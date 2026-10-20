@@ -125,16 +125,16 @@ export function getFlowPassBoost(flowCombo: number): {
  */
 export function computeTackleReach(isYou: boolean, inOwnBox: boolean): number {
   if (isYou) {
-    return inOwnBox ? 108 : 88;
+    return inOwnBox ? 110 : 90;
   }
-  return inOwnBox ? 88 : 66;
+  return inOwnBox ? 94 : 74;
 }
 
 /**
  * Computes organic 2D target position (targetX, targetY) and reaction speed factor for the goalkeeper.
  * The keeper shifts reactively toward the ball's current side (covering the near-post angle and stepping
- * slightly off the line), which naturally leaves the far side of the goal open when the attacking team
- * switches play or passes across the box.
+ * slightly off the line), and tracks long-range shots slightly better while still leaving the far post open
+ * when the attacking team switches play or passes across the box.
  */
 export function computeKeeperTargetPosition(
   keeperTeam: 'YOU' | 'AI' | boolean,
@@ -152,35 +152,45 @@ export function computeKeeperTargetPosition(
   const safeHomeX = Number.isFinite(homeX) ? homeX : isYou ? 42 : PITCH.width - 42;
   const safeBallX = Number.isFinite(ballX) ? ballX : PITCH.width * 0.5;
   const safeBallY = Number.isFinite(ballY) ? ballY : PITCH.height * 0.5;
+  const safeBallVx = Number.isFinite(ballVx) ? ballVx : 0;
   const safeBallVy = Number.isFinite(ballVy) ? ballVy : 0;
   const safeFlow = Number.isFinite(flowCombo) ? flowCombo : 0;
 
   const centerY = PITCH.height / 2;
   const goalHalf = PITCH.goalWidth / 2;
-  const patrolLimit = goalHalf - 34;
+  const patrolLimit = goalHalf - 30;
 
   const flowBoost = getFlowPassBoost(safeFlow);
   const keeperFlowFactor = !isYou && lastTouchTeam === 'YOU' ? flowBoost.keeperReachScale : 1.0;
 
   // Distance from ball to this keeper's goal line
   const distToGoalX = isYou ? safeBallX : PITCH.width - safeBallX;
-  const proximityRatio = Math.max(0, Math.min(1, 1 - distToGoalX / (PITCH.width * 0.72)));
+  const proximityRatio = Math.max(0, Math.min(1, 1 - distToGoalX / (PITCH.width * 0.75)));
 
-  // Keeper commits more strongly to the ball's Y side as the ball gets closer to their half
-  const trackRatio = (0.52 + proximityRatio * 0.22) * keeperFlowFactor;
-  const anticipatedBallY = safeBallY + (isShot ? safeBallVy * 6 : safeBallVy * 2.5);
+  // Detect if a shot or fast ball is traveling toward this keeper's goal (especially long shots)
+  const movingTowardGoal = isYou ? safeBallVx < -5.5 : safeBallVx > 5.5;
+  const isLongShot = (isShot || movingTowardGoal) && distToGoalX > 480 && movingTowardGoal;
+  const timeToGoal = movingTowardGoal ? Math.min(34, Math.max(0, Math.abs((safeHomeX - safeBallX) / safeBallVx))) : 0;
+
+  // Keeper commits more strongly to the ball's Y side as the ball gets closer, and reads long-shot trajectories better
+  const baseTrack = isLongShot ? 0.68 : 0.55 + proximityRatio * 0.22;
+  const trackRatio = Math.min(0.92, baseTrack * keeperFlowFactor);
+  const leadFrames = isLongShot ? Math.min(20, timeToGoal * 0.68) : isShot ? 8.5 : 3.0;
+  const anticipatedBallY = safeBallY + safeBallVy * leadFrames;
   const rawDesiredY = centerY + (anticipatedBallY - centerY) * trackRatio;
   const targetY = Math.max(centerY - patrolLimit, Math.min(centerY + patrolLimit, rawDesiredY));
 
-  // Step slightly off the goal line toward the ball to narrow direct shooting angles, while staying in the box
-  const stepOutDist = (10 + proximityRatio * 34) * keeperFlowFactor;
+  // Step slightly further off the goal line to cut down long-shot angles while staying inside the box
+  const stepOutDist = (12 + proximityRatio * 36 + (isLongShot ? 10 : 0)) * keeperFlowFactor;
   const attackSign = isYou ? 1 : -1;
   const targetX = safeHomeX + attackSign * stepOutDist;
 
   // If the ball is being passed laterally across the pitch (not a shot), the keeper has a subtle organic
   // footwork transition delay so quick cross-pitch passes open up a clean shooting window
-  const isLateralPass = !isShot && Math.abs(safeBallVy) > 3.2 && lastTouchTeam !== teamTag;
-  const reactivityMult = isLateralPass ? 0.78 * keeperFlowFactor : (1.08 + proximityRatio * 0.14) * keeperFlowFactor;
+  const isLateralPass = !isShot && !movingTowardGoal && Math.abs(safeBallVy) > 3.2 && lastTouchTeam !== teamTag;
+  const reactivityMult = isLateralPass
+    ? 0.80 * keeperFlowFactor
+    : (1.14 + proximityRatio * 0.16 + (isLongShot ? 0.16 : 0)) * keeperFlowFactor;
 
   return {
     targetX,
@@ -466,9 +476,9 @@ export function computeShotSpinAndSpeed(
   isOneTouch: boolean,
   isYou: boolean
 ): { shotSpeed: number; appliedSpin: number } {
-  const baseShotSpeed = isYou ? (hasSuperFlow ? 28.0 : 24.5) : hasSuperFlow ? 25.5 : 22.8;
+  const baseShotSpeed = isYou ? (hasSuperFlow ? 29.8 : 26.2) : hasSuperFlow ? 27.2 : 24.4;
   const shotSpeed =
-    baseShotSpeed + chargePower * 6.5 + (isOneTouch ? 2.5 : 0) + (isSweetSpot ? 3.5 : 0);
+    baseShotSpeed + chargePower * 6.8 + (isOneTouch ? 2.6 : 0) + (isSweetSpot ? 3.6 : 0);
   const spinScale = 0.38 + chargePower * 1.15 + (isSweetSpot ? 0.25 : 0);
   const appliedSpin = suggestedSpin * spinScale;
   return { shotSpeed, appliedSpin };
@@ -485,9 +495,9 @@ export function computePassSpinAndSpeed(
   isOneTouch: boolean
 ): { passSpeed: number; appliedSpin: number } {
   const flowBoost = getFlowPassBoost(flowCombo);
-  const basePassSpeed = 19.8 + flowBoost.passSpeedBonus;
+  const basePassSpeed = 21.4 + flowBoost.passSpeedBonus;
   const passSpeed =
-    basePassSpeed + chargePower * 5.2 + (isOneTouch ? 1.8 : 0) + (isSweetSpot ? 2.6 : 0);
+    basePassSpeed + chargePower * 5.5 + (isOneTouch ? 2.0 : 0) + (isSweetSpot ? 2.8 : 0);
   const spinScale = chargePower > 0.12 ? 0.35 + chargePower * 1.15 + (isSweetSpot ? 0.2 : 0) : 0;
   const appliedSpin = suggestedSpin * spinScale;
   return { passSpeed, appliedSpin };

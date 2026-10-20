@@ -467,62 +467,62 @@ export default function App() {
 
     const MODE_PRESETS = {
       CASUAL: {
-        cpuSpeed: 2.86,
-        cpuDribble: 1.52,
-        standOff: 268,
-        tackleChance: 0.008,
-        decisionDelay: 36,
-        keeperSpeed: 1.55,
-        passCreativity: 0.74,
-        interceptScale: 0.80,
+        cpuSpeed: 3.12,
+        cpuDribble: 1.68,
+        standOff: 225,
+        tackleChance: 0.015,
+        decisionDelay: 33,
+        keeperSpeed: 1.74,
+        passCreativity: 0.76,
+        interceptScale: 0.88,
         rankLabel: 'Silver I',
         userRankLabel: 'Silver I',
       },
       RANKED: {
-        cpuSpeed: 4.18,
-        cpuDribble: 2.38,
-        standOff: 136,
-        tackleChance: 0.042,
-        decisionDelay: 10,
-        keeperSpeed: 2.16,
-        passCreativity: 0.95,
-        interceptScale: 1.12,
+        cpuSpeed: 4.52,
+        cpuDribble: 2.58,
+        standOff: 112,
+        tackleChance: 0.056,
+        decisionDelay: 9,
+        keeperSpeed: 2.38,
+        passCreativity: 0.96,
+        interceptScale: 1.20,
         rankLabel: 'Diamond I',
-        userRankLabel: 'Diamond I • 1,540 MMR',
+        userRankLabel: 'Diamond I',
       },
       TOURNAMENT_QF: {
-        cpuSpeed: 3.24,
-        cpuDribble: 1.74,
-        standOff: 224,
-        tackleChance: 0.015,
-        decisionDelay: 26,
-        keeperSpeed: 1.66,
-        passCreativity: 0.80,
-        interceptScale: 0.88,
+        cpuSpeed: 3.52,
+        cpuDribble: 1.92,
+        standOff: 185,
+        tackleChance: 0.024,
+        decisionDelay: 22,
+        keeperSpeed: 1.90,
+        passCreativity: 0.82,
+        interceptScale: 0.96,
         rankLabel: 'Gold II',
         userRankLabel: 'Gold II • Seed #1',
       },
       TOURNAMENT_SF: {
-        cpuSpeed: 3.68,
-        cpuDribble: 2.02,
-        standOff: 176,
-        tackleChance: 0.025,
-        decisionDelay: 17,
-        keeperSpeed: 1.86,
-        passCreativity: 0.88,
-        interceptScale: 0.98,
+        cpuSpeed: 3.98,
+        cpuDribble: 2.20,
+        standOff: 150,
+        tackleChance: 0.036,
+        decisionDelay: 15,
+        keeperSpeed: 2.08,
+        passCreativity: 0.90,
+        interceptScale: 1.06,
         rankLabel: 'Platinum I',
         userRankLabel: 'Platinum I • Seed #1',
       },
       TOURNAMENT_GF: {
-        cpuSpeed: 4.12,
-        cpuDribble: 2.32,
-        standOff: 142,
-        tackleChance: 0.038,
-        decisionDelay: 11,
-        keeperSpeed: 2.10,
-        passCreativity: 0.94,
-        interceptScale: 1.08,
+        cpuSpeed: 4.45,
+        cpuDribble: 2.52,
+        standOff: 118,
+        tackleChance: 0.052,
+        decisionDelay: 10,
+        keeperSpeed: 2.32,
+        passCreativity: 0.95,
+        interceptScale: 1.16,
         rankLabel: 'Star League',
         userRankLabel: 'Star League • Finalist',
       },
@@ -669,16 +669,6 @@ export default function App() {
               : 'Away Kit (Coral)'
             : preset.userRankLabel;
       }
-
-      // 2b. Sync Pitch Arena Theme Buttons
-      const pitchButtons = document.querySelectorAll<HTMLElement>('.pitch-btn');
-      pitchButtons.forEach((btn) => {
-        const isSelected = btn.getAttribute('data-pitch') === selectedPitchTheme;
-        const isFocused = btn.classList.contains('controller-focused');
-        btn.className = isSelected
-          ? `pitch-btn py-2 px-2.5 rounded-xl text-[11px] sm:text-xs font-black transition-all cursor-pointer bg-amber-300 text-slate-900 border-2 border-slate-900 shadow-[0_2px_0_#0f172a] flex items-center justify-center space-x-1.5 whitespace-nowrap${isFocused ? ' controller-focused' : ''}`
-          : `pitch-btn py-2 px-2.5 rounded-xl text-[11px] sm:text-xs font-extrabold transition-all cursor-pointer bg-slate-100 text-slate-600 hover:text-slate-900 border-2 border-transparent flex items-center justify-center space-x-1.5 whitespace-nowrap${isFocused ? ' controller-focused' : ''}`;
-      });
 
       // 3. Update Top HUD Scoreboard Pills so HUD matches chosen kit & contrasting CPU kit
       const hudYouPill = document.getElementById('hudYouPill');
@@ -1105,8 +1095,8 @@ export default function App() {
         hairColor: hairColors[(index + (isYou ? 0 : 3)) % hairColors.length],
         homeX: x, homeY: y, x, y, vx: 0, vy: 0,
         radius: 16.5, angle: isYou ? 0 : Math.PI,
-        baseSpeed: isYou ? 4.65 : preset.cpuSpeed,
-        dribbleSpeed: isYou ? 4.12 : preset.cpuDribble,
+        baseSpeed: isYou ? 5.05 : preset.cpuSpeed,
+        dribbleSpeed: isYou ? 4.48 : preset.cpuDribble,
         speedBoostTimer: 0, actionCooldown: 0, lungeTimer: 0,
         lungeDirX: 0, lungeDirY: 0, stunTimer: 0, giveAndGoTimer: 0,
         commandedRunTimer: 0, commandedTargetX: x, commandedTargetY: y,
@@ -1127,7 +1117,7 @@ export default function App() {
         team, isAutoKeeper: true, homeX, homeY: PITCH.height / 2,
         x: homeX, y: PITCH.height / 2, vx: 0, vy: 0,
         radius: 13.5, angle: isYou ? 0 : Math.PI,
-        patrolSpeed: isYou ? 1.85 : preset.keeperSpeed,
+        patrolSpeed: isYou ? 2.08 : preset.keeperSpeed,
         patrolPhase: isYou ? 0 : Math.PI,
         diveTimer: 0, diveCooldown: 0, diveDirY: 0, saveCooldown: 0,
         holdTimer: 0, holdingBall: false, scaleX: 1, scaleY: 1,
@@ -1975,18 +1965,30 @@ export default function App() {
       const preset = getActiveDifficultyPreset();
 
       if (!ball.owner) {
-        // Don't have CPU chase after player passes unless the ball is genuinely near them
+        // AI steps up slightly more to intercept passes or loose balls in its vicinity or passing lane
         const isUserPassInFlight = ball.lastTouchTeam === 'YOU' && !ball.isShot && ball.passTarget;
         const teamPlayers = players.filter((p) => p.team === defender.team);
         teamPlayers.sort((a, b) => Math.hypot(a.x - ball.x, a.y - ball.y) - Math.hypot(b.x - ball.x, b.y - ball.y));
+        const distToLane = pointToSegmentDistance(
+          defender.x,
+          defender.y,
+          ball.x,
+          ball.y,
+          ball.x + ball.vx * 18,
+          ball.y + ball.vy * 18
+        );
+        const canInterceptPass =
+          !isUserPassInFlight ||
+          Math.hypot(defender.x - ball.x, defender.y - ball.y) < 350 ||
+          distToLane < 165;
         if (
           teamPlayers[0] === defender &&
           (defender.team === 'AI' || defender !== controlledPlayer) &&
-          (!isUserPassInFlight || Math.hypot(defender.x - ball.x, defender.y - ball.y) < 260)
+          canInterceptPass
         ) {
-          const leadBx = Math.max(70, Math.min(PITCH.width - 70, ball.x + ball.vx * 5));
-          const leadBy = Math.max(70, Math.min(PITCH.height - 70, ball.y + ball.vy * 5));
-          movePlayerToward(defender, leadBx, leadBy, defender.baseSpeed * (isYou ? 1.03 : 0.88));
+          const leadBx = Math.max(70, Math.min(PITCH.width - 70, ball.x + ball.vx * 6));
+          const leadBy = Math.max(70, Math.min(PITCH.height - 70, ball.y + ball.vy * 6));
+          movePlayerToward(defender, leadBx, leadBy, defender.baseSpeed * (isYou ? 1.04 : 0.98));
           defender.angle = Math.atan2(ball.y - defender.y, ball.x - defender.x);
           return;
         }
@@ -2001,22 +2003,34 @@ export default function App() {
       let targetY = defender.homeY;
 
       if (sortedByBall[0] === defender) {
-        // Primary defender jockeys at standOff distance instead of relentlessly ball-chasing
-        const standOff = isYou ? 135 : preset.standOff;
+        // Primary defender jockeys at standOff distance and steps in to challenge the ball carrier
+        const distToCarrier = Math.hypot(ball.x - defender.x, ball.y - defender.y);
+        const effectiveStandOff = isYou
+          ? 130
+          : distToCarrier < 240
+            ? preset.standOff * 0.62
+            : preset.standOff;
         const dirToGoalX = ownGoalX - ball.x;
         const dirToGoalY = ownGoalY - ball.y;
         const distToGoal = Math.hypot(dirToGoalX, dirToGoalY) || 1;
-        targetX = ball.x + (dirToGoalX / distToGoal) * standOff;
-        targetY = ball.y + (dirToGoalY / distToGoal) * standOff + Math.sin(matchTick * 0.04 + defender.index) * 28;
+        targetX = ball.x + (dirToGoalX / distToGoal) * effectiveStandOff;
+        targetY = ball.y + (dirToGoalY / distToGoal) * effectiveStandOff + Math.sin(matchTick * 0.04 + defender.index) * 24;
 
-        if (!isYou && ball.owner && Math.hypot(ball.x - defender.x, ball.y - defender.y) < 72) {
+        if (!isYou && ball.owner && distToCarrier < 94) {
           if (Math.random() < preset.tackleChance) {
-            const aim = { x: (ball.x - defender.x) / 72, y: (ball.y - defender.y) / 72 };
+            const d = Math.max(1, distToCarrier);
+            const aim = { x: (ball.x - defender.x) / d, y: (ball.y - defender.y) / d };
             triggerContextAction(defender, aim, 0);
           }
         }
       } else if (sortedByBall[1] === defender) {
-        // Second defender holds organic midfield zone & screens passing lanes without crowding ball carrier
+        // Second defender screens passing lanes & challenges if the carrier dribbles close
+        const distToCarrier = Math.hypot(ball.x - defender.x, ball.y - defender.y);
+        if (!isYou && ball.owner && distToCarrier < 84 && Math.random() < preset.tackleChance * 0.85) {
+          const d = Math.max(1, distToCarrier);
+          const aim = { x: (ball.x - defender.x) / d, y: (ball.y - defender.y) / d };
+          triggerContextAction(defender, aim, 0);
+        }
         const attackers = players.filter((p) => p.team !== defender.team && p !== ball.owner);
         if (attackers.length > 0) {
           attackers.sort((a, b) => Math.abs(a.y - defender.homeY) - Math.abs(b.y - defender.homeY));
@@ -2025,15 +2039,15 @@ export default function App() {
             targetX = mark.x * 0.62 + ball.x * 0.38 - 65;
             targetY = mark.y * 0.68 + ball.y * 0.32;
           } else {
-            // CPU second defender stays disciplined in its half/lane so open space exists on the pitch
-            targetX = Math.max(PITCH.width * 0.48, mark.x * 0.55 + defender.homeX * 0.45 + 75);
-            targetY = mark.y * 0.58 + defender.homeY * 0.42;
+            // CPU second defender shades passing lanes to intercept passes more proactively
+            targetX = Math.max(PITCH.width * 0.44, mark.x * 0.64 + ball.x * 0.16 + defender.homeX * 0.20 + 45);
+            targetY = mark.y * 0.66 + ball.y * 0.18 + defender.homeY * 0.16;
           }
         }
       } else {
         // Third defender anchors back zone near box
         targetX = isYou ? 350 : PITCH.width - 360;
-        targetY = PITCH.height * 0.5 + (ball.y - PITCH.height * 0.5) * 0.38;
+        targetY = PITCH.height * 0.5 + (ball.y - PITCH.height * 0.5) * 0.42;
       }
 
       for (const other of defenders) {
@@ -2050,7 +2064,7 @@ export default function App() {
 
       targetX = Math.max(120, Math.min(PITCH.width - 120, targetX));
       targetY = Math.max(95, Math.min(PITCH.height - 95, targetY));
-      movePlayerToward(defender, targetX, targetY, defender.baseSpeed * (isYou ? 0.92 : 0.84));
+      movePlayerToward(defender, targetX, targetY, defender.baseSpeed * (isYou ? 0.94 : 0.93));
       defender.angle = Math.atan2(ball.y - defender.y, ball.x - defender.x);
     }
 
@@ -2245,8 +2259,7 @@ export default function App() {
     // Returns currently visible & focusable UI buttons in the active screen/modal for DualShock 5 / Keyboard navigation
     function getFocusableMenuButtons(): HTMLElement[] {
       if (gameState === 'SPLASH') {
-        const splashBtn = document.getElementById('splashStartBtn');
-        return splashBtn ? [splashBtn] : [];
+        return [];
       }
 
       const editModal = document.getElementById('editProfileModal');
@@ -2264,7 +2277,7 @@ export default function App() {
 
       const candidates = Array.from(
         overlay.querySelectorAll<HTMLElement>(
-          '.mode-btn, .kit-btn, .pitch-btn, #editProfileBtn, #startBtn, #rematchSameBtn, #mainMenuBtn, #resumeBtn, #forfeitBtn, #howToPlayBtn, .control-tab-btn'
+          '.mode-btn, .kit-btn, #editProfileBtn, #startBtn, #rematchSameBtn, #mainMenuBtn, #resumeBtn, #forfeitBtn, #howToPlayBtn, .control-tab-btn'
         )
       );
       return candidates.filter((el) => {
@@ -2280,7 +2293,7 @@ export default function App() {
 
     function syncMenuFocusVisual(showFocusRing = true) {
       const allBtns = document.querySelectorAll<HTMLElement>(
-        '#splashStartBtn, .mode-btn, .kit-btn, .pitch-btn, #editProfileBtn, #startBtn, #rematchSameBtn, #mainMenuBtn, #resumeBtn, #forfeitBtn, #howToPlayBtn, .control-tab-btn, #takePhotoBtn, #capturePhotoBtn, #clearPhotoBtn, #saveProfileBtn, #closeProfileModalBtn'
+        '#splashStartBtn, .mode-btn, .kit-btn, #editProfileBtn, #startBtn, #rematchSameBtn, #mainMenuBtn, #resumeBtn, #forfeitBtn, #howToPlayBtn, .control-tab-btn, #takePhotoBtn, #capturePhotoBtn, #clearPhotoBtn, #saveProfileBtn, #closeProfileModalBtn'
       );
       allBtns.forEach((b) => b.classList.remove('controller-focused'));
       if (!showFocusRing) return;
@@ -2794,8 +2807,8 @@ export default function App() {
               const dx = receiver.x + receiver.vx * 8 - k.x;
               const dy = receiver.y + receiver.vy * 8 - k.y;
               const d = Math.hypot(dx, dy) || 1;
-              ball.vx = (dx / d) * 19.8;
-              ball.vy = (dy / d) * 19.8;
+              ball.vx = (dx / d) * 21.4;
+              ball.vy = (dy / d) * 21.4;
               ball.vz = 2.4;
               ball.passTarget = receiver;
               ball.lastTouchTeam = k.team;
@@ -2813,7 +2826,7 @@ export default function App() {
 
         // Reactive 2D positioning inside the penalty box:
         // Keeper shifts organically toward the ball's Y side & steps slightly off the line,
-        // so cross-pitch passes open up the far post while keeping the keeper inside the box!
+        // tracking long shots slightly better while cross-pitch passes open up the far post!
         const targetPos = computeKeeperTargetPosition(
           k.team,
           k.homeX,
@@ -2821,22 +2834,22 @@ export default function App() {
           ball.y,
           ball.vx,
           ball.vy,
-          isPassInFlight,
-          ball.owner ? ball.owner.team : null,
-          k.patrolPhase
+          ball.isShot || isPassInFlight,
+          ball.lastTouchTeam,
+          flowCombo
         );
 
         const shotApproaching =
-          !ball.owner && (isYou ? ball.vx < -6.8 && ball.x < 560 : ball.vx > 6.8 && ball.x > PITCH.width - 560);
+          !ball.owner && (isYou ? ball.vx < -6.2 && ball.x < 940 : ball.vx > 6.2 && ball.x > PITCH.width - 940);
         if (shotApproaching && k.diveTimer <= 0 && k.diveCooldown <= 0) {
           const tToLine = (k.x - ball.x) / ball.vx;
-          if (tToLine > 0 && tToLine < 29) {
+          if (tToLine > 0 && tToLine < 35) {
             const predictedY = ball.y + ball.vy * tToLine;
             const diffY = predictedY - k.y;
-            const maxDiveWindow = 148 * keeperFlowFactor;
-            if (Math.abs(diffY) > 18 && Math.abs(diffY) < maxDiveWindow) {
-              k.diveTimer = 16;
-              k.diveCooldown = 44;
+            const maxDiveWindow = 162 * keeperFlowFactor;
+            if (Math.abs(diffY) > 15 && Math.abs(diffY) < maxDiveWindow) {
+              k.diveTimer = 17;
+              k.diveCooldown = 40;
               k.diveDirY = Math.sign(diffY);
               k.scaleX = 0.78;
               k.scaleY = 1.38;
@@ -2844,29 +2857,29 @@ export default function App() {
           }
         }
 
-        k.x += (targetPos.targetX - k.x) * 0.14 * dtScale;
+        k.x += (targetPos.targetX - k.x) * 0.165 * dtScale;
 
         if (k.diveTimer > 0) {
           k.diveTimer = Math.max(0, k.diveTimer - dtScale);
-          k.y += k.diveDirY * effectivePatrolSpeed * 2.45 * dtScale;
+          k.y += k.diveDirY * effectivePatrolSpeed * 2.62 * dtScale;
         } else {
           const desiredY = targetPos.targetY;
           const dy = desiredY - k.y;
-          if (Math.abs(dy) > 1.5) {
+          if (Math.abs(dy) > 1.2) {
             const stepSpeed = effectivePatrolSpeed * targetPos.reactionSpeedFactor;
-            k.y += Math.sign(dy) * Math.min(stepSpeed, Math.abs(dy) * 0.16) * dtScale;
+            k.y += Math.sign(dy) * Math.min(stepSpeed, Math.abs(dy) * 0.185) * dtScale;
           }
         }
 
-        const patrolLimit = goalHalf - 28;
+        const patrolLimit = goalHalf - 26;
         k.y = Math.max(centerY - patrolLimit, Math.min(centerY + patrolLimit, k.y));
         k.angle = Math.atan2(ball.y - k.y, ball.x - k.x);
 
         if (!ball.owner && k.saveCooldown <= 0) {
           const isFriendlyBackpass = ball.lastTouchTeam === k.team && !ball.isShot;
-          const baseReachY = k.diveTimer > 0 ? k.radius + 13 : isFriendlyBackpass ? k.radius + 22 : k.radius + 6;
+          const baseReachY = k.diveTimer > 0 ? k.radius + 15 : isFriendlyBackpass ? k.radius + 22 : k.radius + 8;
           const reachY = baseReachY * keeperFlowFactor;
-          const reachX = (k.radius + ball.radius + (isFriendlyBackpass ? 18 : 5)) * keeperFlowFactor;
+          const reachX = (k.radius + ball.radius + (isFriendlyBackpass ? 18 : 6.5)) * keeperFlowFactor;
           const dx = ball.x - k.x;
           const dy = ball.y - k.y;
           if (Math.abs(dx) <= reachX && Math.abs(dy) <= reachY + ball.radius) {
@@ -3959,7 +3972,17 @@ export default function App() {
       syncMenuFocusVisual(true);
     }
 
+    function pickRandomPitchArena() {
+      const randomTheme = PITCH_THEMES[Math.floor(Math.random() * PITCH_THEMES.length)];
+      selectedPitchTheme = randomTheme.id;
+      applyPitchTheme(selectedPitchTheme);
+      rebuildStaticPitchCache();
+    }
+
     function populatePreMatchVsOverlay() {
+      // Select a random pitch arena for the upcoming match so each game features a fresh aesthetic
+      pickRandomPitchArena();
+
       const vsOverlay = document.getElementById('preMatchVsOverlay');
       const vsModeLabel = document.getElementById('vsOverlayModeLabel');
       const vsPitchLabel = document.getElementById('vsOverlayPitchLabel');
@@ -4243,13 +4266,11 @@ export default function App() {
         hasMatchedOpponent = true;
         syncOpponentUi();
 
-        // In Pause Menu: hide lobby mode/kit/pitch selectors and show Resume Match + Forfeit Match
+        // In Pause Menu: hide lobby mode/kit selectors and show Resume Match + Forfeit Match
         const playlistWrap = document.getElementById('playlistSelectorWrap');
         const kitWrap = document.getElementById('kitSelectorWrap');
-        const pitchWrap = document.getElementById('pitchSelectorWrap');
         if (playlistWrap) playlistWrap.classList.add('hidden');
         if (kitWrap) kitWrap.classList.add('hidden');
-        if (pitchWrap) pitchWrap.classList.add('hidden');
         if (startBtn) startBtn.classList.add('hidden');
         if (rematchSameBtn) rematchSameBtn.classList.add('hidden');
         if (mainMenuBtn) mainMenuBtn.classList.add('hidden');
@@ -4530,23 +4551,6 @@ export default function App() {
     };
     kitButtons.forEach((btn) => btn.addEventListener('click', handleKitClick));
 
-    const pitchButtons = document.querySelectorAll('.pitch-btn');
-    const handlePitchClick = (e: Event) => {
-      const btn = e.currentTarget as HTMLElement;
-      sound.init();
-      sound.playUiSelect();
-      const chosenPitch = (btn.getAttribute('data-pitch') as PitchThemeId) || 'CLASSIC_TURF';
-      selectedPitchTheme = chosenPitch;
-      applyPitchTheme(selectedPitchTheme);
-      rebuildStaticPitchCache();
-      syncKitAndModeUI();
-      const vis = getFocusableMenuButtons();
-      const idx = vis.indexOf(btn);
-      if (idx >= 0) gamepadState.focusedMenuIndex = idx;
-      syncMenuFocusVisual(true);
-    };
-    pitchButtons.forEach((btn) => btn.addEventListener('click', handlePitchClick));
-
     const controlTabButtons = document.querySelectorAll('.control-tab-btn');
     const handleControlTabClick = (e: Event) => {
       const btn = e.currentTarget as HTMLElement;
@@ -4624,7 +4628,7 @@ export default function App() {
 
     // Highlight focused UI button on pointer hover and trigger subtle hover SFX
     const allInteractiveMenuBtns = document.querySelectorAll<HTMLElement>(
-      '#splashStartBtn, .mode-btn, .kit-btn, .pitch-btn, #editProfileBtn, #startBtn, #rematchSameBtn, #mainMenuBtn, #resumeBtn, #forfeitBtn, #howToPlayBtn, .control-tab-btn, #takePhotoBtn, #capturePhotoBtn, #clearPhotoBtn, #saveProfileBtn, #closeProfileModalBtn'
+      '.mode-btn, .kit-btn, #editProfileBtn, #startBtn, #rematchSameBtn, #mainMenuBtn, #resumeBtn, #forfeitBtn, #howToPlayBtn, .control-tab-btn, #takePhotoBtn, #capturePhotoBtn, #clearPhotoBtn, #saveProfileBtn, #closeProfileModalBtn'
     );
     allInteractiveMenuBtns.forEach((btn) => {
       btn.addEventListener('pointerenter', () => {
@@ -5099,21 +5103,14 @@ export default function App() {
       {/* Boot-Up Start Page ("PRESS ANY BUTTON TO START") over the clean original stadium background */}
       <div
         id="splashScreen"
-        className="fixed inset-0 z-50 flex flex-col items-center justify-between p-6 sm:p-12 bg-slate-950/10 cursor-pointer overflow-hidden"
+        className="fixed inset-0 z-50 flex flex-col items-center justify-center p-6 sm:p-12 bg-slate-950/10 cursor-pointer overflow-hidden"
       >
-        <div className="relative z-10 pt-2">
-          <div className="inline-flex items-center space-x-2 px-4 py-1.5 rounded-full bg-white/95 border-2 border-slate-900 shadow-[0_3px_0_#0f172a] text-[11px] font-black tracking-[0.22em] uppercase text-slate-900">
-            <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
-            <span>ARCADE EDITION</span>
-          </div>
-        </div>
-
         <div className="relative z-10 flex flex-col items-center text-center my-auto max-w-3xl px-4">
           <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-3xl bg-sky-400 flex items-center justify-center border-[3px] border-slate-900 shadow-[0_6px_0_#0f172a] mb-5">
             <PixelSoccerBallIcon className="w-11 h-11 sm:w-14 sm:h-14" />
           </div>
 
-          <div className="flex flex-wrap items-center justify-center gap-3 sm:gap-4 mb-8 sm:mb-12">
+          <div className="flex flex-wrap items-center justify-center gap-3 sm:gap-4 mb-10 sm:mb-14">
             <span className="text-6xl sm:text-8xl md:text-9xl font-black tracking-tight text-white drop-shadow-[0_6px_0_#0f172a]">
               REMATCH
             </span>
@@ -5125,14 +5122,10 @@ export default function App() {
           <button
             id="splashStartBtn"
             type="button"
-            className="indie-cta-btn px-8 sm:px-12 py-4 sm:py-5 rounded-2xl bg-amber-300 hover:bg-amber-200 text-slate-900 font-black text-sm sm:text-lg tracking-[0.2em] uppercase cursor-pointer"
+            className="bg-transparent border-0 p-0 text-white font-black text-lg sm:text-2xl tracking-[0.22em] uppercase cursor-pointer drop-shadow-[0_3px_0_#0f172a] focus:outline-none"
           >
             <span className="animate-pulse">PRESS ANY BUTTON TO START</span>
           </button>
-        </div>
-
-        <div className="relative z-10 pb-2 px-4 py-1 rounded-full bg-slate-900/75 text-[11px] font-extrabold tracking-[0.2em] uppercase text-white drop-shadow">
-          COMPUTER • DUALSENSE REMOTE • MOBILE TOUCH
         </div>
       </div>
 
@@ -5506,47 +5499,6 @@ export default function App() {
                   >
                     <span className="w-3.5 h-3.5 rounded-full bg-rose-500 border border-slate-900 shrink-0" />
                     <span>Away Kit (Coral)</span>
-                  </button>
-                </div>
-              </div>
-
-              {/* 3. Aesthetic Pitch Arena Selector (4 Pitches — Identical Physics, Distinct Aesthetics) */}
-              <div id="pitchSelectorWrap">
-                <div className="text-[11px] font-black uppercase tracking-wider text-slate-500 mb-2 px-1">
-                  SELECT PITCH ARENA
-                </div>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                  <button
-                    type="button"
-                    data-pitch="CLASSIC_TURF"
-                    className="pitch-btn py-2 px-2.5 rounded-xl text-[11px] sm:text-xs font-black transition-all cursor-pointer bg-amber-300 text-slate-900 border-2 border-slate-900 shadow-[0_2px_0_#0f172a] flex items-center justify-center space-x-1.5 whitespace-nowrap"
-                  >
-                    <span className="w-3 h-3 rounded-full bg-[#88ebb0] border border-slate-900 shrink-0" />
-                    <span>Sunlit Turf</span>
-                  </button>
-                  <button
-                    type="button"
-                    data-pitch="URBAN_CONCRETE"
-                    className="pitch-btn py-2 px-2.5 rounded-xl text-[11px] sm:text-xs font-extrabold transition-all cursor-pointer bg-slate-100 text-slate-600 hover:text-slate-900 border-2 border-transparent flex items-center justify-center space-x-1.5 whitespace-nowrap"
-                  >
-                    <span className="w-3 h-3 rounded-full bg-[#64748b] border border-slate-900 shrink-0" />
-                    <span>Rooftop Cage</span>
-                  </button>
-                  <button
-                    type="button"
-                    data-pitch="RIO_CLAY"
-                    className="pitch-btn py-2 px-2.5 rounded-xl text-[11px] sm:text-xs font-extrabold transition-all cursor-pointer bg-slate-100 text-slate-600 hover:text-slate-900 border-2 border-transparent flex items-center justify-center space-x-1.5 whitespace-nowrap"
-                  >
-                    <span className="w-3 h-3 rounded-full bg-[#f6ad7b] border border-slate-900 shrink-0" />
-                    <span>Sunset Clay</span>
-                  </button>
-                  <button
-                    type="button"
-                    data-pitch="TWILIGHT_SYNTH"
-                    className="pitch-btn py-2 px-2.5 rounded-xl text-[11px] sm:text-xs font-extrabold transition-all cursor-pointer bg-slate-100 text-slate-600 hover:text-slate-900 border-2 border-transparent flex items-center justify-center space-x-1.5 whitespace-nowrap"
-                  >
-                    <span className="w-3 h-3 rounded-full bg-[#38bdf8] border border-slate-900 shrink-0" />
-                    <span>Cobalt Pulse</span>
                   </button>
                 </div>
               </div>
