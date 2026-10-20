@@ -1,0 +1,6 @@
+{
+  "name": "REMATCH 0.2",
+  "description": "3v3 Arcade Cage Soccer with tiki-taka flow combos, curved finesse strikes, bank passes, and cross-platform PC, Mobile Touch, and Controller support.",
+  "requestFramePermissions": ["camera"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
