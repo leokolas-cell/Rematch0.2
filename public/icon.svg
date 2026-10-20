@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" shape-rendering="crispEdges">
+  <rect width="128" height="128" rx="28" fill="#0f172a"/>
+  <rect x="6" y="6" width="116" height="116" rx="22" fill="#38bdf8"/>
+  <rect x="14" y="14" width="100" height="100" rx="16" fill="#63d297"/>
+  <!-- Pixel Soccer Ball -->
+  <rect x="44" y="28" width="40" height="8" fill="#0f172a"/>
+  <rect x="36" y="36" width="56" height="8" fill="#0f172a"/>
+  <rect x="28" y="44" width="72" height="40" fill="#0f172a"/>
+  <rect x="36" y="84" width="56" height="8" fill="#0f172a"/>
+  <rect x="44" y="92" width="40" height="8" fill="#0f172a"/>
+  <rect x="44" y="36" width="40" height="56" fill="#ffffff"/>
+  <rect x="36" y="44" width="56" height="40" fill="#ffffff"/>
+  <!-- Pentagon Pattern -->
+  <rect x="56" y="52" width="16" height="24" fill="#0f172a"/>
+  <rect x="52" y="56" width="24" height="16" fill="#0f172a"/>
+  <rect x="36" y="44" width="12" height="8" fill="#0f172a"/>
+  <rect x="80" y="44" width="12" height="8" fill="#0f172a"/>
+  <rect x="36" y="76" width="12" height="8" fill="#0f172a"/>
+  <rect x="80" y="76" width="12" height="8" fill="#0f172a"/>
+  <!-- Golden Highlight -->
+  <rect x="44" y="36" width="12" height="8" fill="#fde047"/>
+</svg>

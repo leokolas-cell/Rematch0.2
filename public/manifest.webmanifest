@@ -1,0 +1,18 @@
+{
+  "name": "REMATCH 0.2 — Arcade Cage Soccer",
+  "short_name": "REMATCH 0.2",
+  "description": "Fast-paced 2D top-down arcade cage soccer with one-touch tiki-taka passing, curved shots, and 1v1 matchmaking.",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0f172a",
+  "theme_color": "#0f172a",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
