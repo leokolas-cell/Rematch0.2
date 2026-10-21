@@ -601,25 +601,25 @@ export function evaluateKickDecisionPure<
 
   // 3. Check if aiming toward top or bottom cage wall for a bank/rebound pass
   let wallBouncePoint: WallBouncePreview | null = null;
-  if (Math.abs(dirY) > 0.22) {
+  if (Math.abs(dirY) > 0.16) {
     const targetWallY = dirY < 0 ? ballRadius : PITCH.height - ballRadius;
     const tWall = (targetWallY - actor.y) / dirY;
-    if (tWall > 40 && tWall < 1250) {
+    if (tWall > 35 && tWall < 1550) {
       const hitX = actor.x + dirX * tWall;
       if (hitX > PITCH.cornerChamfer && hitX < PITCH.width - PITCH.cornerChamfer) {
         wallBouncePoint = {
           x: hitX,
           y: targetWallY,
-          refX: hitX + dirX * 340,
-          refY: targetWallY - dirY * 340,
+          refX: Math.max(95, Math.min(PITCH.width - 95, hitX + dirX * 380)),
+          refY: Math.max(95, Math.min(PITCH.height - 95, targetWallY - dirY * 380)),
         };
       }
     }
   }
 
-  // 4. Subtle Teammate Auto-Lock: narrow cone (~12°) or direct cursor proximity (<76px),
-  // and NEVER pulls a pass backward if the player is aiming into open space ahead of the teammate for a through-ball!
+  // 4. Relaxed Teammate Auto-Lock: narrow cone and never hijacks tactical wall rebounds or through-balls into space
   const teammates = allPlayers.filter((p) => p.team === actor.team && p !== actor);
+  const opponents = allPlayers.filter((p) => p.team !== actor.team);
   let bestMate: P | undefined;
   let bestMateScore = -Infinity;
   const pointerDistFromActor =
@@ -636,22 +636,32 @@ export function evaluateKickDecisionPure<
     const mouseDist =
       isYou && pointerWorld.active ? Math.hypot(pointerWorld.x - leadX, pointerWorld.y - leadY) : 9999;
 
-    // If the player is aiming into open space beyond or away from the teammate, let it be a through-ball into space!
+    // If the player is aiming into open space beyond or away from the teammate, let it be a through-ball or rebound pass!
     const aimingThroughBallPastMate =
       isYou &&
       pointerWorld.active &&
-      mouseDist > 110 &&
-      (pointerDistFromActor > dist + 85 || dot < 0.985);
+      mouseDist > 82 &&
+      (pointerDistFromActor > dist + 70 || dot < 0.99);
 
-    // If aiming at a wall rebound that is closer than the teammate and cursor isn't directly on the teammate, skip lock
-    const wallCloserThanMate =
+    // Check if aiming toward the wall for a tactical rebound pass rather than directly at the teammate
+    const wallDist = wallBouncePoint ? Math.hypot(wallBouncePoint.x - actor.x, wallBouncePoint.y - actor.y) : Infinity;
+    const aimingSteeperToWallThanMate =
+      wallBouncePoint !== null && Math.abs(dirY) > Math.abs(dy / dist) + 0.09;
+    const directLaneBlockedByOpponent = opponents.some(
+      (opp) => pointToSegmentDistance(opp.x, opp.y, actor.x, actor.y, leadX, leadY) < 56
+    );
+    const aimingForTacticalWallRebound =
       wallBouncePoint !== null &&
-      Math.hypot(wallBouncePoint.x - actor.x, wallBouncePoint.y - actor.y) < dist * 0.92 &&
-      mouseDist >= 78;
+      mouseDist >= 58 &&
+      (wallDist < dist * 1.28 || aimingSteeperToWallThanMate || directLaneBlockedByOpponent);
 
-    const lockDotThreshold = isYou ? (pointerWorld.active ? 0.92 : 0.84) : 0.90;
-    if (!wallCloserThanMate && !aimingThroughBallPastMate && (mouseDist < 84 || dot > lockDotThreshold)) {
-      const score = dot * 3.2 + (mouseDist < 84 ? 2.5 : 0) - dist / 4200;
+    const lockDotThreshold = isYou ? (pointerWorld.active ? 0.955 : 0.915) : 0.90;
+    if (
+      !aimingForTacticalWallRebound &&
+      !aimingThroughBallPastMate &&
+      (mouseDist < 62 || dot > lockDotThreshold)
+    ) {
+      const score = dot * 3.2 + (mouseDist < 62 ? 2.5 : 0) - dist / 4200;
       if (score > bestMateScore) {
         bestMateScore = score;
         bestMate = mate;
@@ -664,7 +674,7 @@ export function evaluateKickDecisionPure<
     bestMate &&
     isYou &&
     pointerWorld.active &&
-    Math.hypot(pointerWorld.x - bestMate.x, pointerWorld.y - bestMate.y) < 68;
+    Math.hypot(pointerWorld.x - bestMate.x, pointerWorld.y - bestMate.y) < 58;
 
   if (intersectsGoal && !cursorDirectlyOnMate) {
     const shotDx = enemyGoalX - actor.x;
@@ -685,7 +695,6 @@ export function evaluateKickDecisionPure<
   }
 
   // Helper to compute curl spin around the closest defender or toward pitch center
-  const opponents = allPlayers.filter((p) => p.team !== actor.team);
   const computePassSpin = (targetX: number, targetY: number): number => {
     let closestOppDist = Infinity;
     let bendSign = targetY < PITCH.height * 0.5 ? -1 : 1;
@@ -707,8 +716,8 @@ export function evaluateKickDecisionPure<
     const tdx = leadX - actor.x;
     const tdy = leadY - actor.y;
     const tlen = Math.hypot(tdx, tdy) || 1;
-    // Subtle magnetic assist: 76% player raw aim + 24% teammate lead vector (for YOU)
-    const aimWeight = isYou ? 0.76 : 0.35;
+    // Relaxed magnetic assist: 86% player raw aim + 14% teammate lead vector (for YOU) so manual angles feel free
+    const aimWeight = isYou ? 0.86 : 0.35;
     const lockWeight = 1 - aimWeight;
     const blendedX = dirX * aimWeight + (tdx / tlen) * lockWeight;
     const blendedY = dirY * aimWeight + (tdy / tlen) * lockWeight;
@@ -732,9 +741,35 @@ export function evaluateKickDecisionPure<
     };
   }
 
+  // 5. Tactical Wall Rebound Bank Pass or Through-Ball into Open Space:
+  // If aiming at a wall rebound, target the exact wall bounce point so the ball strikes the wall along the player's true aim line!
+  if (wallBouncePoint) {
+    const refDx = wallBouncePoint.refX - wallBouncePoint.x;
+    const refDy = wallBouncePoint.refY - wallBouncePoint.y;
+    const refLen = Math.hypot(refDx, refDy) || 1;
+    const reboundReceiver = findBestReceiverForBall(
+      actor,
+      wallBouncePoint.refX,
+      wallBouncePoint.refY,
+      refDx / refLen,
+      refDy / refLen,
+      teammates
+    );
+    return {
+      type: 'PASS',
+      dirX,
+      dirY,
+      bestMate: reboundReceiver,
+      shotTargetX: wallBouncePoint.x,
+      shotTargetY: wallBouncePoint.y,
+      passTargetX: wallBouncePoint.x,
+      passTargetY: wallBouncePoint.y,
+      wallBouncePoint,
+      suggestedSpin: 0,
+      isThroughBall: true,
+    };
+  }
 
-  // 5. Through-Ball into Open Space or Wall Rebound Pass:
-  // Teammate will actively sprint onto the pass target!
   const pointerDist =
     isYou && pointerWorld.active
       ? Math.min(760, Math.max(260, Math.hypot(pointerWorld.x - actor.x, pointerWorld.y - actor.y)))
@@ -742,12 +777,10 @@ export function evaluateKickDecisionPure<
   const throughX = Math.max(85, Math.min(PITCH.width - 85, actor.x + dirX * pointerDist));
   const throughY = Math.max(85, Math.min(PITCH.height - 85, actor.y + dirY * pointerDist));
 
-  const targetForReceiverX = wallBouncePoint ? wallBouncePoint.refX : throughX;
-  const targetForReceiverY = wallBouncePoint ? wallBouncePoint.refY : throughY;
   const throughReceiver = findBestReceiverForBall(
     actor,
-    targetForReceiverX,
-    targetForReceiverY,
+    throughX,
+    throughY,
     dirX,
     dirY,
     teammates
@@ -762,11 +795,323 @@ export function evaluateKickDecisionPure<
     shotTargetY: throughY,
     passTargetX: throughX,
     passTargetY: throughY,
-    wallBouncePoint,
+    wallBouncePoint: null,
     suggestedSpin: computePassSpin(throughX, throughY),
     isThroughBall: true,
   };
 }
+
+/**
+ * Checks if a loose ball is inside the given keeper's penalty box with no field players from either team nearby,
+ * allowing the keeper to walk toward the ball, collect it, and pass it to their team without ever leaving the box.
+ */
+export function shouldKeeperSweepLooseBallInBox<P extends { x: number; y: number }>(
+  keeperTeam: 'YOU' | 'AI',
+  ballState: {
+    x: number;
+    y: number;
+    vx: number;
+    vy: number;
+    owner: unknown | null;
+    isShot: boolean;
+  },
+  allFieldPlayers: P[]
+): boolean {
+  if (ballState.owner !== null) return false;
+  const ballSpd = Math.hypot(ballState.vx, ballState.vy);
+  // Don't casually walk toward a blazing shot; let normal shot-saving/diving logic handle fast shots
+  if (ballState.isShot && ballSpd > 8.5) return false;
+  if (ballSpd > 13.5) return false;
+
+  const boxTop = (PITCH.height - PITCH.boxHeight) / 2;
+  const boxBottom = (PITCH.height + PITCH.boxHeight) / 2;
+  const inBoxY = ballState.y >= boxTop + 14 && ballState.y <= boxBottom - 14;
+  if (!inBoxY) return false;
+
+  const isYou = keeperTeam === 'YOU';
+  const inBoxX = isYou
+    ? ballState.x >= 10 && ballState.x <= PITCH.boxWidth - 16
+    : ballState.x >= PITCH.width - PITCH.boxWidth + 16 && ballState.x <= PITCH.width - 10;
+  if (!inBoxX) return false;
+
+  // Verify no field player from either team is nearby the ball (within 210px)
+  for (const p of allFieldPlayers) {
+    if (Math.hypot(p.x - ballState.x, p.y - ballState.y) < 210) {
+      return false;
+    }
+  }
+  return true;
+}
+
+/**
+ * Strictly clamps the goalkeeper's (x, y) coordinates inside their own penalty box so the keeper can NEVER leave the box.
+ */
+export function clampKeeperToBox(
+  keeperTeam: 'YOU' | 'AI',
+  x: number,
+  y: number,
+  radius = 13.5
+): { x: number; y: number } {
+  const boxTop = (PITCH.height - PITCH.boxHeight) / 2;
+  const boxBottom = (PITCH.height + PITCH.boxHeight) / 2;
+  const minY = boxTop + radius + 6;
+  const maxY = boxBottom - radius - 6;
+  const isYou = keeperTeam === 'YOU';
+  const minX = isYou ? 22 : PITCH.width - PITCH.boxWidth + radius + 8;
+  const maxX = isYou ? PITCH.boxWidth - radius - 8 : PITCH.width - 22;
+
+  return {
+    x: Math.max(minX, Math.min(maxX, x)),
+    y: Math.max(minY, Math.min(maxY, y)),
+  };
+}
+
+/**
+ * Determines whether a goal was scored from a long shot far outside the opponent's penalty box ("RONALDO GOAL").
+ */
+export function isLongRangeGoal(
+  scoringTeam: 'YOU' | 'AI',
+  kickOriginX: number,
+  kickOriginY: number,
+  goalY = PITCH.height / 2
+): boolean {
+  const isYou = scoringTeam === 'YOU';
+  const goalX = isYou ? PITCH.width : 0;
+  // Penalty box extends 540px from goal line; "far outside of the box" means at least 145px beyond the box line (685px+ from goal line)
+  const boxEdgeX = isYou ? PITCH.width - PITCH.boxWidth : PITCH.boxWidth;
+  const farOutsideBoxX = isYou ? kickOriginX <= boxEdgeX - 145 : kickOriginX >= boxEdgeX + 145;
+  const totalShotDist = Math.hypot(goalX - kickOriginX, goalY - kickOriginY);
+  return farOutsideBoxX && totalShotDist >= 700;
+}
+
+export interface RankTierInfo {
+  index: number;
+  name: string;
+  tierGroup: 'BRONZE' | 'SILVER' | 'GOLD' | 'PLATINUM' | 'DIAMOND' | 'STAR';
+  minWins: number;
+  borderHex: string;
+  shadowHex: string;
+  badgeBgHex: string;
+  badgeTextHex: string;
+  cpuSpeed: number;
+  cpuDribble: number;
+  standOff: number;
+  tackleChance: number;
+  decisionDelay: number;
+  keeperSpeed: number;
+  passCreativity: number;
+  interceptScale: number;
+}
+
+export const RANK_TIERS: readonly RankTierInfo[] = [
+  {
+    index: 0,
+    name: 'Bronze I',
+    tierGroup: 'BRONZE',
+    minWins: 0,
+    borderHex: '#cd7f32',
+    shadowHex: '#7c2d12',
+    badgeBgHex: '#ffedd5',
+    badgeTextHex: '#9a3412',
+    cpuSpeed: 3.35,
+    cpuDribble: 1.82,
+    standOff: 195,
+    tackleChance: 0.022,
+    decisionDelay: 25,
+    keeperSpeed: 1.85,
+    passCreativity: 0.80,
+    interceptScale: 0.94,
+  },
+  {
+    index: 1,
+    name: 'Bronze II',
+    tierGroup: 'BRONZE',
+    minWins: 1,
+    borderHex: '#d97706',
+    shadowHex: '#78350f',
+    badgeBgHex: '#fef3c7',
+    badgeTextHex: '#92400e',
+    cpuSpeed: 3.55,
+    cpuDribble: 1.95,
+    standOff: 180,
+    tackleChance: 0.026,
+    decisionDelay: 21,
+    keeperSpeed: 1.92,
+    passCreativity: 0.83,
+    interceptScale: 0.98,
+  },
+  {
+    index: 2,
+    name: 'Silver I',
+    tierGroup: 'SILVER',
+    minWins: 2,
+    borderHex: '#94a3b8',
+    shadowHex: '#334155',
+    badgeBgHex: '#f1f5f9',
+    badgeTextHex: '#1e293b',
+    cpuSpeed: 3.78,
+    cpuDribble: 2.08,
+    standOff: 162,
+    tackleChance: 0.032,
+    decisionDelay: 17,
+    keeperSpeed: 2.02,
+    passCreativity: 0.87,
+    interceptScale: 1.03,
+  },
+  {
+    index: 3,
+    name: 'Gold II',
+    tierGroup: 'GOLD',
+    minWins: 3,
+    borderHex: '#eab308',
+    shadowHex: '#854d0e',
+    badgeBgHex: '#fef08a',
+    badgeTextHex: '#713f12',
+    cpuSpeed: 4.02,
+    cpuDribble: 2.24,
+    standOff: 146,
+    tackleChance: 0.038,
+    decisionDelay: 14,
+    keeperSpeed: 2.12,
+    passCreativity: 0.90,
+    interceptScale: 1.08,
+  },
+  {
+    index: 4,
+    name: 'Platinum I',
+    tierGroup: 'PLATINUM',
+    minWins: 4,
+    borderHex: '#06b6d4',
+    shadowHex: '#155e75',
+    badgeBgHex: '#cffafe',
+    badgeTextHex: '#0e7490',
+    cpuSpeed: 4.24,
+    cpuDribble: 2.38,
+    standOff: 130,
+    tackleChance: 0.045,
+    decisionDelay: 12,
+    keeperSpeed: 2.22,
+    passCreativity: 0.93,
+    interceptScale: 1.13,
+  },
+  {
+    index: 5,
+    name: 'Diamond I',
+    tierGroup: 'DIAMOND',
+    minWins: 5,
+    borderHex: '#6366f1',
+    shadowHex: '#312e81',
+    badgeBgHex: '#e0e7ff',
+    badgeTextHex: '#3730a3',
+    cpuSpeed: 4.42,
+    cpuDribble: 2.50,
+    standOff: 118,
+    tackleChance: 0.052,
+    decisionDelay: 10,
+    keeperSpeed: 2.32,
+    passCreativity: 0.95,
+    interceptScale: 1.17,
+  },
+  {
+    index: 6,
+    name: 'Star League',
+    tierGroup: 'STAR',
+    minWins: 6,
+    borderHex: '#d946ef',
+    shadowHex: '#701a75',
+    badgeBgHex: '#fae8ff',
+    badgeTextHex: '#86198f',
+    cpuSpeed: 4.55,
+    cpuDribble: 2.58,
+    standOff: 112,
+    tackleChance: 0.056,
+    decisionDelay: 9,
+    keeperSpeed: 2.38,
+    passCreativity: 0.96,
+    interceptScale: 1.20,
+  },
+] as const;
+
+/**
+ * Returns the player's current RankTierInfo based on their total competitive wins.
+ * Players start at Bronze I (0 wins) and rank up as they win games.
+ */
+export function getUserRankInfo(rankedWins: number): RankTierInfo {
+  const safeWins = Math.max(0, Math.floor(Number.isFinite(rankedWins) ? rankedWins : 0));
+  let current = RANK_TIERS[0];
+  for (const tier of RANK_TIERS) {
+    if (safeWins >= tier.minWins) {
+      current = tier;
+    }
+  }
+  return current;
+}
+
+/**
+ * Returns the next RankTierInfo above the player's current rank, or null if at max rank (Star League).
+ */
+export function getNextRankInfo(rankedWins: number): RankTierInfo | null {
+  const current = getUserRankInfo(rankedWins);
+  return RANK_TIERS[current.index + 1] || null;
+}
+
+export interface RankProgressSummary {
+  currentRank: RankTierInfo;
+  prevRank: RankTierInfo;
+  nextRank: RankTierInfo | null;
+  rankedUp: boolean;
+  progressPct: number;
+  prevProgressPct: number;
+  winsNeededForNext: number;
+  statusHeadline: string;
+  subtext: string;
+}
+
+/**
+ * Computes the player's competitive rank progress bar percentage, promotion status, and UI labels.
+ */
+export function computeRankProgressSummary(
+  rankedWins: number,
+  prevWins = rankedWins
+): RankProgressSummary {
+  const safeWins = Math.max(0, Math.floor(Number.isFinite(rankedWins) ? rankedWins : 0));
+  const safePrevWins = Math.max(0, Math.floor(Number.isFinite(prevWins) ? prevWins : safeWins));
+  const currentRank = getUserRankInfo(safeWins);
+  const prevRank = getUserRankInfo(safePrevWins);
+  const nextRank = getNextRankInfo(safeWins);
+  const rankedUp = currentRank.index > prevRank.index;
+
+  const progressPct = Math.min(100, Math.max(14, Math.round(((currentRank.index + 1) / RANK_TIERS.length) * 100)));
+  const prevProgressPct = Math.min(100, Math.max(14, Math.round(((prevRank.index + 1) / RANK_TIERS.length) * 100)));
+  const winsNeededForNext = nextRank ? Math.max(1, nextRank.minWins - safeWins) : 0;
+
+  const statusHeadline = rankedUp
+    ? `RANK UP! PROMOTED TO ${currentRank.name.toUpperCase()}`
+    : nextRank
+      ? `RANKED PROGRESS • ${currentRank.name.toUpperCase()}`
+      : `MAX RANK ACHIEVED • ${currentRank.name.toUpperCase()}`;
+
+  const subtext = rankedUp
+    ? nextRank
+      ? `Promoted from ${prevRank.name} to ${currentRank.name}! Win ${winsNeededForNext} more Ranked ${winsNeededForNext === 1 ? 'match' : 'matches'} for ${nextRank.name}.`
+      : `Promoted from ${prevRank.name} to the highest tier: ${currentRank.name}!`
+    : nextRank
+      ? `Win ${winsNeededForNext} more Ranked ${winsNeededForNext === 1 ? 'match' : 'matches'} to reach ${nextRank.name}`
+      : 'Top Rank Tier Reached (Star League Champion)';
+
+  return {
+    currentRank,
+    prevRank,
+    nextRank,
+    rankedUp,
+    progressPct,
+    prevProgressPct,
+    winsNeededForNext,
+    statusHeadline,
+    subtext,
+  };
+}
+
 
 /**
  * Quantizes an angle in radians to the nearest discrete step (e.g. 16 steps for 16-bit sprites).

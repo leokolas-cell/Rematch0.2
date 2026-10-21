@@ -25,10 +25,11 @@ body,
 }
 
 .app-viewport {
-  width: 100vw;
-  width: 100dvw;
-  height: 100vh;
-  height: 100dvh;
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
 }
 
 canvas {
@@ -135,46 +136,105 @@ canvas {
   animation: trophyBob 2.2s ease-in-out infinite;
 }
 
-/* Safe-Area Aware HUD & Mobile Controls for iPhone / Android / Tablet (Portrait & Landscape) */
+/* Safe-Area Aware HUD, Overlays & Mobile Controls for iPhone Web App (Portrait & Landscape) */
 .hud-safe-top {
-  padding-top: max(0.5rem, env(safe-area-inset-top));
-  padding-left: max(0.75rem, env(safe-area-inset-left));
-  padding-right: max(0.75rem, env(safe-area-inset-right));
+  padding-top: max(0.6rem, calc(env(safe-area-inset-top) + 0.35rem));
+  padding-left: max(0.85rem, calc(env(safe-area-inset-left) + 0.55rem));
+  padding-right: max(0.85rem, calc(env(safe-area-inset-right) + 0.55rem));
+}
+
+.safe-area-overlay,
+#splashScreen,
+#menuOverlay,
+#preMatchVsOverlay,
+#tournamentWinOverlay,
+#editProfileModal {
+  padding-top: max(0.85rem, calc(env(safe-area-inset-top) + 0.55rem));
+  padding-bottom: max(0.85rem, calc(env(safe-area-inset-bottom) + 0.55rem));
+  padding-left: max(0.85rem, calc(env(safe-area-inset-left) + 0.65rem));
+  padding-right: max(0.85rem, calc(env(safe-area-inset-right) + 0.65rem));
 }
 
 .mobile-controls-safe {
-  padding-bottom: max(1.1rem, calc(env(safe-area-inset-bottom) + 0.45rem));
-  padding-left: max(1.25rem, calc(env(safe-area-inset-left) + 0.5rem));
-  padding-right: max(1.25rem, calc(env(safe-area-inset-right) + 0.5rem));
+  padding-bottom: max(1.1rem, calc(env(safe-area-inset-bottom) + 0.55rem));
+  padding-left: max(1.25rem, calc(env(safe-area-inset-left) + 0.65rem));
+  padding-right: max(1.25rem, calc(env(safe-area-inset-right) + 0.65rem));
+}
+
+/* Semi-Transparent Tactile Mobile Joystick & Action Buttons */
+.touch-joy-zone {
+  background: rgba(15, 23, 42, 0.24);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  border: 2px solid rgba(255, 255, 255, 0.42);
+  box-shadow: 0 4px 16px rgba(15, 23, 42, 0.18), inset 0 0 12px rgba(255, 255, 255, 0.12);
+}
+
+.touch-joy-knob {
+  background: rgba(56, 189, 248, 0.62);
+  border: 2px solid rgba(255, 255, 255, 0.86);
+  box-shadow: 0 3px 10px rgba(15, 23, 42, 0.28);
+}
+
+.touch-btn-secondary {
+  background: rgba(15, 23, 42, 0.34);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  border: 2px solid rgba(255, 255, 255, 0.48);
+  color: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.22);
+}
+
+.touch-btn-primary {
+  background: rgba(14, 165, 233, 0.56);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  border: 2.5px solid rgba(255, 255, 255, 0.72);
+  color: #ffffff;
+  box-shadow: 0 5px 14px rgba(15, 23, 42, 0.26);
+}
+.touch-btn-primary:active {
+  background: rgba(250, 204, 21, 0.72);
+  border-color: rgba(255, 255, 255, 0.92);
+  color: #0f172a;
 }
 
 /* Default Mobile & Tablet Touch Control Sizing (Generous Arcade Ergonomics) */
 #joystickZone {
-  width: 8.25rem;
-  height: 8.25rem;
+  width: 8rem;
+  height: 8rem;
 }
 
 #joystickKnob {
-  width: 3.4rem;
-  height: 3.4rem;
+  width: 3.3rem;
+  height: 3.3rem;
 }
 
 #mobileActionBtn {
-  width: 6rem;
-  height: 6rem;
+  width: 5.85rem;
+  height: 5.85rem;
 }
 
 #mobileSwitchBtn {
-  width: 4.75rem;
-  height: 4.75rem;
+  width: 4.65rem;
+  height: 4.65rem;
 }
 
-/* Phone Portrait Specific Ergonomics (e.g. 390x844 iPhone) */
+/* Phone & Compact Portrait Fallback Ergonomics */
 @media (max-width: 639px) and (orientation: portrait) {
   .mobile-controls-safe {
-    padding-bottom: max(1.35rem, calc(env(safe-area-inset-bottom) + 0.6rem));
-    padding-left: 1.15rem;
-    padding-right: 1.15rem;
+    padding-bottom: max(1.1rem, calc(env(safe-area-inset-bottom) + 0.5rem));
+    padding-left: max(1rem, calc(env(safe-area-inset-left) + 0.45rem));
+    padding-right: max(1rem, calc(env(safe-area-inset-right) + 0.45rem));
+  }
+}
+
+/* Tablet Landscape Ergonomics (e.g. iPad 1024x768, 1180x820) */
+@media (min-width: 640px) and (max-width: 1366px) and (pointer: coarse) {
+  .mobile-controls-safe {
+    padding-bottom: max(1.25rem, calc(env(safe-area-inset-bottom) + 0.6rem));
+    padding-left: max(1.6rem, calc(env(safe-area-inset-left) + 0.75rem));
+    padding-right: max(1.6rem, calc(env(safe-area-inset-right) + 0.75rem));
   }
 
   #joystickZone {
@@ -183,8 +243,8 @@ canvas {
   }
 
   #joystickKnob {
-    width: 3.4rem !important;
-    height: 3.4rem !important;
+    width: 3.45rem !important;
+    height: 3.45rem !important;
   }
 
   #mobileActionBtn {
@@ -193,83 +253,156 @@ canvas {
   }
 
   #mobileSwitchBtn {
-    width: 4.75rem !important;
-    height: 4.75rem !important;
+    width: 4.85rem !important;
+    height: 4.85rem !important;
   }
 }
 
-/* Tablet Portrait & Landscape Ergonomics (only when touch controls are active) */
-@media (min-width: 640px) and (max-width: 1366px) and (pointer: coarse) {
-  .mobile-controls-safe {
-    padding-bottom: max(1.5rem, calc(env(safe-area-inset-bottom) + 0.7rem));
-    padding-left: max(1.75rem, calc(env(safe-area-inset-left) + 0.8rem));
-    padding-right: max(1.75rem, calc(env(safe-area-inset-right) + 0.8rem));
-  }
-
-  #joystickZone {
-    width: 9rem !important;
-    height: 9rem !important;
-  }
-
-  #joystickKnob {
-    width: 3.75rem !important;
-    height: 3.75rem !important;
-  }
-
-  #mobileActionBtn {
-    width: 6.5rem !important;
-    height: 6.5rem !important;
-  }
-
-  #mobileSwitchBtn {
-    width: 5.25rem !important;
-    height: 5.25rem !important;
-  }
-}
-
-/* Compact Landscape Viewports (e.g., iPhone Landscape 844x390 or short landscape windows) */
-@media (max-height: 540px) and (orientation: landscape) {
+/* Mobile Phone Landscape Mode Optimization (e.g. iPhone 844x390, 932x430, 667x375) */
+@media (max-height: 550px) and (orientation: landscape) {
   .hud-safe-top {
-    padding-top: max(0.3rem, env(safe-area-inset-top));
-    padding-bottom: 0.25rem;
-    padding-left: max(0.85rem, env(safe-area-inset-left));
-    padding-right: max(0.85rem, env(safe-area-inset-right));
+    padding-top: max(0.3rem, calc(env(safe-area-inset-top) + 0.15rem)) !important;
+    padding-bottom: 0.2rem !important;
+    padding-left: max(0.85rem, calc(env(safe-area-inset-left) + 0.55rem)) !important;
+    padding-right: max(0.85rem, calc(env(safe-area-inset-right) + 0.55rem)) !important;
   }
 
   .mobile-controls-safe {
-    padding-bottom: max(0.75rem, calc(env(safe-area-inset-bottom) + 0.25rem));
-    padding-left: max(1.25rem, calc(env(safe-area-inset-left) + 0.45rem));
-    padding-right: max(1.25rem, calc(env(safe-area-inset-right) + 0.45rem));
+    padding-bottom: max(0.65rem, calc(env(safe-area-inset-bottom) + 0.3rem)) !important;
+    padding-left: max(1.1rem, calc(env(safe-area-inset-left) + 0.55rem)) !important;
+    padding-right: max(1.1rem, calc(env(safe-area-inset-right) + 0.55rem)) !important;
   }
 
   #joystickZone {
-    width: 7.25rem !important;
-    height: 7.25rem !important;
+    width: 6.75rem !important;
+    height: 6.75rem !important;
   }
 
   #joystickKnob {
-    width: 3.05rem !important;
-    height: 3.05rem !important;
+    width: 2.8rem !important;
+    height: 2.8rem !important;
   }
 
   #mobileActionBtn {
-    width: 5.25rem !important;
-    height: 5.25rem !important;
+    width: 4.9rem !important;
+    height: 4.9rem !important;
+    margin-bottom: 0.45rem !important;
   }
 
   #mobileSwitchBtn {
-    width: 4.25rem !important;
-    height: 4.25rem !important;
+    width: 4rem !important;
+    height: 4rem !important;
   }
 
-  #menuOverlay {
-    padding: 0.5rem 0.85rem !important;
-    align-items: flex-start !important;
-  }
-
+  #splashScreen,
+  #menuOverlay,
   #preMatchVsOverlay,
-  #tournamentWinOverlay {
-    padding: 0.5rem 0.85rem !important;
-    align-items: flex-start !important;
+  #tournamentWinOverlay,
+  #editProfileModal {
+    padding-top: max(0.4rem, calc(env(safe-area-inset-top) + 0.25rem)) !important;
+    padding-bottom: max(0.4rem, calc(env(safe-area-inset-bottom) + 0.25rem)) !important;
+    padding-left: max(0.85rem, calc(env(safe-area-inset-left) + 0.65rem)) !important;
+    padding-right: max(0.85rem, calc(env(safe-area-inset-right) + 0.65rem)) !important;
+  }
+
+  /* Compact horizontal 2-column Home Menu & Post-Match UI in Phone Landscape so everything fits on screen at once */
+  #menuModalCard {
+    gap: 0.35rem !important;
+    max-width: 52rem !important;
+  }
+
+  #menuTopBar {
+    padding: 0.32rem 0.75rem !important;
+    border-radius: 1.1rem !important;
+  }
+
+  #menuMainGrid:not(.hidden):not(:has(#menuLeftCol.hidden)) {
+    display: grid !important;
+    grid-template-columns: repeat(12, minmax(0, 1fr)) !important;
+    gap: 0.45rem !important;
+  }
+
+  #menuLeftCol {
+    grid-column: span 7 / span 7 !important;
+    padding: 0.45rem 0.7rem !important;
+    gap: 0.35rem !important;
+    border-radius: 1.1rem !important;
+  }
+
+  #matchmakingCard {
+    grid-column: span 5 / span 5 !important;
+    padding: 0.45rem 0.65rem !important;
+    border-radius: 1.1rem !important;
+  }
+
+  #mmYouAvatar,
+  #mmOpponentAvatar {
+    width: 2.5rem !important;
+    height: 2.5rem !important;
+  }
+
+  #menuBottomBar {
+    padding: 0.38rem 0.7rem !important;
+    border-radius: 1.1rem !important;
+  }
+
+  #menuBottomBar > * + * {
+    margin-top: 0.25rem !important;
+  }
+
+  #startBtn {
+    min-height: 36px !important;
+    padding-top: 0.32rem !important;
+    padding-bottom: 0.32rem !important;
+    font-size: 0.85rem !important;
+  }
+
+  #rematchSameBtn,
+  #mainMenuBtn,
+  #resumeBtn,
+  #forfeitBtn {
+    min-height: 32px !important;
+    padding-top: 0.25rem !important;
+    padding-bottom: 0.25rem !important;
+    font-size: 0.75rem !important;
+  }
+
+  #howToPlayBtn {
+    min-height: 26px !important;
+    padding-top: 0.15rem !important;
+    padding-bottom: 0.15rem !important;
+    font-size: 0.7rem !important;
+  }
+
+  #postMatchRankCard {
+    padding: 0.45rem 0.65rem !important;
+    margin-bottom: 0.25rem !important;
+  }
+
+  #matchStatsRow {
+    margin-bottom: 0.25rem !important;
+    gap: 0.35rem !important;
+  }
+
+  #matchStatsRow > div {
+    padding: 0.25rem 0.4rem !important;
+  }
+
+  .mode-btn,
+  .kit-btn {
+    min-height: 32px !important;
+    padding-top: 0.22rem !important;
+    padding-bottom: 0.22rem !important;
   }
 }
+
+@keyframes phoneRotateTilt {
+  0%, 20% { transform: rotate(0deg); }
+  50%, 80% { transform: rotate(-90deg); }
+  100% { transform: rotate(0deg); }
+}
+
+.animate-phone-rotate {
+  animation: phoneRotateTilt 2.4s cubic-bezier(0.34, 1.56, 0.64, 1) infinite;
+}
+

@@ -23,6 +23,13 @@ import {
   computeShotSpinAndSpeed,
   quantizeAngle,
   simulateCurvedPreviewArc,
+  shouldKeeperSweepLooseBallInBox,
+  clampKeeperToBox,
+  isLongRangeGoal,
+  getUserRankInfo,
+  getNextRankInfo,
+  computeRankProgressSummary,
+  RANK_TIERS,
   type PlayerStateSnapshot,
   type KeeperStateSnapshot,
 } from './rules.ts';
@@ -190,7 +197,7 @@ test('evaluateKickDecisionPure uses subtle auto-lock so tight angles, through-ba
     team: 'YOU',
     index: 0,
     x: 900,
-    y: 790,
+    y: 350,
     vx: 0,
     vy: 0,
     angle: 0,
@@ -199,8 +206,8 @@ test('evaluateKickDecisionPure uses subtle auto-lock so tight angles, through-ba
   const topWing: PlayerStateSnapshot = {
     team: 'YOU',
     index: 1,
-    x: 1350,
-    y: 420,
+    x: 1450,
+    y: 230,
     vx: 3.5,
     vy: 0,
     angle: 0,
@@ -211,25 +218,24 @@ test('evaluateKickDecisionPure uses subtle auto-lock so tight angles, through-ba
     { team: 'AI', x: PITCH.width - 42, y: PITCH.height / 2, radius: 13 },
   ];
 
-  // Aiming a through-ball 28 degrees away from topWing into open space ahead of topWing:
-  // Subtle auto-lock should NOT snap directly onto topWing's current body, allowing a true through-ball into space!
-  const throughAimX = 1650 - carrier.x;
-  const throughAimY = 260 - carrier.y;
-  const len = Math.hypot(throughAimX, throughAimY);
-  const throughDecision = evaluateKickDecisionPure(
+  // Aiming toward the top wall at (1180, 0) for a tactical wall-rebound bank pass around a defender:
+  // Relaxed auto-aim should NOT pull the pass directly into topWing's body, and should target the wall bounce point!
+  const wallAimX = 1180 - carrier.x;
+  const wallAimY = 10.5 - carrier.y;
+  const wallLen = Math.hypot(wallAimX, wallAimY);
+  const reboundDecision = evaluateKickDecisionPure(
     carrier,
-    throughAimX / len,
-    throughAimY / len,
+    wallAimX / wallLen,
+    wallAimY / wallLen,
     [carrier, topWing],
     keepers,
-    { active: true, x: 1650, y: 260 }
+    { active: false, x: 0, y: 0 }
   );
-  assert.equal(throughDecision.type, 'PASS');
-  assert.equal(throughDecision.isThroughBall, true);
-  assert.equal(throughDecision.bestMate, topWing);
+  assert.equal(reboundDecision.type, 'PASS');
+  assert.ok(reboundDecision.wallBouncePoint !== null, 'Expected wallBouncePoint to be populated for wall rebound pass');
   assert.ok(
-    throughDecision.passTargetX! > topWing.x + 120,
-    `Through-ball targetX (${throughDecision.passTargetX}) should lead ahead of topWing (${topWing.x})`
+    reboundDecision.passTargetY! <= 15,
+    `Expected wall rebound passTargetY (${reboundDecision.passTargetY}) to target the top wall directly instead of being clamped away`
   );
 });
 
@@ -391,4 +397,86 @@ test('computeKeeperTargetPosition shifts keeper reactively toward ball side so c
   const farPostY = centerY + 145;
   assert.ok(farPostY - topWingState.targetY > 260);
 });
+
+test('shouldKeeperSweepLooseBallInBox and clampKeeperToBox allow keeper to collect uncontested ball in box without ever leaving box', () => {
+  const farFieldPlayers = [
+    { x: 1100, y: 500 },
+    { x: 1350, y: 900 },
+  ];
+  const closeFieldPlayers = [
+    { x: 310, y: 780 },
+    { x: 1350, y: 900 },
+  ];
+
+  // Loose ball inside YOU penalty box (x=280, y=790) with no field players nearby -> keeper sweeps!
+  assert.equal(
+    shouldKeeperSweepLooseBallInBox(
+      'YOU',
+      { x: 280, y: 790, vx: 1.5, vy: 0.5, owner: null, isShot: false },
+      farFieldPlayers
+    ),
+    true
+  );
+
+  // If a field player is nearby (x=310, y=780), keeper stays on patrol line
+  assert.equal(
+    shouldKeeperSweepLooseBallInBox(
+      'YOU',
+      { x: 280, y: 790, vx: 1.5, vy: 0.5, owner: null, isShot: false },
+      closeFieldPlayers
+    ),
+    false
+  );
+
+  // Keeper can NEVER leave their penalty box
+  const clampedYou = clampKeeperToBox('YOU', 750, 150, 13.5);
+  assert.ok(clampedYou.x <= PITCH.boxWidth - 13.5 - 8);
+  assert.ok(clampedYou.y >= (PITCH.height - PITCH.boxHeight) / 2 + 13.5 + 6);
+
+  const clampedAi = clampKeeperToBox('AI', 1800, 1450, 13.5);
+  assert.ok(clampedAi.x >= PITCH.width - PITCH.boxWidth + 13.5 + 8);
+  assert.ok(clampedAi.y <= (PITCH.height + PITCH.boxHeight) / 2 - 13.5 - 6);
+});
+
+test('isLongRangeGoal detects goals scored from far outside the penalty box for RONALDO GOAL celebration', () => {
+  // Shot by YOU from x=1500 (well outside the x=2180 penalty box edge) -> true
+  assert.equal(isLongRangeGoal('YOU', 1500, 790), true);
+  // Shot by YOU from inside the penalty box (x=2350) -> false
+  assert.equal(isLongRangeGoal('YOU', 2350, 790), false);
+  // Shot by YOU from just outside the box line (x=2120) -> false (not far outside)
+  assert.equal(isLongRangeGoal('YOU', 2120, 790), false);
+});
+
+test('getUserRankInfo starts player at Bronze I (0 wins) and ranks up as wins increase with matching rank border colors', () => {
+  const startRank = getUserRankInfo(0);
+  assert.equal(startRank.name, 'Bronze I');
+  assert.equal(startRank.tierGroup, 'BRONZE');
+  assert.equal(startRank.borderHex, '#cd7f32');
+
+  const nextAfterZero = getNextRankInfo(0);
+  assert.equal(nextAfterZero?.name, 'Bronze II');
+
+  const silverRank = getUserRankInfo(2);
+  assert.equal(silverRank.name, 'Silver I');
+  assert.equal(silverRank.borderHex, '#94a3b8');
+
+  const goldRank = getUserRankInfo(3);
+  assert.equal(goldRank.name, 'Gold II');
+  assert.equal(goldRank.borderHex, '#eab308');
+
+  const starRank = getUserRankInfo(8);
+  assert.equal(starRank.name, 'Star League');
+  assert.equal(getNextRankInfo(8), null);
+  assert.ok(RANK_TIERS.length >= 7);
+
+  const summaryAfterFirstWin = computeRankProgressSummary(1, 0);
+  assert.equal(summaryAfterFirstWin.rankedUp, true);
+  assert.equal(summaryAfterFirstWin.prevRank.name, 'Bronze I');
+  assert.equal(summaryAfterFirstWin.currentRank.name, 'Bronze II');
+  assert.equal(summaryAfterFirstWin.nextRank?.name, 'Silver I');
+  assert.ok(summaryAfterFirstWin.progressPct > summaryAfterFirstWin.prevProgressPct);
+  assert.ok(summaryAfterFirstWin.statusHeadline.includes('RANK UP!'));
+});
+
+
 

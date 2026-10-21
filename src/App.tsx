@@ -28,6 +28,13 @@ import {
   computeLaunchVelocityForCurve,
   computeShotSpinAndSpeed,
   computePassSpinAndSpeed,
+  shouldKeeperSweepLooseBallInBox,
+  clampKeeperToBox,
+  isLongRangeGoal,
+  getUserRankInfo,
+  getNextRankInfo,
+  computeRankProgressSummary,
+  RANK_TIERS,
 } from './game/rules';
 import { GRAPHICS_CONFIG, PITCH_THEMES, applyPitchTheme, type PitchThemeId } from './game/graphicsConfig';
 import { IndieSoundEngine } from './game/soundEngine';
@@ -359,19 +366,54 @@ export default function App() {
 
     type InternalGameState = 'SPLASH' | 'MENU' | 'PLAYING' | 'PAUSED' | 'GOAL_CELEBRATION' | 'MATCH_OVER';
     let gameState: InternalGameState = 'SPLASH';
-    let hasDetectedTouchInput = false;
+    const isForcedTouchParam =
+      typeof window !== 'undefined' &&
+      new URLSearchParams(window.location.search).get('touch') === '1';
 
     function isCoarseTouchHardware(): boolean {
       return (
-        typeof window.matchMedia === 'function' &&
-        window.matchMedia('(pointer: coarse) and (hover: none)').matches
+        isForcedTouchParam ||
+        (typeof window.matchMedia === 'function' &&
+          window.matchMedia('(pointer: coarse) and (hover: none)').matches)
       );
     }
+
+    let hasDetectedTouchInput = isCoarseTouchHardware();
 
     function isMobileOrTabletViewport(): boolean {
       const w = window.innerWidth;
       const h = window.innerHeight;
-      return w < h || hasDetectedTouchInput || (isCoarseTouchHardware() && w <= 1366);
+      return w < h || hasDetectedTouchInput || (isCoarseTouchHardware() && w <= 1366) || (w <= 1024 && h <= 600);
+    }
+
+    let landscapeLockDismissed = false;
+
+    function tryLockDeviceToLandscape() {
+      try {
+        const scr = window.screen as Screen & {
+          orientation?: { lock?: (mode: string) => Promise<void> };
+        };
+        if (scr?.orientation && typeof scr.orientation.lock === 'function') {
+          scr.orientation.lock('landscape').catch(() => {});
+        }
+      } catch {
+        // Ignore on browsers that restrict orientation lock
+      }
+    }
+
+    function syncLandscapeLockOverlay() {
+      const lockOverlay = document.getElementById('landscapeLockOverlay');
+      if (!lockOverlay) return;
+      const w = window.innerWidth;
+      const h = window.innerHeight;
+      const isPortrait = w < h;
+      const isMobileOrTab = hasDetectedTouchInput || isCoarseTouchHardware() || w < 768;
+      if (!isPortrait) {
+        landscapeLockDismissed = false;
+      }
+      const shouldShowLock = isPortrait && isMobileOrTab && !landscapeLockDismissed;
+      lockOverlay.classList.toggle('hidden', !shouldShowLock);
+      lockOverlay.classList.toggle('flex', shouldShowLock);
     }
 
     function shouldShowMobileTouchControls(): boolean {
@@ -404,6 +446,7 @@ export default function App() {
       mobileControlsEl.classList.toggle('hidden', !showTouch);
       mobileControlsEl.classList.toggle('flex', showTouch);
       mobileControlsEl.style.display = showTouch ? 'flex' : 'none';
+      syncLandscapeLockOverlay();
     }
 
     function syncBodyStateAttr(state: InternalGameState) {
@@ -440,12 +483,15 @@ export default function App() {
     let selectedPitchTheme: PitchThemeId = 'CLASSIC_TURF';
     let tournamentRound = 0; // 0 = Quarter-Final (Game 1), 1 = Semi-Final (Game 2), 2 = Grand Final (Game 3)
 
-    // User Profile State (Name + Preset Icon or Camera Photo)
+    // User Profile State (Name + Preset Icon or Camera Photo + Ranked Progression & Setup Flag)
     interface UserProfile {
       name: string;
       iconType: 'preset' | 'photo';
       presetIcon: string;
       photoDataUrl: string | null;
+      rankedWins: number;
+      rankedMatches: number;
+      hasEditedProfile: boolean;
     }
 
     const PRESET_ICONS: { id: string; label: string; html: string }[] = [
@@ -462,6 +508,9 @@ export default function App() {
       iconType: 'preset',
       presetIcon: '#10',
       photoDataUrl: null,
+      rankedWins: 0,
+      rankedMatches: 0,
+      hasEditedProfile: false,
     };
 
     try {
@@ -474,11 +523,22 @@ export default function App() {
             iconType: parsed.iconType === 'photo' && parsed.photoDataUrl ? 'photo' : 'preset',
             presetIcon: parsed.presetIcon || '#10',
             photoDataUrl: parsed.photoDataUrl || null,
+            rankedWins: typeof parsed.rankedWins === 'number' && parsed.rankedWins >= 0 ? Math.floor(parsed.rankedWins) : 0,
+            rankedMatches: typeof parsed.rankedMatches === 'number' && parsed.rankedMatches >= 0 ? Math.floor(parsed.rankedMatches) : 0,
+            hasEditedProfile: Boolean(parsed.hasEditedProfile),
           };
         }
       }
     } catch {
       // Ignore storage access errors
+    }
+
+    function saveUserProfileToStorage() {
+      try {
+        window.localStorage.setItem('rematch_profile_v1', JSON.stringify(userProfile));
+      } catch {
+        // Ignore storage access errors
+      }
     }
 
     let activeCameraStream: MediaStream | null = null;
@@ -509,6 +569,54 @@ export default function App() {
         rankLabel: 'Silver I',
         userRankLabel: 'Silver I',
       },
+      RANKED_BRONZE: {
+        cpuSpeed: 3.35,
+        cpuDribble: 1.82,
+        standOff: 195,
+        tackleChance: 0.022,
+        decisionDelay: 25,
+        keeperSpeed: 1.86,
+        passCreativity: 0.80,
+        interceptScale: 0.94,
+        rankLabel: 'Bronze II',
+        userRankLabel: 'Bronze II',
+      },
+      RANKED_SILVER: {
+        cpuSpeed: 3.65,
+        cpuDribble: 2.02,
+        standOff: 170,
+        tackleChance: 0.030,
+        decisionDelay: 19,
+        keeperSpeed: 1.98,
+        passCreativity: 0.85,
+        interceptScale: 1.0,
+        rankLabel: 'Silver I',
+        userRankLabel: 'Silver I',
+      },
+      RANKED_GOLD: {
+        cpuSpeed: 3.95,
+        cpuDribble: 2.22,
+        standOff: 148,
+        tackleChance: 0.038,
+        decisionDelay: 15,
+        keeperSpeed: 2.10,
+        passCreativity: 0.90,
+        interceptScale: 1.06,
+        rankLabel: 'Gold II',
+        userRankLabel: 'Gold II',
+      },
+      RANKED_PLATINUM: {
+        cpuSpeed: 4.22,
+        cpuDribble: 2.40,
+        standOff: 128,
+        tackleChance: 0.046,
+        decisionDelay: 12,
+        keeperSpeed: 2.24,
+        passCreativity: 0.93,
+        interceptScale: 1.12,
+        rankLabel: 'Platinum I',
+        userRankLabel: 'Platinum I',
+      },
       RANKED: {
         cpuSpeed: 4.52,
         cpuDribble: 2.58,
@@ -531,7 +639,7 @@ export default function App() {
         passCreativity: 0.82,
         interceptScale: 0.96,
         rankLabel: 'Gold II',
-        userRankLabel: 'Gold II • Seed #1',
+        userRankLabel: 'Bronze II',
       },
       TOURNAMENT_SF: {
         cpuSpeed: 3.98,
@@ -543,7 +651,7 @@ export default function App() {
         passCreativity: 0.90,
         interceptScale: 1.06,
         rankLabel: 'Platinum I',
-        userRankLabel: 'Platinum I • Seed #1',
+        userRankLabel: 'Bronze II',
       },
       TOURNAMENT_GF: {
         cpuSpeed: 4.45,
@@ -555,16 +663,40 @@ export default function App() {
         passCreativity: 0.95,
         interceptScale: 1.16,
         rankLabel: 'Star League',
-        userRankLabel: 'Star League • Finalist',
+        userRankLabel: 'Bronze II',
       },
     };
 
     function getActiveDifficultyPreset() {
+      const rankInfo = getUserRankInfo(userProfile.rankedWins);
       if (currentGameMode === 'CASUAL') return MODE_PRESETS.CASUAL;
-      if (currentGameMode === 'RANKED') return MODE_PRESETS.RANKED;
-      if (tournamentRound === 0) return MODE_PRESETS.TOURNAMENT_QF;
-      if (tournamentRound === 1) return MODE_PRESETS.TOURNAMENT_SF;
-      return MODE_PRESETS.TOURNAMENT_GF;
+      if (currentGameMode === 'RANKED') {
+        const base =
+          rankInfo.tierGroup === 'BRONZE'
+            ? MODE_PRESETS.RANKED_BRONZE
+            : rankInfo.tierGroup === 'SILVER'
+              ? MODE_PRESETS.RANKED_SILVER
+              : rankInfo.tierGroup === 'GOLD'
+                ? MODE_PRESETS.RANKED_GOLD
+                : rankInfo.tierGroup === 'PLATINUM'
+                  ? MODE_PRESETS.RANKED_PLATINUM
+                  : MODE_PRESETS.RANKED;
+        return {
+          ...base,
+          rankLabel: rankInfo.name,
+          userRankLabel: rankInfo.name,
+        };
+      }
+      const roundPreset =
+        tournamentRound === 0
+          ? MODE_PRESETS.TOURNAMENT_QF
+          : tournamentRound === 1
+            ? MODE_PRESETS.TOURNAMENT_SF
+            : MODE_PRESETS.TOURNAMENT_GF;
+      return {
+        ...roundPreset,
+        userRankLabel: rankInfo.name,
+      };
     }
 
     const AVATAR_COLORS = [
@@ -582,7 +714,7 @@ export default function App() {
       'SaltyPretzel', 'TurboTaco', 'ChaiLatte', 'Niko_Bell', 'Zuzu_Plays', 'Kobe_24', 'Pippin_11',
     ];
 
-    const RANKS = ['Bronze II', 'Silver I', 'Gold II', 'Platinum I', 'Star League'];
+    const RANKS = ['Bronze II', 'Silver I', 'Gold II', 'Platinum I', 'Diamond I', 'Star League'];
     const SERVERS = ['Sydney-1 [OCE]', 'Melbourne-2 [OCE]', 'Auckland-1 [OCE]'];
 
     const OCEANIA_PLAYERS = GAMER_TAGS.map((tag, idx) => {
@@ -694,9 +826,23 @@ export default function App() {
       isSearchingMatch = false;
     }
 
+    function applyRankOutlineStyle(el: HTMLElement | null) {
+      if (!el) return;
+      const rankInfo = getUserRankInfo(userProfile.rankedWins);
+      el.style.borderColor = rankInfo.borderHex;
+      el.style.boxShadow = `0 3px 0 ${rankInfo.shadowHex}, 0 0 0 1.5px ${rankInfo.borderHex}`;
+    }
+
     function syncProfileUI() {
       const youIsHome = userKitChoice === 'HOME';
+      const rankInfo = getUserRankInfo(userProfile.rankedWins);
+      const nextRank = getNextRankInfo(userProfile.rankedWins);
+
       const menuNameEl = document.getElementById('menuProfileNameText');
+      const menuRankBadgeEl = document.getElementById('menuProfileRankBadge');
+      const menuAvatarBox = document.getElementById('menuProfileAvatarBox');
+      const menuProfileCardBtn = document.getElementById('editProfileBtn');
+      const profileFirstBootPrompt = document.getElementById('profileFirstBootPrompt');
       const menuAvatarImg = document.getElementById('menuProfileAvatarImg') as HTMLImageElement | null;
       const menuAvatarInitials = document.getElementById('menuProfileAvatarInitials');
       const mmYouAvatar = document.getElementById('mmYouAvatar');
@@ -709,6 +855,23 @@ export default function App() {
           .toUpperCase() || 'PL';
 
       if (menuNameEl) menuNameEl.innerText = userProfile.name;
+      if (menuRankBadgeEl) {
+        menuRankBadgeEl.innerText = rankInfo.name;
+        menuRankBadgeEl.style.color = rankInfo.badgeTextHex;
+        menuRankBadgeEl.style.backgroundColor = rankInfo.badgeBgHex;
+        menuRankBadgeEl.style.borderColor = rankInfo.borderHex;
+      }
+      if (menuAvatarBox) {
+        menuAvatarBox.style.borderColor = rankInfo.borderHex;
+      }
+      if (menuProfileCardBtn) {
+        menuProfileCardBtn.style.borderColor = rankInfo.borderHex;
+        menuProfileCardBtn.style.boxShadow = `0 3px 0 #0f172a, 0 0 0 1.5px ${rankInfo.borderHex}`;
+      }
+      if (profileFirstBootPrompt) {
+        profileFirstBootPrompt.classList.toggle('hidden', userProfile.hasEditedProfile);
+      }
+
       if (menuAvatarImg && menuAvatarInitials) {
         if (userProfile.iconType === 'photo' && userProfile.photoDataUrl) {
           menuAvatarImg.src = userProfile.photoDataUrl;
@@ -723,12 +886,55 @@ export default function App() {
 
       if (mmYouAvatar) {
         mmYouAvatar.className = youIsHome
-          ? 'w-14 h-14 rounded-2xl bg-sky-400 border-2 border-slate-900 text-slate-900 font-black text-xs flex flex-col items-center justify-center shadow-[0_3px_0_#0f172a] mb-2 relative overflow-hidden transition-colors'
-          : 'w-14 h-14 rounded-2xl bg-rose-400 border-2 border-slate-900 text-white font-black text-xs flex flex-col items-center justify-center shadow-[0_3px_0_#0f172a] mb-2 relative overflow-hidden transition-colors';
+          ? 'w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-sky-400 border-[3px] text-slate-900 font-black text-xs flex flex-col items-center justify-center mb-2 relative overflow-hidden transition-colors shrink-0'
+          : 'w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-rose-400 border-[3px] text-white font-black text-xs flex flex-col items-center justify-center mb-2 relative overflow-hidden transition-colors shrink-0';
+        applyRankOutlineStyle(mmYouAvatar);
         mmYouAvatar.innerHTML = getProfileAvatarInnerHtml(userProfile, youIsHome);
       }
       if (mmYouTitle) {
         mmYouTitle.innerText = `${userProfile.name} (${youIsHome ? 'Home Kit' : 'Away Kit'})`;
+      }
+
+      // Sync Profile Overview Modal elements
+      const ovAvatarBox = document.getElementById('overviewAvatarBox');
+      const ovAvatarImg = document.getElementById('overviewProfileImg') as HTMLImageElement | null;
+      const ovAvatarInitials = document.getElementById('overviewProfileInitials');
+      const ovName = document.getElementById('overviewProfileName');
+      const ovRankBadge = document.getElementById('overviewRankBadge');
+      const ovWinsText = document.getElementById('overviewRankedWinsText');
+      const ovNextRankText = document.getElementById('overviewNextRankText');
+      const ovProgressBar = document.getElementById('overviewRankProgressBar');
+
+      if (ovAvatarBox) {
+        applyRankOutlineStyle(ovAvatarBox);
+      }
+      if (ovAvatarImg && ovAvatarInitials) {
+        if (userProfile.iconType === 'photo' && userProfile.photoDataUrl) {
+          ovAvatarImg.src = userProfile.photoDataUrl;
+          ovAvatarImg.classList.remove('hidden');
+          ovAvatarInitials.classList.add('hidden');
+        } else {
+          ovAvatarImg.classList.add('hidden');
+          ovAvatarInitials.classList.remove('hidden');
+          ovAvatarInitials.innerText = initials;
+        }
+      }
+      if (ovName) ovName.innerText = userProfile.name;
+      if (ovRankBadge) {
+        ovRankBadge.innerText = rankInfo.name;
+        ovRankBadge.style.backgroundColor = rankInfo.badgeBgHex;
+        ovRankBadge.style.color = rankInfo.badgeTextHex;
+        ovRankBadge.style.borderColor = rankInfo.borderHex;
+      }
+      if (ovWinsText) {
+        ovWinsText.innerText = `${userProfile.rankedWins} ${userProfile.rankedWins === 1 ? 'Win' : 'Wins'}`;
+      }
+      const progressSummary = computeRankProgressSummary(userProfile.rankedWins);
+      if (ovNextRankText) {
+        ovNextRankText.innerText = progressSummary.subtext;
+      }
+      if (ovProgressBar) {
+        ovProgressBar.style.width = `${progressSummary.progressPct}%`;
       }
     }
 
@@ -739,6 +945,7 @@ export default function App() {
     function syncKitAndModeUI() {
       const cpuKit = getContrastingKit(userKitChoice);
       const youIsHome = userKitChoice === 'HOME';
+      const rankInfo = getUserRankInfo(userProfile.rankedWins);
 
       // 1. Update Home Menu Kit Toggle Buttons
       const kitHomeBtn = document.getElementById('kitHomeBtn');
@@ -752,20 +959,36 @@ export default function App() {
           : 'kit-btn min-h-[44px] py-2.5 px-3.5 sm:px-4 rounded-xl text-xs sm:text-sm font-extrabold transition-all cursor-pointer bg-slate-100 text-slate-600 hover:text-slate-900 border-2 border-slate-300 flex items-center justify-center gap-2';
       }
 
-      // 2. Update Player Card in Home Menu (Rank shown on Ranked & Tournament; hidden on Casual)
+      // 2. Update Player Card in Home Menu (Rank shown on BOTH Ranked & Tournament; hidden on Casual)
       syncProfileUI();
-      const preset = getActiveDifficultyPreset();
       const mmYouPill = document.getElementById('mmYouPill');
       const mmYouDot = document.getElementById('mmYouDot');
       const mmYouMeta = document.getElementById('mmYouMeta');
 
       if (mmYouPill) {
-        mmYouPill.className = youIsHome
-          ? 'inline-flex items-center space-x-1.5 mt-1 px-2.5 py-0.5 rounded-full bg-sky-100 text-[11px] font-extrabold text-sky-800'
-          : 'inline-flex items-center space-x-1.5 mt-1 px-2.5 py-0.5 rounded-full bg-rose-100 text-[11px] font-extrabold text-rose-800';
+        if (currentGameMode === 'CASUAL') {
+          mmYouPill.className = youIsHome
+            ? 'inline-flex items-center space-x-1.5 mt-1 px-2.5 py-0.5 rounded-full bg-sky-100 text-[11px] font-extrabold text-sky-800'
+            : 'inline-flex items-center space-x-1.5 mt-1 px-2.5 py-0.5 rounded-full bg-rose-100 text-[11px] font-extrabold text-rose-800';
+          mmYouPill.style.backgroundColor = '';
+          mmYouPill.style.color = '';
+          mmYouPill.style.borderColor = '';
+        } else {
+          mmYouPill.className =
+            'inline-flex items-center space-x-1.5 mt-1 px-2.5 py-0.5 rounded-full border text-[11px] font-black';
+          mmYouPill.style.backgroundColor = rankInfo.badgeBgHex;
+          mmYouPill.style.color = rankInfo.badgeTextHex;
+          mmYouPill.style.borderColor = rankInfo.borderHex;
+        }
       }
       if (mmYouDot) {
-        mmYouDot.className = youIsHome ? 'w-2 h-2 rounded-full bg-sky-500' : 'w-2 h-2 rounded-full bg-rose-500';
+        if (currentGameMode === 'CASUAL') {
+          mmYouDot.className = youIsHome ? 'w-2 h-2 rounded-full bg-sky-500' : 'w-2 h-2 rounded-full bg-rose-500';
+          mmYouDot.style.backgroundColor = '';
+        } else {
+          mmYouDot.className = 'w-2 h-2 rounded-full';
+          mmYouDot.style.backgroundColor = rankInfo.borderHex;
+        }
       }
       if (mmYouMeta) {
         mmYouMeta.innerText =
@@ -773,7 +996,7 @@ export default function App() {
             ? youIsHome
               ? 'Home Kit (Sky)'
               : 'Away Kit (Coral)'
-            : preset.userRankLabel;
+            : rankInfo.name;
       }
 
       // 3. Update Top HUD Scoreboard Pills so HUD matches chosen kit & contrasting CPU kit
@@ -800,7 +1023,7 @@ export default function App() {
         }
         if (hudTourneyBadge) {
           hudTourneyBadge.classList.remove('hidden');
-          hudTourneyBadge.innerText = `CUP ${tournamentRound + 1}/${TOTAL_TOURNAMENT_GAMES} · ${TOURNAMENT_ROUNDS[tournamentRound].toUpperCase()}`;
+          hudTourneyBadge.innerText = `CUP ${tournamentRound + 1}/${TOTAL_TOURNAMENT_GAMES} · ${TOURNAMENT_ROUNDS[tournamentRound].toUpperCase()} · ${rankInfo.name.toUpperCase()}`;
         }
         for (let r = 0; r < TOTAL_TOURNAMENT_GAMES; r++) {
           const stepEl = document.getElementById(`tourneyStep${r}`);
@@ -842,7 +1065,7 @@ export default function App() {
       const vsOverlay = document.getElementById('preMatchVsOverlay');
       if (vsOverlay) vsOverlay.classList.add('hidden');
 
-      if (card) card.className = 'lg:col-span-5 w-full p-4 sm:p-5 rounded-3xl bg-white border-3 border-slate-900 shadow-[0_6px_0_#0f172a] text-left transition-all duration-300 relative overflow-hidden flex flex-col justify-between';
+      if (card) card.className = 'sm:col-span-5 w-full p-4 sm:p-5 rounded-3xl bg-white border-3 border-slate-900 shadow-[0_6px_0_#0f172a] text-left transition-all duration-300 relative overflow-hidden flex flex-col justify-between';
       if (statusLabel) statusLabel.className = 'flex items-center space-x-2 text-slate-800 transition-colors';
       if (statusIcon) statusIcon.className = 'fa-solid fa-trophy text-amber-500 text-xs';
       if (statusText) {
@@ -1130,6 +1353,8 @@ export default function App() {
       passTarget: null as PlayerEntity | null,
       passTargetX: PITCH.width / 2,
       passTargetY: PITCH.height / 2,
+      kickOriginX: PITCH.width / 2,
+      kickOriginY: PITCH.height / 2,
       isThroughBall: false,
       isShot: false,
       isOneTouch: false,
@@ -1146,8 +1371,8 @@ export default function App() {
 
     const keys: Record<string, boolean> = {};
     type ControlScheme = 'MOUSE' | 'KEYBOARD' | 'JOYSTICK' | 'GAMEPAD';
-    let activeControlScheme: ControlScheme = 'MOUSE';
-    let activeControlGuideTab: ControlGuideTab = 'COMPUTER';
+    let activeControlScheme: ControlScheme = hasDetectedTouchInput ? 'JOYSTICK' : 'MOUSE';
+    let activeControlGuideTab: ControlGuideTab = hasDetectedTouchInput ? 'MOBILE' : 'COMPUTER';
     let hasUsedKeyboardMove = false;
 
     const mouseState = {
@@ -1284,36 +1509,25 @@ export default function App() {
 
     function resizeCanvas() {
       if (!canvas) return;
+      const vv = window.visualViewport;
       const rect = canvas.getBoundingClientRect();
-      const w = rect.width || window.innerWidth;
-      const h = rect.height || window.innerHeight;
+      const w = Math.round(vv ? vv.width : rect.width || window.innerWidth);
+      const h = Math.round(vv ? vv.height : rect.height || window.innerHeight);
       canvas.width = w;
       canvas.height = h;
-      const isPortrait = w < h;
       const isMobileOrTablet = isMobileOrTabletViewport();
 
-      if (isPortrait) {
-        // Portrait phone & tablet: shift pitch slightly above the bottom thumb controls & zoom for crisp readability
-        const isTabletPortrait = w >= 600;
-        canvasOffsetY = -Math.round(Math.min(68, h * (isTabletPortrait ? 0.055 : 0.075)));
-        const availH = h - (isTabletPortrait ? 200 : 190);
-        const pitchFractionX = isTabletPortrait ? 0.58 : 0.44;
-        const pitchFractionY = isTabletPortrait ? 0.76 : 0.72;
-        viewScale = Math.max(
-          isTabletPortrait ? 0.46 : 0.39,
-          Math.min(w / (PITCH.width * pitchFractionX), availH / (PITCH.height * pitchFractionY))
-        );
-      } else if (isMobileOrTablet) {
-        // Landscape phone & tablet: generous stadium framing with clearance for top HUD & corner thumb controls
-        const isCompactPhoneLandscape = h <= 540;
-        canvasOffsetY = isCompactPhoneLandscape ? 6 : 12;
-        const pitchFractionX = isCompactPhoneLandscape ? 0.68 : 0.82;
-        const pitchFractionY = isCompactPhoneLandscape ? 0.72 : 0.82;
-        const scaleX = (w - (isCompactPhoneLandscape ? 12 : 36)) / (PITCH.width * pitchFractionX);
-        const scaleY = (h - (isCompactPhoneLandscape ? 16 : 64)) / (PITCH.height * pitchFractionY);
-        viewScale = Math.max(isCompactPhoneLandscape ? 0.34 : 0.44, Math.min(scaleX, scaleY));
+      if (isMobileOrTablet) {
+        // Mobile & Tablet Landscape-Locked Arena Framing: fits entire 2720x1580 horizontal stadium pitch cleanly inside display
+        const isCompactPhoneLandscape = h <= 550;
+        canvasOffsetY = isCompactPhoneLandscape ? 14 : 18;
+        const padX = isCompactPhoneLandscape ? 32 : 52;
+        const padY = isCompactPhoneLandscape ? 54 : 84;
+        const scaleX = Math.max(240, w - padX) / (PITCH.width + 72);
+        const scaleY = Math.max(180, h - padY) / (PITCH.height + 72);
+        viewScale = Math.min(scaleX, scaleY);
       } else {
-        // Desktop widescreen
+        // Normal PC widescreen viewing mode
         canvasOffsetY = 20;
         const padX = 76;
         const padY = 132;
@@ -1322,10 +1536,14 @@ export default function App() {
         viewScale = Math.max(0.18, Math.min(scaleX, scaleY));
       }
       syncBodyStateAttr(gameState);
+      syncLandscapeLockOverlay();
       updateMouseWorldCoords();
     }
 
     window.addEventListener('resize', resizeCanvas);
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener('resize', resizeCanvas);
+    }
 
     function updateMouseWorldCoords() {
       if (!canvas) return;
@@ -1739,6 +1957,8 @@ export default function App() {
       // Start ball directly from actor's center so its actual curved trajectory matches the preview arc 1:1
       ball.x = actor.x;
       ball.y = actor.y;
+      ball.kickOriginX = actor.x;
+      ball.kickOriginY = actor.y;
       ball.owner = null;
       ball.pickupCooldown = 8;
       ball.lastTouchTeam = actor.team;
@@ -2351,14 +2571,19 @@ export default function App() {
             'absolute inset-0 bg-slate-900/55 flex items-center justify-center z-30 p-3 sm:p-6 transition-opacity duration-150 overflow-y-auto';
         }
         modalCard.className =
-          'glass-modal rounded-[28px] max-w-lg w-full max-h-[92dvh] overflow-y-auto p-5 sm:p-7 text-center relative transition-all duration-200 my-auto';
+          state === 'MATCH_OVER'
+            ? 'glass-modal rounded-[28px] max-w-xl w-full max-h-[94dvh] overflow-y-auto p-4 sm:p-6 text-center relative transition-all duration-200 my-auto'
+            : 'glass-modal rounded-[28px] max-w-lg w-full max-h-[92dvh] overflow-y-auto p-5 sm:p-7 text-center relative transition-all duration-200 my-auto';
         if (topBar) {
           topBar.className =
-            'flex flex-col sm:flex-row items-center justify-center gap-3 pb-4 mb-4 border-b-2 border-slate-200';
+            'flex flex-col sm:flex-row items-center justify-center gap-2 sm:gap-3 pb-3 mb-3 border-b-2 border-slate-200';
         }
-        if (mainGrid) mainGrid.className = 'flex flex-col gap-4 text-left mb-4';
+        if (mainGrid) {
+          mainGrid.className =
+            state === 'MATCH_OVER' ? 'hidden' : 'flex flex-col gap-4 text-left mb-4';
+        }
         if (leftCol) leftCol.classList.add('hidden');
-        if (bottomBar) bottomBar.className = 'flex flex-col space-y-2.5 sm:space-y-3';
+        if (bottomBar) bottomBar.className = 'flex flex-col space-y-2 sm:space-y-2.5';
         if (profileBar) profileBar.classList.add('hidden');
         if (editProfileBtn) editProfileBtn.classList.add('hidden');
         if (mainMenuBtn) {
@@ -2377,18 +2602,20 @@ export default function App() {
           'w-full max-w-2xl lg:max-w-5xl flex flex-col gap-3 sm:gap-4 text-center relative transition-all duration-200 my-auto';
         if (topBar) {
           topBar.className =
-            'glass-modal rounded-3xl px-4 py-3 sm:px-6 sm:py-4 flex flex-wrap sm:flex-nowrap items-center justify-between gap-3';
+            'glass-modal rounded-3xl px-4 py-3 sm:px-6 sm:py-3.5 flex flex-col sm:flex-row items-center justify-center sm:justify-between gap-2.5 sm:gap-3';
         }
         if (mainGrid) {
-          mainGrid.className = 'grid grid-cols-1 lg:grid-cols-12 gap-3.5 sm:gap-4 items-stretch text-left';
+          mainGrid.className = 'grid grid-cols-1 sm:grid-cols-12 gap-3.5 sm:gap-4 items-stretch text-left';
         }
         if (leftCol) {
           leftCol.className =
-            'lg:col-span-7 glass-modal rounded-3xl p-4 sm:p-6 flex flex-col justify-between gap-4';
+            'sm:col-span-7 glass-modal rounded-3xl p-4 sm:p-6 flex flex-col justify-between gap-4';
         }
         if (bottomBar) {
           bottomBar.className = 'glass-modal rounded-3xl p-4 sm:p-5 flex flex-col space-y-2.5 sm:space-y-3';
         }
+        const postMatchRankCard = document.getElementById('postMatchRankCard');
+        if (postMatchRankCard) postMatchRankCard.classList.add('hidden');
         if (profileBar) profileBar.classList.remove('hidden');
         if (editProfileBtn) editProfileBtn.classList.remove('hidden');
         if (mainMenuBtn) mainMenuBtn.classList.add('hidden');
@@ -2935,6 +3162,10 @@ export default function App() {
 
       for (const k of keepers) {
         const isYou = k.team === 'YOU';
+        if (!Number.isFinite(k.x) || !Number.isFinite(k.y)) {
+          k.x = k.homeX;
+          k.y = k.homeY;
+        }
         k.patrolPhase = (k.patrolPhase || 0) + dtScale;
         if (k.diveCooldown > 0) k.diveCooldown = Math.max(0, k.diveCooldown - dtScale);
         if (k.saveCooldown > 0) k.saveCooldown = Math.max(0, k.saveCooldown - dtScale);
@@ -2946,6 +3177,9 @@ export default function App() {
         const effectivePatrolSpeed = k.patrolSpeed * keeperFlowFactor;
 
         if (k.holdingBall) {
+          const clampedHold = clampKeeperToBox(k.team, k.x, k.y, k.radius);
+          k.x = clampedHold.x;
+          k.y = clampedHold.y;
           ball.owner = null;
           ball.x = k.x + (isYou ? 18 : -18);
           ball.y = k.y;
@@ -2962,6 +3196,8 @@ export default function App() {
               const dx = receiver.x + receiver.vx * 8 - k.x;
               const dy = receiver.y + receiver.vy * 8 - k.y;
               const d = Math.hypot(dx, dy) || 1;
+              ball.kickOriginX = k.x;
+              ball.kickOriginY = k.y;
               ball.vx = (dx / d) * 21.4;
               ball.vy = (dy / d) * 21.4;
               ball.vz = 2.4;
@@ -2971,10 +3207,36 @@ export default function App() {
               ball.passCounted = false;
               if (isYou) {
                 controlledPlayer = receiver;
-                spawnFloatingText(k.x, k.y - 24, 'KEEPER OUT!', '#06b6d4');
+                spawnFloatingText(k.x, k.y - 24, 'KEEPER PASS!', '#06b6d4');
               }
               sound.playPass();
             }
+          }
+          continue;
+        }
+
+        // Check if loose ball is inside the keeper's box with no outfield players nearby -> Keeper walks to ball & passes to team
+        const shouldSweepBoxBall =
+          k.saveCooldown <= 0 && shouldKeeperSweepLooseBallInBox(k.team, ball, players);
+
+        if (shouldSweepBoxBall) {
+          const dxToBall = ball.x - k.x;
+          const dyToBall = ball.y - k.y;
+          const distToBall = Math.hypot(dxToBall, dyToBall);
+          if (distToBall > 2) {
+            const sweepSpeed = effectivePatrolSpeed * 1.32;
+            k.x += (dxToBall / distToBall) * Math.min(sweepSpeed, distToBall * 0.28) * dtScale;
+            k.y += (dyToBall / distToBall) * Math.min(sweepSpeed, distToBall * 0.28) * dtScale;
+          }
+          const clampedSweep = clampKeeperToBox(k.team, k.x, k.y, k.radius);
+          k.x = clampedSweep.x;
+          k.y = clampedSweep.y;
+          k.angle = Math.atan2(ball.y - k.y, ball.x - k.x);
+
+          if (Math.hypot(ball.x - k.x, ball.y - k.y) <= k.radius + ball.radius + 14) {
+            k.holdingBall = true;
+            k.holdTimer = 16;
+            spawnRipple(k.x, k.y, '#06b6d4', 44);
           }
           continue;
         }
@@ -3028,6 +3290,9 @@ export default function App() {
 
         const patrolLimit = goalHalf - 26;
         k.y = Math.max(centerY - patrolLimit, Math.min(centerY + patrolLimit, k.y));
+        const clampedBox = clampKeeperToBox(k.team, k.x, k.y, k.radius);
+        k.x = clampedBox.x;
+        k.y = clampedBox.y;
         k.angle = Math.atan2(ball.y - k.y, ball.x - k.x);
 
         if (!ball.owner && k.saveCooldown <= 0) {
@@ -3084,6 +3349,12 @@ export default function App() {
       const goalX = scoringTeam === 'YOU' ? PITCH.width : 0;
       spawnGoalConfetti(goalX, ball.y, scoringTeam);
 
+      const isRonaldoLongShot = isLongRangeGoal(
+        scoringTeam,
+        ball.kickOriginX,
+        ball.kickOriginY
+      );
+
       players.forEach((p) => {
         if (p.team === scoringTeam) {
           p.celebrateTimer = 110;
@@ -3094,26 +3365,37 @@ export default function App() {
         scoreYou++;
         const syEl = document.getElementById('scoreYou');
         if (syEl) syEl.innerText = String(scoreYou);
-        goalBannerText = 'GOAL · YOU SCORE!';
-        goalBannerSub = ball.isPerfectStrike
-          ? 'SWEET-SPOT PERFECT STRIKE FINISH!'
-          : flowCombo >= PASSES_FOR_FLOW_BOOST
-            ? `SUPER FLOW x${flowCombo} TEAMWORK FINISH!`
-            : ball.isOneTouch
-              ? 'INSTANT ONE-TOUCH VOLLEY FINISH!'
-              : `CLINICAL CAGE FINISH VS ${currentOpponent.tag.toUpperCase()}!`;
-        setLedBanner(`GOOOAAAL! YOU LEAD ${currentOpponent.tag.toUpperCase()} ${scoreYou} - ${scoreAi}`, 220);
+        if (isRonaldoLongShot) {
+          goalBannerText = 'RONALDO GOAL!';
+          goalBannerSub = 'LONG-RANGE SCREAMER FROM FAR OUTSIDE THE BOX!';
+          spawnFloatingText(ball.x - 60, ball.y - 36, 'RONALDO GOAL!', '#facc15');
+          setLedBanner(`⚡ RONALDO GOAL! LONG-RANGE SCREAMER VS ${currentOpponent.tag.toUpperCase()} (${scoreYou} - ${scoreAi}) ⚡`, 240);
+        } else {
+          goalBannerText = 'GOAL · YOU SCORE!';
+          goalBannerSub = ball.isPerfectStrike
+            ? 'SWEET-SPOT PERFECT STRIKE FINISH!'
+            : flowCombo >= PASSES_FOR_FLOW_BOOST
+              ? `SUPER FLOW x${flowCombo} TEAMWORK FINISH!`
+              : ball.isOneTouch
+                ? 'INSTANT ONE-TOUCH VOLLEY FINISH!'
+                : `CLINICAL CAGE FINISH VS ${currentOpponent.tag.toUpperCase()}!`;
+          setLedBanner(`GOOOAAAL! YOU LEAD ${currentOpponent.tag.toUpperCase()} ${scoreYou} - ${scoreAi}`, 220);
+        }
         const oppPlayer = players.find((p) => p.team === 'AI');
         if (oppPlayer && Math.random() < 0.65) {
-          const chat = ['Nice shot!', 'What a finish!', 'Unlucky!', 'GG!'][Math.floor(Math.random() * 4)];
+          const chat = isRonaldoLongShot
+            ? 'What a screamer!!'
+            : ['Nice shot!', 'What a finish!', 'Unlucky!', 'GG!'][Math.floor(Math.random() * 4)];
           spawnFloatingText(oppPlayer.x, oppPlayer.y - 28, `${currentOpponent.tag}: "${chat}"`, '#fda4af');
         }
       } else {
         scoreAi++;
         const saEl = document.getElementById('scoreAi');
         if (saEl) saEl.innerText = String(scoreAi);
-        goalBannerText = `${currentOpponent.tag.toUpperCase()} SCORES!`;
-        goalBannerSub = `${currentOpponent.rank.toUpperCase()} RIVAL FINISH`;
+        goalBannerText = isRonaldoLongShot ? 'RONALDO GOAL!' : `${currentOpponent.tag.toUpperCase()} SCORES!`;
+        goalBannerSub = isRonaldoLongShot
+          ? `${currentOpponent.tag.toUpperCase()} LONG-RANGE SCREAMER!`
+          : `${currentOpponent.rank.toUpperCase()} RIVAL FINISH`;
         setLedBanner(`${currentOpponent.tag.toUpperCase()} GOAL • SCORE ${scoreYou} - ${scoreAi}`, 180);
         if (ball.lastTouchPlayer && ball.lastTouchPlayer.team === 'AI') {
           const chat = ["Let's gooo!", 'Calculated!', 'GG!', 'Nice pass!'][Math.floor(Math.random() * 4)];
@@ -3853,30 +4135,30 @@ export default function App() {
       const isIdleMenuState = gameState === 'SPLASH' || gameState === 'MENU';
       let targetCamX: number;
       let targetCamY: number;
-      let targetZoom = 1.04;
+      let targetZoom = 1.0;
 
       if (isIdleMenuState) {
         // Gentle scenic stadium pan while in Splash or Home Menu so the pitch never looks like a frozen old match
-        targetCamX = PITCH.width * 0.5 + Math.sin(matchTick * 0.008) * 140;
-        targetCamY = PITCH.height * 0.5 + Math.cos(matchTick * 0.006) * 55;
-        targetZoom = 1.02;
+        targetCamX = PITCH.width * 0.5 + Math.sin(matchTick * 0.008) * 110;
+        targetCamY = PITCH.height * 0.5 + Math.cos(matchTick * 0.006) * 45;
+        targetZoom = 1.0;
       } else {
         const focusX = ball.x * 0.65 + (controlledPlayer ? controlledPlayer.x * 0.35 : PITCH.width * 0.175);
         const focusY = ball.y * 0.65 + (controlledPlayer ? controlledPlayer.y * 0.35 : PITCH.height * 0.175);
         const isPortrait = canvas ? canvas.width < canvas.height : false;
         const isMobOrTab = isMobileOrTabletViewport();
-        const panFactorX = isPortrait ? 0.78 : isMobOrTab ? 0.56 : 0.14;
-        const panFactorY = isPortrait ? 0.40 : isMobOrTab ? 0.38 : 0.12;
+        const panFactorX = isPortrait ? 0.12 : isMobOrTab ? 0.10 : 0.14;
+        const panFactorY = isPortrait ? 0.10 : isMobOrTab ? 0.10 : 0.12;
         const rawCamX = PITCH.width * 0.5 + (focusX - PITCH.width * 0.5) * panFactorX;
         const rawCamY = PITCH.height * 0.5 + (focusY - PITCH.height * 0.5) * panFactorY;
-        const clampMarginX = isPortrait ? 0.14 : isMobOrTab ? 0.18 : 0.22;
-        const clampMarginY = isPortrait ? 0.20 : isMobOrTab ? 0.22 : 0.28;
+        const clampMarginX = isPortrait ? 0.38 : isMobOrTab ? 0.38 : 0.22;
+        const clampMarginY = isPortrait ? 0.38 : isMobOrTab ? 0.38 : 0.28;
         targetCamX = Math.max(PITCH.width * clampMarginX, Math.min(PITCH.width * (1 - clampMarginX), rawCamX));
         targetCamY = Math.max(PITCH.height * clampMarginY, Math.min(PITCH.height * (1 - clampMarginY), rawCamY));
         if (gameState === 'GOAL_CELEBRATION') {
-          targetZoom = 1.1;
+          targetZoom = 1.06;
         } else if (kickChargeState.power > 0.25) {
-          targetZoom = 1.04 + kickChargeState.power * 0.035;
+          targetZoom = 1.0 + kickChargeState.power * 0.025;
         }
       }
 
@@ -3973,7 +4255,7 @@ export default function App() {
       resetPositionsForKickoff('YOU');
       cam.x = PITCH.width * 0.5;
       cam.y = PITCH.height * 0.5;
-      cam.zoom = 1.02;
+      cam.zoom = 1.0;
     }
 
     function returnToHomeMenu() {
@@ -3998,12 +4280,13 @@ export default function App() {
         const srTitleEl = document.getElementById('menuTitle');
         const subEl = document.getElementById('menuSubtitle');
         const statsRow = document.getElementById('matchStatsRow');
+        const postMatchRankCard = document.getElementById('postMatchRankCard');
         const playlistWrap = document.getElementById('playlistSelectorWrap');
         const kitWrap = document.getElementById('kitSelectorWrap');
         const pitchWrap = document.getElementById('pitchSelectorWrap');
 
         if (titleEl) {
-          titleEl.innerHTML = `REMATCH <span class="px-2.5 py-0.5 rounded-xl bg-amber-300 border-2 border-slate-900 font-mono-num text-sm md:text-base font-black text-slate-900 shadow-[0_2px_0_#0f172a]">0.2</span>`;
+          titleEl.innerHTML = `<span>REMATCH</span><span class="font-mono-num text-xl sm:text-3xl md:text-4xl font-black text-amber-400 drop-shadow-[0_2px_0_#0f172a]">0.2</span>`;
         }
         if (srTitleEl) srTitleEl.innerText = 'REMATCH 0.2';
         if (subEl) {
@@ -4013,6 +4296,9 @@ export default function App() {
         if (statsRow) {
           statsRow.classList.add('hidden');
           statsRow.classList.remove('grid');
+        }
+        if (postMatchRankCard) {
+          postMatchRankCard.classList.add('hidden');
         }
         if (playlistWrap) playlistWrap.classList.remove('hidden');
         if (kitWrap) kitWrap.classList.remove('hidden');
@@ -4048,11 +4334,16 @@ export default function App() {
       const youIsHome = userKitChoice === 'HOME';
       if (winAvatar) {
         winAvatar.className = youIsHome
-          ? 'w-20 h-20 sm:w-24 sm:h-24 rounded-3xl bg-sky-400 border-[3px] border-slate-900 text-slate-900 font-black text-xl flex flex-col items-center justify-center shadow-[0_5px_0_#0f172a] relative overflow-hidden shrink-0'
-          : 'w-20 h-20 sm:w-24 sm:h-24 rounded-3xl bg-rose-400 border-[3px] border-slate-900 text-white font-black text-xl flex flex-col items-center justify-center shadow-[0_5px_0_#0f172a] relative overflow-hidden shrink-0';
+          ? 'w-20 h-20 sm:w-24 sm:h-24 rounded-3xl bg-sky-400 border-[3px] text-slate-900 font-black text-xl flex flex-col items-center justify-center relative overflow-hidden shrink-0'
+          : 'w-20 h-20 sm:w-24 sm:h-24 rounded-3xl bg-rose-400 border-[3px] text-white font-black text-xl flex flex-col items-center justify-center relative overflow-hidden shrink-0';
+        applyRankOutlineStyle(winAvatar);
         winAvatar.innerHTML = getProfileAvatarInnerHtml(userProfile, youIsHome);
       }
       if (winPlayerName) winPlayerName.innerText = userProfile.name;
+      const winRankText = document.getElementById('tourneyWinRankText');
+      if (winRankText) {
+        winRankText.innerText = `${getUserRankInfo(userProfile.rankedWins).name} · Cup Champion`;
+      }
       if (winQfRecap) {
         winQfRecap.innerText = `vs ${tournamentBracket.qfOpponent.tag} (${tournamentBracket.scores.qfYou || 'W'})`;
       }
@@ -4095,6 +4386,80 @@ export default function App() {
       let showRematchBtn = true;
       let isTournamentChampion = false;
 
+      // Ranked & Tournament win progression: start at Bronze I and rank up by winning games, with Post-Match Rank Progress Bar UI!
+      let rankUpAnnouncement = '';
+      const postMatchRankCard = document.getElementById('postMatchRankCard');
+      if (currentGameMode === 'RANKED' || currentGameMode === 'TOURNAMENT') {
+        const prevWins = userProfile.rankedWins;
+        userProfile.rankedMatches += 1;
+        if (youWon) {
+          userProfile.rankedWins += 1;
+        }
+        saveUserProfileToStorage();
+        syncProfileUI();
+
+        const summary = computeRankProgressSummary(userProfile.rankedWins, prevWins);
+        if (youWon && summary.rankedUp) {
+          sound.playComboBonus();
+          rankUpAnnouncement = `RANK UP! Promoted to ${summary.currentRank.name}!`;
+        } else if (youWon && currentGameMode === 'RANKED') {
+          rankUpAnnouncement = summary.nextRank
+            ? `Ranked Win #${userProfile.rankedWins} (${summary.currentRank.name} • ${summary.winsNeededForNext} more to ${summary.nextRank.name})`
+            : `Ranked Win #${userProfile.rankedWins} (${summary.currentRank.name})`;
+        }
+
+        // Populate and display the Post-Match Ranked Progression Bar & UI Card
+        if (postMatchRankCard && (currentGameMode === 'RANKED' || youWon)) {
+          postMatchRankCard.classList.remove('hidden');
+          postMatchRankCard.style.borderColor = summary.currentRank.borderHex;
+          const badgeEl = document.getElementById('postMatchRankBadge');
+          const headlineEl = document.getElementById('postMatchRankHeadline');
+          const winsPillEl = document.getElementById('postMatchRankWinsPill');
+          const barEl = document.getElementById('postMatchRankProgressBar');
+          const subtextEl = document.getElementById('postMatchRankSubtext');
+
+          if (badgeEl) {
+            badgeEl.innerText = summary.currentRank.name;
+            badgeEl.style.backgroundColor = summary.currentRank.badgeBgHex;
+            badgeEl.style.color = summary.currentRank.badgeTextHex;
+            badgeEl.style.borderColor = summary.currentRank.borderHex;
+          }
+          if (headlineEl) {
+            headlineEl.innerText = youWon
+              ? summary.statusHeadline
+              : `CURRENT RANK • ${summary.currentRank.name.toUpperCase()}`;
+          }
+          if (winsPillEl) {
+            winsPillEl.innerText = youWon
+              ? `+1 WIN (${userProfile.rankedWins} TOTAL)`
+              : `${userProfile.rankedWins} ${userProfile.rankedWins === 1 ? 'WIN' : 'WINS'}`;
+          }
+          if (barEl) {
+            barEl.style.width = `${youWon ? summary.prevProgressPct : summary.progressPct}%`;
+            setTimeout(() => {
+              barEl.style.width = `${summary.progressPct}%`;
+            }, 80);
+          }
+          if (subtextEl) {
+            subtextEl.innerText = summary.subtext;
+          }
+
+          // Highlight active tier node in the 7-step ladder
+          RANK_TIERS.forEach((tier, idx) => {
+            const nodeEl = document.getElementById(`postMatchTierNode${idx}`);
+            if (!nodeEl) return;
+            const isReached = idx <= summary.currentRank.index;
+            const isCurrent = idx === summary.currentRank.index;
+            nodeEl.style.backgroundColor = isReached ? tier.borderHex : '#e2e8f0';
+            nodeEl.style.transform = isCurrent ? 'scale(1.25)' : 'scale(1)';
+          });
+        } else if (postMatchRankCard) {
+          postMatchRankCard.classList.add('hidden');
+        }
+      } else if (postMatchRankCard) {
+        postMatchRankCard.classList.add('hidden');
+      }
+
       if (subEl) subEl.classList.remove('hidden');
 
       if (currentGameMode === 'TOURNAMENT') {
@@ -4112,13 +4477,21 @@ export default function App() {
             const nextRoundName = TOURNAMENT_ROUNDS[tournamentRound];
             if (titleEl) titleEl.innerHTML = `ROUND WON <span class="font-light text-emerald-500">·</span> ${scoreYou}-${scoreAi}`;
             if (srTitleEl) srTitleEl.innerText = `ROUND WON ${scoreYou}-${scoreAi}`;
-            if (subEl) subEl.innerText = `Advanced to ${nextRoundName} (Game ${tournamentRound + 1} of ${TOTAL_TOURNAMENT_GAMES})!`;
+            if (subEl) {
+              subEl.innerText = rankUpAnnouncement
+                ? `Advanced to ${nextRoundName}! ${rankUpAnnouncement}`
+                : `Advanced to ${nextRoundName} (Game ${tournamentRound + 1} of ${TOTAL_TOURNAMENT_GAMES})!`;
+            }
             nextBtnLabel = `PLAY ${nextRoundName.toUpperCase()} (${tournamentRound + 1}/${TOTAL_TOURNAMENT_GAMES})`;
           } else {
             isTournamentChampion = true;
             if (titleEl) titleEl.innerHTML = `CHAMPION! <span class="font-light text-amber-500">·</span> ${scoreYou}-${scoreAi}`;
             if (srTitleEl) srTitleEl.innerText = `TOURNAMENT CHAMPION ${scoreYou}-${scoreAi}`;
-            if (subEl) subEl.innerText = `3-0 Knockout Sweep! You won the Knockout Cup vs ${currentOpponent.tag}!`;
+            if (subEl) {
+              subEl.innerText = rankUpAnnouncement
+                ? `3-0 Knockout Sweep! ${rankUpAnnouncement}`
+                : `3-0 Knockout Sweep! You won the Knockout Cup vs ${currentOpponent.tag}!`;
+            }
             tournamentRound = 0;
             tournamentBracket.initialized = false;
             nextBtnLabel = 'ENTER NEW TOURNAMENT';
@@ -4136,7 +4509,11 @@ export default function App() {
         if (youWon) {
           if (titleEl) titleEl.innerHTML = `VICTORY <span class="font-light text-sky-500">·</span> ${scoreYou}-${scoreAi}`;
           if (srTitleEl) srTitleEl.innerText = `VICTORY ${scoreYou}-${scoreAi}`;
-          if (subEl) subEl.innerText = reason || `You defeated ${currentOpponent.tag}!`;
+          if (subEl) {
+            subEl.innerText = rankUpAnnouncement
+              ? `${reason ? reason + ' • ' : ''}${rankUpAnnouncement}`
+              : reason || `You defeated ${currentOpponent.tag}!`;
+          }
         } else if (scoreAi > scoreYou) {
           if (titleEl) titleEl.innerHTML = `FULL TIME <span class="font-light text-rose-400">·</span> ${scoreYou}-${scoreAi}`;
           if (srTitleEl) srTitleEl.innerText = `FULL TIME ${scoreYou}-${scoreAi}`;
@@ -4215,7 +4592,8 @@ export default function App() {
         if (el) el.innerText = txt;
       };
 
-      setElText('brkYouNameQf', userProfile.name);
+      const rankInfo = getUserRankInfo(userProfile.rankedWins);
+      setElText('brkYouNameQf', `${userProfile.name} (${rankInfo.name})`);
       setElText('brkOppNameQf', tournamentBracket.qfOpponent.tag);
       setElText('brkScoreQf1', tournamentRound === 0 ? 'NOW' : tournamentBracket.scores.qfYou || 'W');
 
@@ -4232,7 +4610,7 @@ export default function App() {
       setElText('brkScoreQf4', tournamentRound >= 1 ? '3-1' : 'QF 4');
 
       // Semi-Finals
-      setElText('brkYouNameSf', tournamentRound >= 1 ? userProfile.name : 'Winner QF 1');
+      setElText('brkYouNameSf', tournamentRound >= 1 ? `${userProfile.name} (${rankInfo.name})` : 'Winner QF 1');
       setElText('brkOppNameSf', tournamentRound >= 1 ? tournamentBracket.sfOpponent.tag : 'Winner QF 2');
       setElText('brkScoreSf1', tournamentRound === 1 ? 'NOW' : tournamentRound > 1 ? tournamentBracket.scores.sfYou || 'W' : 'SF 1');
 
@@ -4241,7 +4619,7 @@ export default function App() {
       setElText('brkScoreSf2', tournamentRound >= 2 ? '2-1' : 'SF 2');
 
       // Grand Final
-      setElText('brkYouNameGf', tournamentRound >= 2 ? userProfile.name : 'Winner SF 1');
+      setElText('brkYouNameGf', tournamentRound >= 2 ? `${userProfile.name} (${rankInfo.name})` : 'Winner SF 1');
       setElText('brkOppNameGf', tournamentRound >= 2 ? tournamentBracket.gfOpponent.tag : 'Winner SF 2');
       setElText('brkScoreGf', tournamentRound === 2 ? 'FINAL' : 'CUP');
 
@@ -4287,7 +4665,7 @@ export default function App() {
 
       const youIsHome = userKitChoice === 'HOME';
       const cpuWearsAway = getContrastingKit(userKitChoice) === 'AWAY';
-      const preset = getActiveDifficultyPreset();
+      const rankInfo = getUserRankInfo(userProfile.rankedWins);
       const activeTheme = PITCH_THEMES.find((t) => t.id === selectedPitchTheme) || PITCH_THEMES[0];
       const showRank = currentGameMode !== 'CASUAL';
 
@@ -4305,14 +4683,18 @@ export default function App() {
       if (vsYouName) vsYouName.innerText = userProfile.name;
       if (vsYouAvatar) {
         vsYouAvatar.className = youIsHome
-          ? 'w-16 h-16 sm:w-20 sm:h-20 rounded-3xl bg-sky-400 border-[3px] border-slate-900 text-slate-900 font-black text-lg flex flex-col items-center justify-center shadow-[0_4px_0_#0f172a] mb-2 relative overflow-hidden'
-          : 'w-16 h-16 sm:w-20 sm:h-20 rounded-3xl bg-rose-400 border-[3px] border-slate-900 text-white font-black text-lg flex flex-col items-center justify-center shadow-[0_4px_0_#0f172a] mb-2 relative overflow-hidden';
+          ? 'w-16 h-16 sm:w-20 sm:h-20 rounded-3xl bg-sky-400 border-[3px] text-slate-900 font-black text-lg flex flex-col items-center justify-center mb-2 relative overflow-hidden'
+          : 'w-16 h-16 sm:w-20 sm:h-20 rounded-3xl bg-rose-400 border-[3px] text-white font-black text-lg flex flex-col items-center justify-center mb-2 relative overflow-hidden';
+        applyRankOutlineStyle(vsYouAvatar);
         vsYouAvatar.innerHTML = getProfileAvatarInnerHtml(userProfile, youIsHome);
       }
       if (vsYouRankPill) {
         if (showRank) {
           vsYouRankPill.classList.remove('hidden');
-          vsYouRankPill.innerText = preset.userRankLabel;
+          vsYouRankPill.innerText = rankInfo.name;
+          vsYouRankPill.style.backgroundColor = rankInfo.badgeBgHex;
+          vsYouRankPill.style.color = rankInfo.badgeTextHex;
+          vsYouRankPill.style.borderColor = rankInfo.borderHex;
         } else {
           vsYouRankPill.classList.add('hidden');
         }
@@ -4463,7 +4845,7 @@ export default function App() {
       const stageMsg = searchStages[Math.min(step, searchStages.length - 1)];
       const candidatePlayer = OCEANIA_PLAYERS[(step * 3 + tournamentRound) % OCEANIA_PLAYERS.length];
 
-      if (card) card.className = 'lg:col-span-5 w-full p-4 sm:p-5 rounded-3xl bg-sky-50 border-3 border-slate-900 shadow-[0_6px_0_#0f172a] text-left transition-all duration-300 relative overflow-hidden flex flex-col justify-between';
+      if (card) card.className = 'sm:col-span-5 w-full p-4 sm:p-5 rounded-3xl bg-sky-50 border-3 border-slate-900 shadow-[0_6px_0_#0f172a] text-left transition-all duration-300 relative overflow-hidden flex flex-col justify-between';
       if (mmStatusLabel) mmStatusLabel.className = 'flex items-center space-x-2 text-sky-800';
       if (mmStatusText) mmStatusText.innerText = stageMsg;
       if (mmStatusIcon) mmStatusIcon.className = 'fa-solid fa-satellite-dish fa-spin text-sky-600 text-xs';
@@ -4519,6 +4901,17 @@ export default function App() {
       clearMatchmakingTimers();
       isSearchingMatch = true;
       hasMatchedOpponent = false;
+      if (gameState === 'MATCH_OVER') {
+        const mainGridEl = document.getElementById('menuMainGrid');
+        const postMatchRankCardEl = document.getElementById('postMatchRankCard');
+        const statsRowEl = document.getElementById('matchStatsRow');
+        if (mainGridEl) mainGridEl.className = 'flex flex-col gap-3 text-left mb-3';
+        if (postMatchRankCardEl) postMatchRankCardEl.classList.add('hidden');
+        if (statsRowEl) {
+          statsRowEl.classList.add('hidden');
+          statsRowEl.classList.remove('grid');
+        }
+      }
       if (resumeBtn) resumeBtn.classList.add('hidden');
       if (forfeitBtn) forfeitBtn.classList.add('hidden');
       if (rematchSameBtn) rematchSameBtn.classList.add('hidden');
@@ -4555,7 +4948,7 @@ export default function App() {
           const progressBar = document.getElementById('mmProgressBar');
           const startIcon = document.getElementById('startBtnIcon');
 
-          if (card) card.className = 'lg:col-span-5 w-full p-4 sm:p-5 rounded-3xl bg-emerald-50 border-3 border-slate-900 shadow-[0_6px_0_#0f172a] text-left transition-all duration-300 relative overflow-hidden flex flex-col justify-between';
+          if (card) card.className = 'sm:col-span-5 w-full p-4 sm:p-5 rounded-3xl bg-emerald-50 border-3 border-slate-900 shadow-[0_6px_0_#0f172a] text-left transition-all duration-300 relative overflow-hidden flex flex-col justify-between';
           if (mmStatusLabel) mmStatusLabel.className = 'flex items-center space-x-2 text-emerald-800';
           if (mmStatusText) mmStatusText.innerText = `Opponent Matched • ${currentOpponent.tag}`;
           if (mmStatusIcon) mmStatusIcon.className = 'fa-solid fa-circle-check text-emerald-600 text-xs';
@@ -4639,20 +5032,40 @@ export default function App() {
       returnToHomeMenu();
     }
 
-    // --- Edit Profile & Device Camera Photo Capture Logic ---
+    // --- Player Profile Overview & Edit Profile / Camera Photo Capture Logic ---
     const editProfileBtn = document.getElementById('editProfileBtn');
+    const menuProfileBar = document.getElementById('menuProfileBar');
     const editProfileModal = document.getElementById('editProfileModal');
     const closeProfileModalBtn = document.getElementById('closeProfileModalBtn');
+    const switchToEditProfileBtn = document.getElementById('switchToEditProfileBtn');
+    const backToProfileOverviewBtn = document.getElementById('backToProfileOverviewBtn');
+    const profileOverviewSection = document.getElementById('profileOverviewSection');
+    const profileEditSection = document.getElementById('profileEditSection');
+    const profileModalHeaderTitle = document.getElementById('profileModalTitleText');
     const saveProfileBtn = document.getElementById('saveProfileBtn');
     const profileNameInput = document.getElementById('profileNameInput') as HTMLInputElement | null;
     const takePhotoBtn = document.getElementById('takePhotoBtn');
     const capturePhotoBtn = document.getElementById('capturePhotoBtn');
     const clearPhotoBtn = document.getElementById('clearPhotoBtn');
     const profileCameraVideo = document.getElementById('profileCameraVideo') as HTMLVideoElement | null;
+    const modalProfilePreviewBox = document.getElementById('modalProfilePreviewBox');
     const modalProfilePreviewImg = document.getElementById('modalProfilePreviewImg') as HTMLImageElement | null;
     const modalProfilePreviewInitials = document.getElementById('modalProfilePreviewInitials');
     const cameraStatusText = document.getElementById('cameraStatusText');
     let pendingAvatarDataUrl: string | null = userProfile.photoDataUrl;
+
+    function switchProfileModalView(view: 'overview' | 'edit') {
+      if (profileOverviewSection) profileOverviewSection.classList.toggle('hidden', view !== 'overview');
+      if (profileEditSection) profileEditSection.classList.toggle('hidden', view !== 'edit');
+      if (profileModalHeaderTitle) {
+        profileModalHeaderTitle.innerText = view === 'overview' ? 'Player Profile' : 'Edit Profile';
+      }
+      if (view !== 'edit') {
+        stopProfileCameraStream();
+      }
+      gamepadState.focusedMenuIndex = 0;
+      syncMenuFocusVisual(true);
+    }
 
     function stopProfileCameraStream() {
       if (activeCameraStream) {
@@ -4678,6 +5091,10 @@ export default function App() {
           .replace(/[^a-zA-Z0-9]/g, '')
           .slice(0, 2)
           .toUpperCase() || 'PL';
+
+      if (modalProfilePreviewBox) {
+        applyRankOutlineStyle(modalProfilePreviewBox);
+      }
 
       if (modalProfilePreviewImg && modalProfilePreviewInitials) {
         if (dataUrl) {
@@ -4706,7 +5123,9 @@ export default function App() {
         cameraStatusText.innerText = '';
         cameraStatusText.classList.add('hidden');
       }
+      syncProfileUI();
       renderModalAvatarPreview(pendingAvatarDataUrl);
+      switchProfileModalView('overview');
       if (editProfileModal) {
         editProfileModal.classList.remove('hidden');
       }
@@ -4807,19 +5226,38 @@ export default function App() {
       sound.playMatchFound();
       const rawName = profileNameInput ? profileNameInput.value.trim().slice(0, 16) : '';
       userProfile = {
+        ...userProfile,
         name: rawName || 'Player',
         iconType: pendingAvatarDataUrl ? 'photo' : 'preset',
         presetIcon: userProfile.presetIcon || '#10',
         photoDataUrl: pendingAvatarDataUrl,
+        hasEditedProfile: true,
       };
-      try {
-        window.localStorage.setItem('rematch_profile_v1', JSON.stringify(userProfile));
-      } catch {}
-      syncUserProfileUI();
+      saveUserProfileToStorage();
+      syncKitAndModeUI();
       closeEditProfileModal();
     }
 
     if (editProfileBtn) editProfileBtn.addEventListener('click', openEditProfileModal);
+    if (menuProfileBar && menuProfileBar !== editProfileBtn) {
+      menuProfileBar.addEventListener('click', openEditProfileModal);
+    }
+    if (switchToEditProfileBtn) {
+      switchToEditProfileBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        sound.init();
+        sound.playUiClick();
+        switchProfileModalView('edit');
+      });
+    }
+    if (backToProfileOverviewBtn) {
+      backToProfileOverviewBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        sound.init();
+        sound.playUiBack();
+        switchProfileModalView('overview');
+      });
+    }
     if (closeProfileModalBtn) {
       closeProfileModalBtn.addEventListener('click', () => {
         sound.init();
@@ -4972,7 +5410,7 @@ export default function App() {
 
     // Highlight focused UI button on pointer hover and trigger subtle hover SFX
     const allInteractiveMenuBtns = document.querySelectorAll<HTMLElement>(
-      '.mode-btn, .kit-btn, #editProfileBtn, #startBtn, #rematchSameBtn, #mainMenuBtn, #resumeBtn, #forfeitBtn, #howToPlayBtn, .control-tab-btn, #takePhotoBtn, #capturePhotoBtn, #clearPhotoBtn, #saveProfileBtn, #closeProfileModalBtn'
+      '.mode-btn, .kit-btn, #editProfileBtn, #startBtn, #rematchSameBtn, #mainMenuBtn, #resumeBtn, #forfeitBtn, #howToPlayBtn, .control-tab-btn, #switchToEditProfileBtn, #backToProfileOverviewBtn, #takePhotoBtn, #capturePhotoBtn, #clearPhotoBtn, #saveProfileBtn, #closeProfileModalBtn'
     );
     allInteractiveMenuBtns.forEach((btn) => {
       btn.addEventListener('pointerenter', () => {
@@ -5113,10 +5551,11 @@ export default function App() {
     window.addEventListener('keydown', handleKeyDown);
     window.addEventListener('keyup', handleKeyUp);
 
-    // Global iOS/Phone Audio Unlock & Foreground Recovery Listeners
+    // Global iOS/Phone Audio Unlock & Landscape Orientation Lock Listeners
     const unlockAudioOnGesture = (e: Event) => {
       if (e.type === 'touchstart' || e.type === 'touchend') {
         hasDetectedTouchInput = true;
+        tryLockDeviceToLandscape();
         syncMobileControlsVisibility();
       }
       sound.unlock();
@@ -5128,6 +5567,15 @@ export default function App() {
         }));
       }
     };
+    const dismissLandscapeLockBtn = document.getElementById('dismissLandscapeLockBtn');
+    if (dismissLandscapeLockBtn) {
+      dismissLandscapeLockBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        landscapeLockDismissed = true;
+        tryLockDeviceToLandscape();
+        syncLandscapeLockOverlay();
+      });
+    }
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
         sound.unlock();
@@ -5141,7 +5589,7 @@ export default function App() {
     document.addEventListener('visibilitychange', handleVisibilityChange);
 
     const handlePointerMove = (e: PointerEvent) => {
-      if (e.pointerType === 'mouse') {
+      if (e.pointerType === 'mouse' && !isForcedTouchParam) {
         hasDetectedTouchInput = false;
         if (!hasUsedKeyboardMove) {
           activeControlScheme = 'MOUSE';
@@ -5576,7 +6024,7 @@ export default function App() {
       if (gameState === 'GOAL_CELEBRATION') {
         ctx.save();
         ctx.fillStyle = 'rgba(15, 23, 42, 0.94)';
-        const bw = Math.min(520, canvas.width * 0.88);
+        const bw = Math.min(540, canvas.width * 0.9);
         const bh = 96;
         const bx = (canvas.width - bw) / 2;
         const by = canvas.height * 0.16;
@@ -5588,7 +6036,7 @@ export default function App() {
         ctx.stroke();
 
         ctx.fillStyle = '#ffffff';
-        ctx.font = '800 28px "Plus Jakarta Sans", sans-serif';
+        ctx.font = '800 26px "Plus Jakarta Sans", sans-serif';
         ctx.textAlign = 'center';
         ctx.fillText(goalBannerText, canvas.width / 2, by + 44);
 
@@ -5608,13 +6056,21 @@ export default function App() {
     syncMenuLayoutForState(gameState);
     syncMenuFocusVisual(true);
 
-    // Support ?autostart=1 query parameter to skip straight into active gameplay
+    // Support ?autostart=1 query parameter to skip straight into active gameplay, or ?testRankedWin=1 to verify Ranked Win Progress Bar UI
     const urlParams = new URLSearchParams(window.location.search);
     if (urlParams.get('autostart') === '1') {
       const splashEl = document.getElementById('splashScreen');
       if (splashEl) splashEl.classList.add('hidden');
       pickRandomOpponent(false);
       launchMatchNow();
+    } else if (urlParams.get('testRankedWin') === '1') {
+      const splashEl = document.getElementById('splashScreen');
+      if (splashEl) splashEl.classList.add('hidden');
+      currentGameMode = 'RANKED';
+      pickRandomOpponent(false);
+      scoreYou = 3;
+      scoreAi = 0;
+      endMatch('MERCY RULE +3 VICTORY');
     }
 
     rafId = requestAnimationFrame(renderLoop);
@@ -5647,21 +6103,60 @@ export default function App() {
 
   return (
     <div className="app-viewport relative overflow-hidden select-none bg-[#63d297]">
+      {/* Mobile & Tablet Landscape Lock Prompt (Shown when mobile/tablet device is held in portrait) */}
+      <div
+        id="landscapeLockOverlay"
+        className="hidden fixed inset-0 z-[60] bg-slate-950/92 backdrop-blur-md flex-col items-center justify-center p-6 text-center"
+      >
+        <div className="glass-modal rounded-[28px] max-w-sm w-full p-6 border-3 border-slate-900 shadow-[0_10px_0_#0f172a] flex flex-col items-center">
+          <div className="w-16 h-16 rounded-2xl bg-amber-300 border-2 border-slate-900 shadow-[0_4px_0_#0f172a] flex items-center justify-center mb-4">
+            <svg
+              className="w-9 h-9 text-slate-900 animate-phone-rotate"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <rect x="6" y="2" width="12" height="20" rx="2.5" />
+              <line x1="12" y1="18" x2="12.01" y2="18" />
+            </svg>
+          </div>
+          <div className="inline-flex items-center space-x-1.5 px-3 py-0.5 rounded-full bg-sky-100 border border-sky-400 text-[10px] font-black uppercase tracking-widest text-sky-900 mb-2">
+            <span>LANDSCAPE ARENA MODE</span>
+          </div>
+          <h2 className="text-xl font-black text-slate-900 tracking-tight">
+            Rotate Device to Landscape
+          </h2>
+          <p className="text-xs font-bold text-slate-600 mt-1.5 mb-5">
+            REMATCH <span className="text-amber-500 font-black">0.2</span> is locked to widescreen landscape on mobile &amp; tablet for full-pitch viewing and dual-thumb arcade controls.
+          </p>
+          <button
+            id="dismissLandscapeLockBtn"
+            type="button"
+            className="btn-clean w-full py-2.5 px-4 rounded-xl bg-slate-200 hover:bg-slate-300 border-2 border-slate-900 text-slate-800 font-black text-xs uppercase tracking-wider cursor-pointer"
+          >
+            Continue Anyway
+          </button>
+        </div>
+      </div>
+
       {/* Boot-Up Start Page ("PRESS ANY BUTTON TO START") over the clean original stadium background */}
       <div
         id="splashScreen"
-        className="fixed inset-0 z-50 flex flex-col items-center justify-center p-6 sm:p-12 bg-slate-950/10 cursor-pointer overflow-hidden"
+        className="fixed inset-0 z-50 flex flex-col items-center justify-center p-4 sm:p-10 bg-slate-950/10 cursor-pointer overflow-hidden"
       >
-        <div className="relative z-10 flex flex-col items-center text-center my-auto max-w-3xl px-4">
-          <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-3xl bg-sky-400 flex items-center justify-center border-[3px] border-slate-900 shadow-[0_6px_0_#0f172a] mb-5">
-            <PixelSoccerBallIcon className="w-11 h-11 sm:w-14 sm:h-14" />
+        <div className="relative z-10 flex flex-col items-center text-center my-auto max-w-5xl px-4">
+          <div className="w-16 h-16 sm:w-22 sm:h-22 rounded-3xl bg-sky-400 flex items-center justify-center border-[3px] border-slate-900 shadow-[0_6px_0_#0f172a] mb-3 sm:mb-5">
+            <PixelSoccerBallIcon className="w-9 h-9 sm:w-13 sm:h-13" />
           </div>
 
-          <div className="flex flex-wrap items-center justify-center gap-3 sm:gap-4 mb-10 sm:mb-14">
-            <span className="text-6xl sm:text-8xl md:text-9xl font-black tracking-tight text-white drop-shadow-[0_6px_0_#0f172a]">
+          <div className="flex flex-nowrap items-baseline justify-center gap-3.5 sm:gap-6 md:gap-8 mb-6 sm:mb-12 whitespace-nowrap">
+            <span className="text-5xl sm:text-7xl md:text-8xl lg:text-9xl font-black tracking-tight text-white drop-shadow-[0_6px_0_#0f172a]">
               REMATCH
             </span>
-            <span className="px-4 py-1.5 sm:px-6 sm:py-2 rounded-2xl bg-amber-300 border-[3px] border-slate-900 font-mono-num text-3xl sm:text-5xl md:text-6xl font-black text-slate-900 shadow-[0_6px_0_#0f172a]">
+            <span className="font-mono-num text-4xl sm:text-6xl md:text-7xl lg:text-8xl font-black tracking-tight text-amber-300 drop-shadow-[0_6px_0_#0f172a]">
               0.2
             </span>
           </div>
@@ -5669,7 +6164,7 @@ export default function App() {
           <button
             id="splashStartBtn"
             type="button"
-            className="bg-transparent border-0 p-0 text-white font-black text-lg sm:text-2xl tracking-[0.22em] uppercase cursor-pointer drop-shadow-[0_3px_0_#0f172a] focus:outline-none"
+            className="bg-transparent border-0 p-0 text-white font-black text-base sm:text-2xl tracking-[0.22em] uppercase cursor-pointer drop-shadow-[0_3px_0_#0f172a] focus:outline-none"
           >
             <span className="animate-pulse">PRESS ANY BUTTON TO START</span>
           </button>
@@ -5788,38 +6283,38 @@ export default function App() {
         </div>
       </div>
 
-      {/* Mobile & Tablet Touch Controls (Strictly hidden on Computer/Gamepad; displayed only on touch devices during active play) */}
+      {/* Mobile & Tablet Touch Controls (Strictly hidden on Computer/Gamepad; displayed with subtle translucency on touch devices during active play) */}
       <div
         id="mobileControls"
         style={{ display: 'none' }}
         className="mobile-controls-safe hidden fixed bottom-0 left-0 w-full justify-between items-end pointer-events-none z-20"
       >
-        {/* Left Thumb: Generous 360° Arcade Analog Thumbstick with Directional Guides */}
+        {/* Left Thumb: Generous 360° Arcade Analog Thumbstick with Subtle Transparency */}
         <div
           id="joystickZone"
           aria-label="Virtual Movement Joystick"
-          className="rounded-full glass-pill relative flex items-center justify-center pointer-events-auto touch-none shadow-xl opacity-95"
+          className="rounded-full bg-white/40 backdrop-blur-md border-2 border-slate-900/55 relative flex items-center justify-center pointer-events-auto touch-none shadow-[0_6px_18px_rgba(15,23,42,0.2)] transition-opacity"
         >
-          <span className="absolute top-2 text-[9px] font-black text-slate-400 pointer-events-none">▲</span>
-          <span className="absolute bottom-2 text-[9px] font-black text-slate-400 pointer-events-none">▼</span>
-          <span className="absolute left-2.5 text-[9px] font-black text-slate-400 pointer-events-none">◀</span>
-          <span className="absolute right-2.5 text-[9px] font-black text-slate-400 pointer-events-none">▶</span>
-          <div className="w-14 h-14 rounded-full border-2 border-dashed border-slate-300/90 pointer-events-none absolute" />
+          <span className="absolute top-2 text-[9px] font-black text-slate-700/70 pointer-events-none">▲</span>
+          <span className="absolute bottom-2 text-[9px] font-black text-slate-700/70 pointer-events-none">▼</span>
+          <span className="absolute left-2.5 text-[9px] font-black text-slate-700/70 pointer-events-none">◀</span>
+          <span className="absolute right-2.5 text-[9px] font-black text-slate-700/70 pointer-events-none">▶</span>
+          <div className="w-14 h-14 rounded-full border-2 border-dashed border-slate-600/35 pointer-events-none absolute" />
           <div
             id="joystickKnob"
-            className="rounded-full bg-slate-900 border-[2.5px] border-sky-400 shadow-[0_3px_0_#0f172a] transition-transform duration-75 pointer-events-none relative z-10 flex items-center justify-center"
+            className="rounded-full bg-slate-900/75 border-2 border-sky-400/90 shadow-[0_3px_8px_rgba(15,23,42,0.35)] transition-transform duration-75 pointer-events-none relative z-10 flex items-center justify-center"
           >
-            <div className="w-4 h-4 rounded-full bg-sky-400/90" />
+            <div className="w-3.5 h-3.5 rounded-full bg-sky-400/85" />
           </div>
         </div>
 
-        {/* Right Thumb: Ergonomic Arcade Action Cluster (Send Run/Switch + Large Elevated Kick/Curve Button) */}
-        <div className="flex items-end space-x-3.5 sm:space-x-5 pointer-events-auto touch-none opacity-95">
+        {/* Right Thumb: Ergonomic Arcade Action Cluster with Subtle Transparency */}
+        <div className="flex items-end space-x-3.5 sm:space-x-5 pointer-events-auto touch-none">
           <button
             id="mobileSwitchBtn"
             type="button"
             aria-label="Send Teammate Run or Switch Defender"
-            className="rounded-full glass-pill text-slate-900 font-black text-xs sm:text-sm flex flex-col items-center justify-center active:scale-90 transition-transform whitespace-nowrap shadow-[0_5px_0_#0f172a] mb-0.5"
+            className="rounded-full bg-white/55 backdrop-blur-md border-2 border-slate-900/65 text-slate-900 font-black text-xs sm:text-sm flex flex-col items-center justify-center active:scale-90 transition-transform whitespace-nowrap shadow-[0_4px_0_rgba(15,23,42,0.5)] mb-0.5"
           >
             <i className="fa-solid fa-bolt text-base mb-0.5 text-amber-500" />
             <span id="mobileSecondaryText">Send Run</span>
@@ -5828,9 +6323,9 @@ export default function App() {
             id="mobileActionBtn"
             type="button"
             aria-label="Kick, Pass, or Hold for Finesse Shot"
-            className="rounded-full bg-sky-500 active:bg-amber-400 border-[3.5px] border-slate-900 text-white active:text-slate-900 font-black text-sm sm:text-base shadow-[0_6px_0_#0f172a] flex flex-col items-center justify-center active:translate-y-1 transition-all whitespace-nowrap mb-3"
+            className="rounded-full bg-sky-500/75 active:bg-amber-400/90 backdrop-blur-md border-[3px] border-slate-900/75 text-white active:text-slate-900 font-black text-sm sm:text-base shadow-[0_5px_0_rgba(15,23,42,0.65)] flex flex-col items-center justify-center active:translate-y-1 transition-all whitespace-nowrap mb-3"
           >
-            <PixelSoccerBallIcon className="w-7 h-7 sm:w-8 sm:h-8 mb-0.5" />
+            <PixelSoccerBallIcon className="w-7 h-7 sm:w-8 sm:h-8 mb-0.5 opacity-95" />
             <span id="mobileActionText">Kick</span>
           </button>
         </div>
@@ -5870,7 +6365,7 @@ export default function App() {
                 id="vsOverlayYouRank"
                 className="hidden mt-1 px-2.5 py-0.5 rounded-full bg-amber-200 border border-slate-900 text-[10px] sm:text-xs font-black text-slate-900 truncate max-w-full"
               >
-                Diamond I
+                Bronze I
               </div>
             </div>
 
@@ -5896,7 +6391,7 @@ export default function App() {
                 id="vsOverlayOppRank"
                 className="hidden mt-1 px-2.5 py-0.5 rounded-full bg-rose-100 border border-slate-900 text-[10px] sm:text-xs font-black text-rose-900 truncate max-w-full"
               >
-                Diamond I
+                Bronze I
               </div>
             </div>
           </div>
@@ -6067,7 +6562,7 @@ export default function App() {
           <div className="flex items-center justify-center space-x-4 p-3.5 sm:p-4 rounded-2xl bg-gradient-to-r from-amber-50 via-yellow-50 to-sky-50 border-2 border-slate-900 shadow-[0_4px_0_#0f172a] mb-4">
             <div
               id="tourneyWinAvatar"
-              className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl bg-sky-400 border-2 border-slate-900 flex items-center justify-center relative overflow-hidden shrink-0"
+              className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl bg-sky-400 border-[3px] border-slate-900 flex items-center justify-center relative overflow-hidden shrink-0"
             />
             <div className="text-left min-w-0">
               <div className="text-[10px] font-black uppercase tracking-widest text-amber-600">
@@ -6078,7 +6573,7 @@ export default function App() {
               </div>
               <div className="inline-flex items-center space-x-1.5 mt-1 px-2.5 py-0.5 rounded-full bg-emerald-200 border border-slate-900 text-[10px] font-black text-emerald-950">
                 <i className="fa-solid fa-star text-amber-500" />
-                <span>Star League Champion</span>
+                <span id="tourneyWinRankText">Bronze I · Cup Champion</span>
               </div>
             </div>
           </div>
@@ -6164,22 +6659,22 @@ export default function App() {
           id="menuModalCard"
           className="w-full max-w-2xl lg:max-w-5xl flex flex-col gap-3 sm:gap-4 text-center relative my-auto"
         >
-          {/* Top Bar: Title Lockup & Player Profile Bar */}
+          {/* Top Bar: Title Lockup & Centered/Balanced Clickable Player Profile Card */}
           <div
             id="menuTopBar"
-            className="glass-modal rounded-3xl px-4 py-3 sm:px-6 sm:py-4 flex flex-wrap sm:flex-nowrap items-center justify-between gap-3"
+            className="glass-modal rounded-3xl px-4 py-3 sm:px-6 sm:py-3.5 flex flex-col sm:flex-row items-center justify-center sm:justify-between gap-2.5 sm:gap-3"
           >
-            <div className="flex items-center space-x-3">
-              <div className="w-11 h-11 sm:w-13 sm:h-13 rounded-2xl bg-sky-400 flex items-center justify-center border-2 border-slate-900 shadow-[0_3px_0_#0f172a] shrink-0">
-                <PixelSoccerBallIcon className="w-6 h-6 sm:w-7 sm:h-7" />
+            <div className="flex items-center justify-center space-x-2.5 sm:space-x-3">
+              <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-2xl bg-sky-400 flex items-center justify-center border-2 border-slate-900 shadow-[0_3px_0_#0f172a] shrink-0">
+                <PixelSoccerBallIcon className="w-5 h-5 sm:w-7 sm:h-7" />
               </div>
               <div className="text-left">
                 <div
                   id="menuTitleVisible"
-                  className="flex items-center space-x-2 text-xl sm:text-3xl md:text-4xl font-black tracking-tight text-slate-900"
+                  className="flex items-baseline gap-2.5 sm:gap-3.5 text-xl sm:text-3xl md:text-4xl font-black tracking-tight text-slate-900 whitespace-nowrap"
                 >
                   <span>REMATCH</span>
-                  <span className="px-2.5 py-0.5 rounded-xl bg-amber-300 border-2 border-slate-900 font-mono-num text-xs sm:text-base font-black text-slate-900 shadow-[0_2px_0_#0f172a]">
+                  <span className="font-mono-num text-xl sm:text-3xl md:text-4xl font-black text-amber-400 drop-shadow-[0_2px_0_#0f172a]">
                     0.2
                   </span>
                 </div>
@@ -6189,10 +6684,18 @@ export default function App() {
               </h1>
             </div>
 
-            {/* Player Profile Pill + Edit Profile Button */}
-            <div id="menuProfileBar" className="flex items-center space-x-2 sm:space-x-3 ml-auto sm:ml-0">
-              <div className="flex items-center space-x-2 px-2.5 py-1.5 rounded-2xl bg-slate-100 border-2 border-slate-900 shadow-[0_2px_0_#0f172a]">
-                <div className="w-8 h-8 rounded-xl bg-sky-400 border-2 border-slate-900 overflow-hidden flex items-center justify-center shrink-0">
+            {/* Clickable Player Profile Card (Centered on narrow screens, right-aligned on landscape/PC, with Rank Outline Border) */}
+            <div id="menuProfileBar" className="flex items-center justify-center relative">
+              <button
+                id="editProfileBtn"
+                type="button"
+                aria-label="Open Player Profile"
+                className="btn-clean group relative flex items-center justify-center gap-2.5 sm:gap-3 px-3.5 py-1.5 sm:px-4 sm:py-2 rounded-2xl bg-slate-100 hover:bg-white border-[3px] border-amber-600 shadow-[0_3px_0_#0f172a] cursor-pointer transition-all text-left"
+              >
+                <div
+                  id="menuProfileAvatarBox"
+                  className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-sky-400 border-[2.5px] border-amber-600 overflow-hidden flex items-center justify-center shrink-0 transition-transform group-hover:scale-105"
+                >
                   <img
                     id="menuProfileAvatarImg"
                     alt="Profile Avatar"
@@ -6200,41 +6703,46 @@ export default function App() {
                   />
                   <span
                     id="menuProfileAvatarInitials"
-                    className="text-xs font-black text-slate-900"
+                    className="text-xs sm:text-sm font-black text-slate-900"
                   >
                     PL
                   </span>
                 </div>
-                <div className="text-left pr-1">
-                  <div className="text-[9px] font-black uppercase tracking-wider text-slate-500">
-                    PROFILE
+                <div className="flex flex-col items-start justify-center min-w-0">
+                  <div className="flex items-center space-x-1.5">
+                    <span
+                      id="menuProfileNameText"
+                      className="text-xs sm:text-sm font-black text-slate-900 max-w-[110px] sm:max-w-[140px] truncate leading-tight"
+                    >
+                      Player
+                    </span>
+                    <i className="fa-solid fa-chevron-right text-[9px] text-slate-400 group-hover:text-slate-800 transition-colors" />
                   </div>
-                  <div
-                    id="menuProfileNameText"
-                    className="text-xs sm:text-sm font-black text-slate-900 max-w-[95px] sm:max-w-[140px] truncate"
-                  >
-                    Player
+                  <div className="flex items-center space-x-1.5 mt-0.5">
+                    <span
+                      id="menuProfileRankBadge"
+                      className="inline-flex items-center px-2 py-0.2 rounded-full border text-[9px] sm:text-[10px] font-black tracking-wide whitespace-nowrap bg-amber-100 text-amber-900 border-amber-700"
+                    >
+                      Bronze I
+                    </span>
+                    <span
+                      id="profileFirstBootPrompt"
+                      className="hidden inline-flex items-center space-x-1 px-1.5 py-0.2 rounded-full bg-sky-100 border border-sky-400 text-[9px] font-extrabold text-sky-800 animate-pulse whitespace-nowrap"
+                    >
+                      <span>✨ Setup</span>
+                    </span>
                   </div>
                 </div>
-              </div>
-
-              <button
-                id="editProfileBtn"
-                type="button"
-                className="btn-clean min-h-[42px] py-2 px-3 sm:px-4 rounded-2xl bg-amber-300 hover:bg-amber-200 border-2 border-slate-900 text-slate-900 font-black text-xs tracking-wide cursor-pointer shadow-[0_2px_0_#0f172a] flex items-center space-x-1.5 whitespace-nowrap"
-              >
-                <i className="fa-solid fa-camera text-xs" />
-                <span>Edit Profile</span>
               </button>
             </div>
           </div>
 
           <p id="menuSubtitle" className="hidden text-slate-600 font-semibold text-xs sm:text-sm mb-1" />
 
-          {/* Main Dashboard Grid (Spacious 2-Column Layout on Desktop, Clean Stacked on Tablet/Mobile so cards never squish) */}
-          <div id="menuMainGrid" className="grid grid-cols-1 lg:grid-cols-12 gap-3.5 sm:gap-4 items-stretch text-left">
+          {/* Main Dashboard Grid (2-Column Horizontal Layout across Landscape Mobile, Tablet & Desktop) */}
+          <div id="menuMainGrid" className="grid grid-cols-1 sm:grid-cols-12 gap-3.5 sm:gap-4 items-stretch text-left">
             {/* Left Column: Mode & Kit Selection */}
-            <div id="menuLeftCol" className="lg:col-span-7 glass-modal rounded-3xl p-4 sm:p-6 flex flex-col justify-between gap-4">
+            <div id="menuLeftCol" className="sm:col-span-7 glass-modal rounded-3xl p-4 sm:p-6 flex flex-col justify-between gap-4">
               {/* 1. Game Mode Selector: Casual / Ranked / Tournament */}
               <div id="playlistSelectorWrap">
                 <div className="text-[11px] font-black uppercase tracking-wider text-slate-500 mb-2 px-1">
@@ -6318,7 +6826,7 @@ export default function App() {
             {/* Right Column: Locker-Room 1v1 Online Matchmaking Card */}
             <div
               id="matchmakingCard"
-              className="lg:col-span-5 w-full p-4 sm:p-5 rounded-3xl bg-white border-3 border-slate-900 shadow-[0_6px_0_#0f172a] text-left transition-all duration-300 relative overflow-hidden flex flex-col justify-between"
+              className="sm:col-span-5 w-full p-4 sm:p-5 rounded-3xl bg-white border-3 border-slate-900 shadow-[0_6px_0_#0f172a] text-left transition-all duration-300 relative overflow-hidden flex flex-col justify-between"
             >
               <div className="flex items-center justify-between text-[11px] font-extrabold uppercase tracking-wider mb-3 px-1">
                 <span id="mmStatusLabel" className="flex items-center space-x-2 text-slate-800 transition-colors min-w-0">
@@ -6332,10 +6840,10 @@ export default function App() {
 
               <div className="grid grid-cols-2 gap-3 relative items-stretch my-auto">
                 {/* Left Card: YOU */}
-                <div className="bg-slate-50 rounded-2xl p-3.5 sm:p-4 border-2 border-slate-900 shadow-[0_3px_0_rgba(15,23,42,0.08)] flex flex-col items-center justify-center text-center min-w-0">
+                <div className="bg-slate-50 rounded-2xl p-3 sm:p-4 border-2 border-slate-900 shadow-[0_3px_0_rgba(15,23,42,0.08)] flex flex-col items-center justify-center text-center min-w-0">
                   <div
                     id="mmYouAvatar"
-                    className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-sky-400 border-2 border-slate-900 text-slate-900 font-black text-xs flex flex-col items-center justify-center shadow-xs mb-2 relative overflow-hidden transition-colors shrink-0"
+                    className="w-12 h-12 sm:w-16 sm:h-16 rounded-2xl bg-sky-400 border-[3px] border-amber-600 text-slate-900 font-black text-xs flex flex-col items-center justify-center shadow-xs mb-1.5 sm:mb-2 relative overflow-hidden transition-colors shrink-0"
                   >
                     <img
                       id="mmYouAvatarImg"
@@ -6365,7 +6873,7 @@ export default function App() {
                 {/* Center Floating VS Badge */}
                 <div
                   id="mmVsBadge"
-                  className="w-9 h-9 sm:w-10 sm:h-10 rounded-2xl bg-amber-300 text-slate-900 font-black text-xs flex items-center justify-center shadow-[0_3px_0_#0f172a] border-2 border-slate-900 absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-10 transition-colors duration-200"
+                  className="w-8 h-8 sm:w-10 sm:h-10 rounded-2xl bg-amber-300 text-slate-900 font-black text-xs flex items-center justify-center shadow-[0_3px_0_#0f172a] border-2 border-slate-900 absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-10 transition-colors duration-200"
                 >
                   VS
                 </div>
@@ -6373,11 +6881,11 @@ export default function App() {
                 {/* Right Card: RIVAL SLOT */}
                 <div
                   id="mmOpponentSlotCard"
-                  className="bg-gradient-to-b from-rose-50 to-white rounded-2xl p-3.5 sm:p-4 border-2 border-dashed border-rose-300 flex flex-col items-center justify-center text-center transition-colors duration-200 min-w-0"
+                  className="bg-gradient-to-b from-rose-50 to-white rounded-2xl p-3 sm:p-4 border-2 border-dashed border-rose-300 flex flex-col items-center justify-center text-center transition-colors duration-200 min-w-0"
                 >
                   <div
                     id="mmOpponentAvatar"
-                    className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-rose-100/80 border-2 border-dashed border-rose-300 text-rose-500 font-black text-sm flex items-center justify-center mb-2 relative transition-colors duration-200 shrink-0"
+                    className="w-12 h-12 sm:w-16 sm:h-16 rounded-2xl bg-rose-100/80 border-2 border-dashed border-rose-300 text-rose-500 font-black text-sm flex items-center justify-center mb-1.5 sm:mb-2 relative transition-colors duration-200 shrink-0"
                   >
                     <i className="fa-solid fa-user-astronaut text-sm" />
                   </div>
@@ -6401,10 +6909,66 @@ export default function App() {
             </div>
           </div>
 
+          {/* Post-Match Ranked Progression Bar & Rank Promotion UI (Displayed when winning/completing Ranked games) */}
+          <div
+            id="postMatchRankCard"
+            className="hidden mb-3 p-3.5 sm:p-4 rounded-2xl bg-gradient-to-r from-amber-50 via-white to-sky-50 border-[3px] border-amber-600 shadow-[0_4px_0_#0f172a] text-left space-y-2.5"
+          >
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center space-x-2">
+                <span
+                  id="postMatchRankBadge"
+                  className="inline-flex items-center px-3 py-0.5 rounded-full border-2 text-xs font-black tracking-wide bg-amber-100 text-amber-900 border-amber-700"
+                >
+                  Bronze II
+                </span>
+                <span
+                  id="postMatchRankHeadline"
+                  className="text-xs sm:text-sm font-black uppercase tracking-wider text-slate-900"
+                >
+                  RANK UP! PROMOTED TO BRONZE II
+                </span>
+              </div>
+              <span
+                id="postMatchRankWinsPill"
+                className="font-mono-num text-[10px] sm:text-xs font-black text-emerald-800 bg-emerald-200 px-2.5 py-0.5 rounded-full border border-slate-900 shrink-0"
+              >
+                +1 WIN (1 TOTAL)
+              </span>
+            </div>
+
+            {/* Animated Rank Progress Bar */}
+            <div className="w-full h-3.5 bg-slate-200 rounded-full overflow-hidden border-2 border-slate-900 p-0.5">
+              <div
+                id="postMatchRankProgressBar"
+                className="h-full bg-gradient-to-r from-amber-400 via-emerald-400 to-sky-400 rounded-full transition-all duration-500"
+                style={{ width: '29%' }}
+              />
+            </div>
+
+            {/* 7-Tier Competitive Ladder Checkpoints */}
+            <div className="flex items-center justify-between px-1 pt-0.5">
+              {['Brz I', 'Brz II', 'Silv I', 'Gold II', 'Plat I', 'Dia I', 'Star'].map((lbl, idx) => (
+                <div key={lbl} className="flex flex-col items-center space-y-0.5">
+                  <span
+                    id={`postMatchTierNode${idx}`}
+                    className="w-2.5 h-2.5 rounded-full border border-slate-900 transition-transform duration-300"
+                    style={{ backgroundColor: idx <= 1 ? '#d97706' : '#e2e8f0' }}
+                  />
+                  <span className="text-[8px] sm:text-[9px] font-extrabold text-slate-600">{lbl}</span>
+                </div>
+              ))}
+            </div>
+
+            <div id="postMatchRankSubtext" className="text-[11px] font-bold text-slate-700 text-center pt-0.5">
+              Promoted from Bronze I to Bronze II! Win 1 more Ranked match for Silver I.
+            </div>
+          </div>
+
           {/* End-of-Match Summary */}
           <div
             id="matchStatsRow"
-            className="hidden grid-cols-2 sm:grid-cols-4 gap-2.5 mb-4 p-3.5 rounded-2xl bg-slate-100 border-2 border-slate-900 text-center"
+            className="hidden grid-cols-2 sm:grid-cols-4 gap-2.5 mb-3 p-3 rounded-2xl bg-slate-100 border-2 border-slate-900 text-center"
           >
             <div>
               <div className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500">Passes</div>
@@ -6494,153 +7058,155 @@ export default function App() {
               id="howToPlayPanel"
               className="hidden mt-3 pt-3 border-t-2 border-slate-200 text-left space-y-3 text-xs text-slate-700"
             >
-            {/* Device Control Guide Selector Tabs */}
-            <div className="grid grid-cols-3 gap-2 p-1 rounded-2xl bg-slate-100 border-2 border-slate-900">
-              <button
-                id="tabComputerBtn"
-                type="button"
-                data-control-tab="COMPUTER"
-                className="control-tab-btn py-2 px-3 rounded-xl text-xs font-black cursor-pointer bg-sky-400 text-slate-900 border-2 border-slate-900 shadow-[0_2px_0_#0f172a] flex items-center justify-center space-x-1.5 whitespace-nowrap"
-              >
-                <i className="fa-solid fa-desktop text-[10px]" />
-                <span>Computer</span>
-              </button>
-              <button
-                id="tabRemoteBtn"
-                type="button"
-                data-control-tab="REMOTE"
-                className="control-tab-btn py-2 px-3 rounded-xl text-xs font-extrabold cursor-pointer bg-white text-slate-600 hover:text-slate-900 border border-slate-300 flex items-center justify-center space-x-1.5 whitespace-nowrap"
-              >
-                <i className="fa-solid fa-gamepad text-[10px]" />
-                <span>Remote (PS5)</span>
-              </button>
-              <button
-                id="tabMobileBtn"
-                type="button"
-                data-control-tab="MOBILE"
-                className="control-tab-btn py-2 px-3 rounded-xl text-xs font-extrabold cursor-pointer bg-white text-slate-600 hover:text-slate-900 border border-slate-300 flex items-center justify-center space-x-1.5 whitespace-nowrap"
-              >
-                <i className="fa-solid fa-mobile-screen-button text-[10px]" />
-                <span>Mobile</span>
-              </button>
-            </div>
+              {/* Device Control Guide Selector Tabs */}
+              <div className="grid grid-cols-3 gap-2 p-1 rounded-2xl bg-slate-100 border-2 border-slate-900">
+                <button
+                  id="tabComputerBtn"
+                  type="button"
+                  data-control-tab="COMPUTER"
+                  className="control-tab-btn py-2 px-3 rounded-xl text-xs font-black cursor-pointer bg-sky-400 text-slate-900 border-2 border-slate-900 shadow-[0_2px_0_#0f172a] flex items-center justify-center space-x-1.5 whitespace-nowrap"
+                >
+                  <i className="fa-solid fa-desktop text-[10px]" />
+                  <span>Computer</span>
+                </button>
+                <button
+                  id="tabRemoteBtn"
+                  type="button"
+                  data-control-tab="REMOTE"
+                  className="control-tab-btn py-2 px-3 rounded-xl text-xs font-extrabold cursor-pointer bg-white text-slate-600 hover:text-slate-900 border border-slate-300 flex items-center justify-center space-x-1.5 whitespace-nowrap"
+                >
+                  <i className="fa-solid fa-gamepad text-[10px]" />
+                  <span>Remote (PS5)</span>
+                </button>
+                <button
+                  id="tabMobileBtn"
+                  type="button"
+                  data-control-tab="MOBILE"
+                  className="control-tab-btn py-2 px-3 rounded-xl text-xs font-extrabold cursor-pointer bg-white text-slate-600 hover:text-slate-900 border border-slate-300 flex items-center justify-center space-x-1.5 whitespace-nowrap"
+                >
+                  <i className="fa-solid fa-mobile-screen-button text-[10px]" />
+                  <span>Mobile</span>
+                </button>
+              </div>
 
-            {/* 1. COMPUTER CONTROLS GUIDE */}
-            <div id="guideComputer" className="space-y-2">
-              <div className="flex items-start space-x-2.5 bg-slate-50 p-2.5 rounded-xl border border-slate-200">
-                <PixelMouseLeftIcon className="w-4 h-4 shrink-0 mt-0.5" />
-                <div>
-                  <strong className="text-slate-900">Move &amp; 360° Aim:</strong> Guide your player with{' '}
-                  <strong>Mouse</strong>, <strong>WASD</strong>, or <strong>Arrow Keys</strong>. Teammates automatically
-                  sprint into open space.
+              {/* 1. COMPUTER CONTROLS GUIDE */}
+              <div id="guideComputer" className="space-y-2">
+                <div className="flex items-start space-x-2.5 bg-slate-50 p-2.5 rounded-xl border border-slate-200">
+                  <PixelMouseLeftIcon className="w-4 h-4 shrink-0 mt-0.5" />
+                  <div>
+                    <strong className="text-slate-900">Move &amp; 360° Aim:</strong> Guide your player with{' '}
+                    <strong>Mouse</strong>, <strong>WASD</strong>, or <strong>Arrow Keys</strong>. Teammates automatically
+                    sprint into open space.
+                  </div>
+                </div>
+                <div className="flex items-start space-x-2.5 bg-slate-50 p-2.5 rounded-xl border border-slate-200">
+                  <PixelFlameIcon className="w-4 h-4 shrink-0 mt-0.5" />
+                  <div>
+                    <strong className="text-slate-900">Through-Balls, Rebounds &amp; Curved Shots:</strong>{' '}
+                    <strong>Left-Click / Space</strong> to pass into space, bank off walls, or tackle. Hold &amp; release
+                    in the <strong>62%–92% Golden Sweet Spot</strong> for a curved <strong>PERFECT STRIKE!</strong>
+                  </div>
+                </div>
+                <div className="flex items-start space-x-2.5 bg-slate-50 p-2.5 rounded-xl border border-slate-200">
+                  <PixelMouseRightIcon className="w-4 h-4 shrink-0 mt-0.5" />
+                  <div>
+                    <strong className="text-slate-900">Send Teammate Run &amp; Switch:</strong>{' '}
+                    <strong>Right-Click / Q / Shift</strong> commands a teammate to sprint forward for a through-ball, or
+                    switches defenders.
+                  </div>
                 </div>
               </div>
-              <div className="flex items-start space-x-2.5 bg-slate-50 p-2.5 rounded-xl border border-slate-200">
-                <PixelFlameIcon className="w-4 h-4 shrink-0 mt-0.5" />
-                <div>
-                  <strong className="text-slate-900">Through-Balls, Rebounds &amp; Curved Shots:</strong>{' '}
-                  <strong>Left-Click / Space</strong> to pass into space, bank off walls, or tackle. Hold &amp; release
-                  in the <strong>62%–92% Golden Sweet Spot</strong> for a curved <strong>PERFECT STRIKE!</strong>
-                </div>
-              </div>
-              <div className="flex items-start space-x-2.5 bg-slate-50 p-2.5 rounded-xl border border-slate-200">
-                <PixelMouseRightIcon className="w-4 h-4 shrink-0 mt-0.5" />
-                <div>
-                  <strong className="text-slate-900">Send Teammate Run &amp; Switch:</strong>{' '}
-                  <strong>Right-Click / Q / Shift</strong> commands a teammate to sprint forward for a through-ball, or
-                  switches defenders.
-                </div>
-              </div>
-            </div>
 
-            {/* 2. REMOTE (DUALSHOCK 5 / DUALSENSE) CONTROLS GUIDE */}
-            <div id="guideRemote" className="hidden space-y-2">
-              <div className="flex items-start space-x-2.5 bg-blue-50/80 p-2.5 rounded-xl border border-blue-200">
-                <span className="px-1.5 py-0.5 rounded bg-blue-600 text-white font-mono-num text-[10px] font-black shrink-0 mt-0.5">
-                  L3 / R3
-                </span>
-                <div>
-                  <strong className="text-slate-900">DualShock 5 Move &amp; 360° Aim:</strong> Move with{' '}
-                  <strong>Left Stick</strong> (auto-assists onto through-balls) and aim tight angles or wall rebounds
-                  with <strong>Right Stick</strong>.
+              {/* 2. REMOTE (DUALSHOCK 5 / DUALSENSE) CONTROLS GUIDE */}
+              <div id="guideRemote" className="hidden space-y-2">
+                <div className="flex items-start space-x-2.5 bg-blue-50/80 p-2.5 rounded-xl border border-blue-200">
+                  <span className="px-1.5 py-0.5 rounded bg-blue-600 text-white font-mono-num text-[10px] font-black shrink-0 mt-0.5">
+                    L3 / R3
+                  </span>
+                  <div>
+                    <strong className="text-slate-900">DualShock 5 Move &amp; 360° Aim:</strong> Move with{' '}
+                    <strong>Left Stick</strong> (auto-assists onto through-balls) and aim tight angles or wall rebounds
+                    with <strong>Right Stick</strong>.
+                  </div>
+                </div>
+                <div className="flex items-start space-x-2.5 bg-blue-50/80 p-2.5 rounded-xl border border-blue-200">
+                  <span className="px-1.5 py-0.5 rounded bg-blue-600 text-white font-mono-num text-[10px] font-black shrink-0 mt-0.5">
+                    X / R2
+                  </span>
+                  <div>
+                    <strong className="text-slate-900">Pass, Tackle &amp; Sweet-Spot Curve:</strong> Tap{' '}
+                    <strong>X Cross</strong> or <strong>R2 Trigger</strong> to pass, thread a through-ball, or lunge
+                    tackle. Hold &amp; release in the <strong>Golden Sweet Spot</strong> to bend shots!
+                  </div>
+                </div>
+                <div className="flex items-start space-x-2.5 bg-blue-50/80 p-2.5 rounded-xl border border-blue-200">
+                  <span className="px-1.5 py-0.5 rounded bg-blue-600 text-white font-mono-num text-[10px] font-black shrink-0 mt-0.5">
+                    O / R1
+                  </span>
+                  <div>
+                    <strong className="text-slate-900">Send Runner, Switch &amp; Menu Nav:</strong> Press{' '}
+                    <strong>O Circle / R1</strong> to send a teammate run or switch defender. Use{' '}
+                    <strong>D-Pad + X</strong> to select highlighted UI options &amp; <strong>Options</strong> to pause.
+                  </div>
                 </div>
               </div>
-              <div className="flex items-start space-x-2.5 bg-blue-50/80 p-2.5 rounded-xl border border-blue-200">
-                <span className="px-1.5 py-0.5 rounded bg-blue-600 text-white font-mono-num text-[10px] font-black shrink-0 mt-0.5">
-                  X / R2
-                </span>
-                <div>
-                  <strong className="text-slate-900">Pass, Tackle &amp; Sweet-Spot Curve:</strong> Tap{' '}
-                  <strong>X Cross</strong> or <strong>R2 Trigger</strong> to pass, thread a through-ball, or lunge
-                  tackle. Hold &amp; release in the <strong>Golden Sweet Spot</strong> to bend shots!
-                </div>
-              </div>
-              <div className="flex items-start space-x-2.5 bg-blue-50/80 p-2.5 rounded-xl border border-blue-200">
-                <span className="px-1.5 py-0.5 rounded bg-blue-600 text-white font-mono-num text-[10px] font-black shrink-0 mt-0.5">
-                  O / R1
-                </span>
-                <div>
-                  <strong className="text-slate-900">Send Runner, Switch &amp; Menu Nav:</strong> Press{' '}
-                  <strong>O Circle / R1</strong> to send a teammate run or switch defender. Use{' '}
-                  <strong>D-Pad + X</strong> to select highlighted UI options &amp; <strong>Options</strong> to pause.
-                </div>
-              </div>
-            </div>
 
-            {/* 3. MOBILE TOUCH CONTROLS GUIDE */}
-            <div id="guideMobile" className="hidden space-y-2">
-              <div className="flex items-start space-x-2.5 bg-emerald-50/80 p-2.5 rounded-xl border border-emerald-200">
-                <span className="px-1.5 py-0.5 rounded bg-emerald-600 text-white font-mono-num text-[10px] font-black shrink-0 mt-0.5">
-                  JOY
-                </span>
-                <div>
-                  <strong className="text-slate-900">Virtual Left Thumbstick:</strong> Drag the bottom-left thumbstick
-                  for smooth 360° dribbling, positioning for rebounds, and aiming through-balls into space.
+              {/* 3. MOBILE TOUCH CONTROLS GUIDE */}
+              <div id="guideMobile" className="hidden space-y-2">
+                <div className="flex items-start space-x-2.5 bg-emerald-50/80 p-2.5 rounded-xl border border-emerald-200">
+                  <span className="px-1.5 py-0.5 rounded bg-emerald-600 text-white font-mono-num text-[10px] font-black shrink-0 mt-0.5">
+                    JOY
+                  </span>
+                  <div>
+                    <strong className="text-slate-900">Virtual Left Thumbstick:</strong> Drag the bottom-left thumbstick
+                    for smooth 360° dribbling, positioning for rebounds, and aiming through-balls into space.
+                  </div>
+                </div>
+                <div className="flex items-start space-x-2.5 bg-emerald-50/80 p-2.5 rounded-xl border border-emerald-200">
+                  <span className="px-1.5 py-0.5 rounded bg-sky-500 text-white font-mono-num text-[10px] font-black shrink-0 mt-0.5">
+                    KICK
+                  </span>
+                  <div>
+                    <strong className="text-slate-900">Kick / Hold to Curve Button:</strong> Tap <strong>Kick</strong> to
+                    pass or lunge tackle. Hold &amp; release in the <strong>62%–92% Golden Sweet Spot</strong> for a
+                    curved <strong>PERFECT STRIKE!</strong>
+                  </div>
+                </div>
+                <div className="flex items-start space-x-2.5 bg-emerald-50/80 p-2.5 rounded-xl border border-emerald-200">
+                  <span className="px-1.5 py-0.5 rounded bg-amber-500 text-slate-900 font-mono-num text-[10px] font-black shrink-0 mt-0.5">
+                    RUN
+                  </span>
+                  <div>
+                    <strong className="text-slate-900">Send Run &amp; Tap-to-Switch:</strong> Tap{' '}
+                    <strong>Send Run</strong> to launch a teammate into open space, or tap any defender on the pitch to
+                    switch control immediately.
+                  </div>
                 </div>
               </div>
-              <div className="flex items-start space-x-2.5 bg-emerald-50/80 p-2.5 rounded-xl border border-emerald-200">
-                <span className="px-1.5 py-0.5 rounded bg-sky-500 text-white font-mono-num text-[10px] font-black shrink-0 mt-0.5">
-                  KICK
-                </span>
-                <div>
-                  <strong className="text-slate-900">Kick / Hold to Curve Button:</strong> Tap <strong>Kick</strong> to
-                  pass or lunge tackle. Hold &amp; release in the <strong>62%–92% Golden Sweet Spot</strong> for a
-                  curved <strong>PERFECT STRIKE!</strong>
-                </div>
-              </div>
-              <div className="flex items-start space-x-2.5 bg-emerald-50/80 p-2.5 rounded-xl border border-emerald-200">
-                <span className="px-1.5 py-0.5 rounded bg-amber-500 text-slate-900 font-mono-num text-[10px] font-black shrink-0 mt-0.5">
-                  RUN
-                </span>
-                <div>
-                  <strong className="text-slate-900">Send Run &amp; Tap-to-Switch:</strong> Tap{' '}
-                  <strong>Send Run</strong> to launch a teammate into open space, or tap any defender on the pitch to
-                  switch control immediately.
-                </div>
-              </div>
-            </div>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Edit Profile & Camera Photo Capture Modal */}
+      {/* Player Profile Modal (Overview Screen + Edit Profile View) */}
       <div
         id="editProfileModal"
-        className="hidden fixed inset-0 z-50 bg-slate-900/65 flex items-center justify-center p-4"
+        className="hidden fixed inset-0 z-50 bg-slate-900/65 flex items-center justify-center p-4 overflow-y-auto"
       >
-        <div className="glass-modal rounded-[28px] max-w-md w-full p-5 sm:p-6 text-left relative">
+        <div className="glass-modal rounded-[28px] max-w-md w-full p-5 sm:p-6 text-left relative my-auto">
           <div className="flex items-center justify-between pb-3 mb-4 border-b-2 border-slate-200">
             <div>
               <div className="text-[10px] font-black uppercase tracking-widest text-sky-600">
-                CLUB IDENTITY
+                CLUB IDENTITY &amp; RANKING
               </div>
-              <h2 className="text-xl sm:text-2xl font-black text-slate-900">Edit Profile</h2>
+              <h2 id="profileModalTitleText" className="text-xl sm:text-2xl font-black text-slate-900">
+                Player Profile
+              </h2>
             </div>
             <button
               id="closeProfileModalBtn"
               type="button"
-              aria-label="Close Edit Profile"
+              aria-label="Close Profile Modal"
               className="btn-clean w-9 h-9 rounded-xl bg-slate-100 hover:bg-slate-200 border border-slate-300 text-slate-700 font-black text-base flex items-center justify-center cursor-pointer"
             >
               <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
@@ -6650,8 +7216,114 @@ export default function App() {
             </button>
           </div>
 
-          <div className="space-y-4">
-            {/* Avatar & Camera Capture Box */}
+          {/* VIEW 1: PROFILE OVERVIEW (Displays Rank, Border Color, Ranked Wins & Edit Profile Option) */}
+          <div id="profileOverviewSection" className="space-y-4">
+            <div className="p-4 rounded-2xl bg-slate-50 border-2 border-slate-900 flex items-center space-x-4">
+              <div
+                id="overviewAvatarBox"
+                className="w-20 h-20 rounded-2xl bg-sky-400 border-[3.5px] border-amber-600 shadow-[0_4px_0_#0f172a] overflow-hidden relative flex items-center justify-center shrink-0"
+              >
+                <img
+                  id="overviewProfileImg"
+                  alt="Player Avatar"
+                  className="hidden w-full h-full object-cover"
+                />
+                <span
+                  id="overviewProfileInitials"
+                  className="text-2xl font-black text-slate-900"
+                >
+                  PL
+                </span>
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="text-[10px] font-black uppercase tracking-wider text-slate-500">
+                  CLUB CAPTAIN
+                </div>
+                <div
+                  id="overviewProfileName"
+                  className="text-lg sm:text-xl font-black text-slate-900 truncate"
+                >
+                  Player
+                </div>
+                <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                  <span
+                    id="overviewRankBadge"
+                    className="inline-flex items-center px-3 py-0.5 rounded-full border-2 text-xs font-black tracking-wide bg-amber-100 text-amber-900 border-amber-700"
+                  >
+                    Bronze I
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Competitive Rank Progression Card */}
+            <div className="p-4 rounded-2xl bg-white border-2 border-slate-900 shadow-[0_3px_0_#0f172a] space-y-2.5">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-black uppercase tracking-wider text-slate-700 flex items-center space-x-1.5">
+                  <i className="fa-solid fa-trophy text-amber-500" />
+                  <span>Competitive Rank</span>
+                </span>
+                <span
+                  id="overviewRankedWinsText"
+                  className="font-mono-num text-xs font-black text-emerald-700 bg-emerald-100 px-2.5 py-0.5 rounded-full border border-emerald-400"
+                >
+                  0 Wins
+                </span>
+              </div>
+
+              <div className="w-full h-3 bg-slate-200 rounded-full overflow-hidden border border-slate-900">
+                <div
+                  id="overviewRankProgressBar"
+                  className="h-full bg-gradient-to-r from-amber-400 to-emerald-400 rounded-full transition-all duration-300"
+                  style={{ width: '8%' }}
+                />
+              </div>
+
+              <div id="overviewNextRankText" className="text-[11px] font-bold text-slate-600">
+                Win 1 more Ranked match to reach Bronze II
+              </div>
+
+              {/* Rank Tier Color Key */}
+              <div className="pt-2 border-t border-slate-200 grid grid-cols-3 gap-1.5 text-[10px] font-extrabold text-slate-700">
+                <div className="flex items-center space-x-1.5">
+                  <span className="w-2.5 h-2.5 rounded-full border border-slate-900 shrink-0" style={{ backgroundColor: '#d97706' }} />
+                  <span>Bronze</span>
+                </div>
+                <div className="flex items-center space-x-1.5">
+                  <span className="w-2.5 h-2.5 rounded-full border border-slate-900 shrink-0" style={{ backgroundColor: '#94a3b8' }} />
+                  <span>Silver</span>
+                </div>
+                <div className="flex items-center space-x-1.5">
+                  <span className="w-2.5 h-2.5 rounded-full border border-slate-900 shrink-0" style={{ backgroundColor: '#facc15' }} />
+                  <span>Gold</span>
+                </div>
+                <div className="flex items-center space-x-1.5">
+                  <span className="w-2.5 h-2.5 rounded-full border border-slate-900 shrink-0" style={{ backgroundColor: '#10b981' }} />
+                  <span>Platinum</span>
+                </div>
+                <div className="flex items-center space-x-1.5">
+                  <span className="w-2.5 h-2.5 rounded-full border border-slate-900 shrink-0" style={{ backgroundColor: '#38bdf8' }} />
+                  <span>Diamond</span>
+                </div>
+                <div className="flex items-center space-x-1.5">
+                  <span className="w-2.5 h-2.5 rounded-full border border-slate-900 shrink-0" style={{ backgroundColor: '#a855f7' }} />
+                  <span>Champion</span>
+                </div>
+              </div>
+            </div>
+
+            <button
+              id="switchToEditProfileBtn"
+              type="button"
+              className="indie-cta-btn w-full py-3.5 px-6 rounded-2xl bg-amber-300 hover:bg-amber-200 text-slate-900 font-black text-sm tracking-wide uppercase cursor-pointer flex items-center justify-center space-x-2"
+            >
+              <i className="fa-solid fa-pen-to-square text-xs" />
+              <span>Edit Profile</span>
+            </button>
+          </div>
+
+          {/* VIEW 2: EDIT PROFILE FORM (Name + Camera Photo Capture) */}
+          <div id="profileEditSection" className="hidden space-y-4">
             <div className="p-4 rounded-2xl bg-slate-50 border-2 border-slate-900 flex flex-col items-center text-center">
               <div className="w-24 h-24 rounded-2xl bg-sky-400 border-2 border-slate-900 shadow-[0_3px_0_#0f172a] overflow-hidden relative flex items-center justify-center mb-3">
                 <img
@@ -6705,7 +7377,6 @@ export default function App() {
               </div>
             </div>
 
-            {/* Profile Name Input */}
             <div>
               <label
                 htmlFor="profileNameInput"
@@ -6722,13 +7393,22 @@ export default function App() {
               />
             </div>
 
-            <button
-              id="saveProfileBtn"
-              type="button"
-              className="indie-cta-btn w-full py-3.5 px-6 rounded-2xl bg-emerald-500 hover:bg-emerald-400 text-white font-black text-sm tracking-wide uppercase cursor-pointer"
-            >
-              Save Profile
-            </button>
+            <div className="flex items-center gap-2.5">
+              <button
+                id="backToProfileOverviewBtn"
+                type="button"
+                className="btn-clean py-3.5 px-4 rounded-2xl bg-slate-200 hover:bg-slate-300 border-2 border-slate-900 text-slate-800 font-black text-xs uppercase tracking-wide cursor-pointer"
+              >
+                Back
+              </button>
+              <button
+                id="saveProfileBtn"
+                type="button"
+                className="indie-cta-btn flex-1 py-3.5 px-6 rounded-2xl bg-emerald-500 hover:bg-emerald-400 text-white font-black text-sm tracking-wide uppercase cursor-pointer"
+              >
+                Save Profile
+              </button>
+            </div>
           </div>
         </div>
       </div>
