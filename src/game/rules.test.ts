@@ -34,7 +34,14 @@ import {
   type PlayerStateSnapshot,
   type KeeperStateSnapshot,
 } from './rules.ts';
-import { GRAPHICS_CONFIG, PIXEL_DIGITS_3X5, PITCH_THEMES, applyPitchTheme } from './graphicsConfig.ts';
+import {
+  GRAPHICS_CONFIG,
+  PIXEL_DIGITS_3X5,
+  PITCH_THEMES,
+  applyPitchTheme,
+  STADIUM_GOAL_EFFECTS,
+  getStadiumGoalEffect,
+} from './graphicsConfig.ts';
 import { STADIUM_MUSIC_PROFILES, getStadiumMusicProfile } from './soundEngine.ts';
 
 test('Expanded PITCH specification provides spread-out tiki-taka passing room and 3-game Tournament config', () => {
@@ -518,12 +525,23 @@ test('buildGoalCelebrationMessage generates dynamic headlines & callouts for goa
     assert.equal(music.melodySectionA.length, 32);
     assert.equal(music.bassNotesA.length, 32);
     assert.equal(music.chordVoicings.length, 4);
+    assert.ok(music.bpm >= 110 && music.bpm <= 145, `Expected valid BPM for ${theme.id}`);
+    assert.equal(music.goalChimeNotes.length, 6, `Expected 6 goal chime notes for ${theme.id}`);
     titles.add(music.title);
     melodies.add(music.melodySectionA.join(','));
+
+    const goalFx = getStadiumGoalEffect(theme.id);
+    assert.equal(goalFx.id, theme.id);
+    assert.ok(goalFx.particleColors.length >= 4);
+    assert.ok(goalFx.shockwaveColors[0].startsWith('#'));
+    assert.ok(goalFx.shockwaveColors[1].startsWith('#'));
   }
   assert.equal(titles.size, 10, 'All 10 stadiums have unique soundtrack titles');
   assert.equal(melodies.size, 10, 'All 10 stadiums have unique lead melodies');
   assert.equal(Object.keys(STADIUM_MUSIC_PROFILES).length, 10);
+  assert.equal(Object.keys(STADIUM_GOAL_EFFECTS).length, 10);
+  const effectStyles = new Set(Object.values(STADIUM_GOAL_EFFECTS).map((fx) => fx.effectStyle));
+  assert.equal(effectStyles.size, 10, 'All 10 stadiums have unique subtle goal effect styles');
 
   // 1. Long-Range Ronaldo Goal
   const ronaldoGoal = buildGoalCelebrationMessage({

@@ -38,7 +38,13 @@ import {
   RANK_TIERS,
   type GoalCelebrationSpec,
 } from './game/rules';
-import { GRAPHICS_CONFIG, PITCH_THEMES, applyPitchTheme, type PitchThemeId } from './game/graphicsConfig';
+import {
+  GRAPHICS_CONFIG,
+  PITCH_THEMES,
+  applyPitchTheme,
+  getStadiumGoalEffect,
+  type PitchThemeId,
+} from './game/graphicsConfig';
 import { IndieSoundEngine, getStadiumMusicProfile } from './game/soundEngine';
 import {
   snapPx,
@@ -639,14 +645,25 @@ export default function App() {
           pitchCacheCtx.stroke();
         }
 
-        // Orbital Space Station Metallic Deck Collar with Cyan Conduit Strips
+        // Orbital Space Station Metallic Deck Collar with Cyan Conduit Strips & Docking Bay Chevrons
         const stationPad = 42;
         fillPxRect(pitchCacheCtx, -stationPad - 4, -stationPad - 4, w + (stationPad + 4) * 2, h + (stationPad + 4) * 2, outline, px);
         fillPxRect(pitchCacheCtx, -stationPad, -stationPad, w + stationPad * 2, h + stationPad * 2, '#1e1b4b', px);
         fillPxRect(pitchCacheCtx, -stationPad + 8, -stationPad + 8, w + (stationPad - 8) * 2, h + (stationPad - 8) * 2, '#312e81', px);
         for (let hx = 60; hx < w - 60; hx += 120) {
           fillPxRect(pitchCacheCtx, hx, -stationPad + 6, 36, 10, '#38bdf8', px);
+          fillPxRect(pitchCacheCtx, hx + 10, -stationPad + 9, 16, 4, '#e0f2fe', px);
           fillPxRect(pitchCacheCtx, hx, h + stationPad - 16, 36, 10, '#38bdf8', px);
+          fillPxRect(pitchCacheCtx, hx + 10, h + stationPad - 13, 16, 4, '#e0f2fe', px);
+        }
+        // Subtle Deep-Space Telemetry Radar Dishes on Top & Bottom Orbital Deck
+        for (const rx of [w * 0.14, w * 0.86]) {
+          for (const ry of [-84, h + 84]) {
+            fillPxRect(pitchCacheCtx, rx - 14, ry - 14, 28, 28, outline, px);
+            fillPxRect(pitchCacheCtx, rx - 10, ry - 10, 20, 20, '#334155', px);
+            fillPxRect(pitchCacheCtx, rx - 6, ry - 6, 12, 12, '#38bdf8', px);
+            fillPxRect(pitchCacheCtx, rx - 2, ry - 2, 4, 4, '#ffffff', px);
+          }
         }
         pitchCacheCtx.strokeStyle = 'rgba(56, 189, 248, 0.85)';
         pitchCacheCtx.lineWidth = 3;
@@ -676,6 +693,14 @@ export default function App() {
             for (let stripe = 0; stripe < 5; stripe++) {
               fillPxRect(pitchCacheCtx, cwX, roadY + 6 + stripe * 12, 54, 7, '#f8fafc', px);
             }
+          }
+        }
+
+        // Subtle Warm Streetlight Posts & Graffiti Stencil Murals Along Sidewalk
+        for (const lampX of [250, w - 250]) {
+          for (const lampY of [-56, h + 56]) {
+            fillPxRect(pitchCacheCtx, lampX - 8, lampY - 8, 16, 16, outline, px);
+            fillPxRect(pitchCacheCtx, lampX - 5, lampY - 5, 10, 10, '#fde047', px);
           }
         }
 
@@ -735,14 +760,27 @@ export default function App() {
           fillPxRect(pitchCacheCtx, vx + 68, h * 0.5 - 6, 6, 12, outline, px);
         }
 
+        // Colorful Tropical Surfboards Planted in the Copacabana Sand
+        for (const sb of [
+          { x: 245, y: -76, col: '#f43f5e', stripe: '#fde047' },
+          { x: w - 245, y: -76, col: '#06b6d4', stripe: '#ffffff' },
+          { x: 245, y: h + 76, col: '#10b981', stripe: '#fef08a' },
+          { x: w - 245, y: h + 76, col: '#f97316', stripe: '#ffffff' },
+        ]) {
+          fillPxRect(pitchCacheCtx, sb.x - 14, sb.y - 7, 28, 14, outline, px);
+          fillPxRect(pitchCacheCtx, sb.x - 11, sb.y - 4, 22, 8, sb.col, px);
+          fillPxRect(pitchCacheCtx, sb.x - 6, sb.y - 2, 12, 4, sb.stripe, px);
+        }
+
         // Iconic Copacabana Wave-Mosaic & Teak Boardwalk Collar
         const walkPad = 42;
         fillPxRect(pitchCacheCtx, -walkPad - 4, -walkPad - 4, w + (walkPad + 4) * 2, h + (walkPad + 4) * 2, outline, px);
         fillPxRect(pitchCacheCtx, -walkPad, -walkPad, w + walkPad * 2, h + walkPad * 2, '#92400e', px);
         fillPxRect(pitchCacheCtx, -walkPad + 8, -walkPad + 8, w + (walkPad - 8) * 2, h + (walkPad - 8) * 2, '#b45309', px);
         for (let mx = -walkPad + 12; mx < w + walkPad - 20; mx += 36) {
-          fillPxRect(pitchCacheCtx, mx, -walkPad + 3, 18, 5, '#fef3c7', px);
-          fillPxRect(pitchCacheCtx, mx, h + walkPad - 8, 18, 5, '#fef3c7', px);
+          const waveOffset = (Math.floor(mx / 36) % 2) * 3;
+          fillPxRect(pitchCacheCtx, mx, -walkPad + 2 + waveOffset, 18, 5, '#fef3c7', px);
+          fillPxRect(pitchCacheCtx, mx, h + walkPad - 9 + waveOffset, 18, 5, '#fef3c7', px);
         }
 
         const umbrellas = [
@@ -786,15 +824,21 @@ export default function App() {
         pitchCacheCtx.fillStyle = '#09051c';
         pitchCacheCtx.fillRect(-CACHE_PAD_X, -CACHE_PAD_Y, w + CACHE_PAD_X * 2, h + CACHE_PAD_Y * 2);
 
-        // Giant Retro Outrun Segmented Sunset Glow at Top Horizon
+        // Giant Retro Outrun Segmented Sunset Glow & Horizon Disc at Top Horizon
         const sunGrad = pitchCacheCtx.createRadialGradient(w * 0.5, -135, 10, w * 0.5, -135, 290);
-        sunGrad.addColorStop(0, 'rgba(244, 114, 182, 0.45)');
-        sunGrad.addColorStop(0.5, 'rgba(168, 85, 247, 0.22)');
+        sunGrad.addColorStop(0, 'rgba(244, 114, 182, 0.52)');
+        sunGrad.addColorStop(0.5, 'rgba(168, 85, 247, 0.26)');
         sunGrad.addColorStop(1, 'rgba(9, 5, 28, 0)');
         pitchCacheCtx.fillStyle = sunGrad;
         pitchCacheCtx.beginPath();
         pitchCacheCtx.arc(w * 0.5, -135, 290, 0, Math.PI * 2);
         pitchCacheCtx.fill();
+
+        // Segmented Outrun Sun Bars in Top Center Sky
+        fillPxRect(pitchCacheCtx, w * 0.5 - 64, -158, 128, 8, '#fde047', px);
+        fillPxRect(pitchCacheCtx, w * 0.5 - 76, -144, 152, 8, '#fb923c', px);
+        fillPxRect(pitchCacheCtx, w * 0.5 - 84, -130, 168, 8, '#f43f5e', px);
+        fillPxRect(pitchCacheCtx, w * 0.5 - 76, -116, 152, 6, '#e879f9', px);
 
         pitchCacheCtx.strokeStyle = 'rgba(232, 121, 249, 0.36)';
         pitchCacheCtx.lineWidth = 2;
@@ -832,6 +876,8 @@ export default function App() {
           fillPxRect(pitchCacheCtx, b.x - 4, b.y - 4, b.bw + 8, b.bh + 8, outline, px);
           fillPxRect(pitchCacheCtx, b.x, b.y, b.bw, b.bh, b.c, px);
           fillPxRect(pitchCacheCtx, b.x + 6, b.y + 4, b.bw - 12, 5, '#f472b6', px);
+          // Rooftop Cyber Beacon Spires
+          fillPxRect(pitchCacheCtx, b.x + b.bw * 0.5 - 3, b.y - 12, 6, 10, '#22d3ee', px);
           for (let wx = b.x + 12; wx < b.x + b.bw - 14; wx += 18) {
             for (let wy = b.y + 14; wy < b.y + b.bh - 12; wy += 16) {
               if ((wx + wy) % 5 !== 0) {
@@ -862,6 +908,19 @@ export default function App() {
         fillPxRect(pitchCacheCtx, -195, -142, w + 390, h + 284, '#38bdf8', px);
         fillPxRect(pitchCacheCtx, -172, -124, w + 344, h + 248, '#e2e8f0', px);
         fillPxRect(pitchCacheCtx, -150, -108, w + 300, h + 216, '#f8fafc', px);
+
+        // Glowing Crystalline Ice Monoliths on Left & Right Glacial Banks
+        for (const ic of [
+          { x: -94, y: h * 0.5 - 52 },
+          { x: -94, y: h * 0.5 + 36 },
+          { x: w + 82, y: h * 0.5 - 52 },
+          { x: w + 82, y: h * 0.5 + 36 },
+        ]) {
+          fillPxRect(pitchCacheCtx, ic.x - 4, ic.y - 4, 24, 32, outline, px);
+          fillPxRect(pitchCacheCtx, ic.x, ic.y, 16, 24, '#38bdf8', px);
+          fillPxRect(pitchCacheCtx, ic.x + 3, ic.y + 3, 10, 18, '#bae6fd', px);
+          fillPxRect(pitchCacheCtx, ic.x + 5, ic.y + 5, 5, 10, '#ffffff', px);
+        }
 
         // Cozy Alpine Timber Ski Lodges with Warm Lit Windows & Chimneys
         for (const lodge of [
@@ -939,12 +998,15 @@ export default function App() {
         fillPxRect(pitchCacheCtx, -142, -96, w + 284, h + 192, '#18181b', px);
         fillPxRect(pitchCacheCtx, -126, -84, w + 252, h + 168, '#27272a', px);
 
-        // Left & Right Obsidian Stone Bridges Spanning the Lava Moat
+        // Left & Right Obsidian Stone Bridges Spanning the Lava Moat + Forged Iron Anvil Pedestals
         for (const bx of [-142, w + 42]) {
           fillPxRect(pitchCacheCtx, bx, h * 0.34, 100, h * 0.32, outline, px);
           fillPxRect(pitchCacheCtx, bx + 4, h * 0.34 + 4, 92, h * 0.32 - 8, '#3f3f46', px);
           fillPxRect(pitchCacheCtx, bx + 12, h * 0.34 + 14, 76, 8, '#f97316', px);
           fillPxRect(pitchCacheCtx, bx + 12, h * 0.66 - 22, 76, 8, '#f97316', px);
+          // Glowing Golden Forge Rune Emblem on Bridge Center
+          fillPxRect(pitchCacheCtx, bx + 36, h * 0.5 - 12, 28, 24, outline, px);
+          fillPxRect(pitchCacheCtx, bx + 40, h * 0.5 - 8, 20, 16, '#facc15', px);
         }
 
         // Fortress Basalt Collar with Carved Molten Gold Runes
@@ -991,9 +1053,14 @@ export default function App() {
           pitchCacheCtx.fillRect(bx, -CACHE_PAD_Y, bandW, h + CACHE_PAD_Y * 2);
         }
 
-        // Warm Sandstone Autumn Park Promenade Path
+        // Warm Sandstone Autumn Park Promenade Path with Cobblestone Stepping Tiles
         fillPxRect(pitchCacheCtx, -CACHE_PAD_X, h * 0.5 - 54, w + CACHE_PAD_X * 2, 108, outline, px);
         fillPxRect(pitchCacheCtx, -CACHE_PAD_X, h * 0.5 - 48, w + CACHE_PAD_X * 2, 96, '#fed7aa', px);
+        for (let cx = -130; cx <= w + 100; cx += 48) {
+          if (cx > -40 && cx < w + 20) continue;
+          fillPxRect(pitchCacheCtx, cx, h * 0.5 - 36, 28, 18, '#fdba74', px);
+          fillPxRect(pitchCacheCtx, cx + 14, h * 0.5 + 18, 28, 18, '#fdba74', px);
+        }
 
         // Harvest Festival Timber Market Stalls & Pumpkin Patches on Left & Right Concourse
         for (const sx of [-114, w + 70]) {
@@ -1072,7 +1139,7 @@ export default function App() {
         fillPxRect(pitchCacheCtx, -CACHE_PAD_X, h * 0.5 - 52, w + CACHE_PAD_X * 2, 104, outline, px);
         fillPxRect(pitchCacheCtx, -CACHE_PAD_X, h * 0.5 - 46, w + CACHE_PAD_X * 2, 92, '#fdf2f8', px);
 
-        // Left & Right Imperial Turquoise Koi Ponds with Stone Borders & Green Lotus Pads
+        // Left & Right Imperial Turquoise Koi Ponds with Stone Borders, Lotus Pads & Stone Toro Lanterns
         for (const kx of [-124, w + 56]) {
           for (const ky of [h * 0.2 - 36, h * 0.8 - 36]) {
             fillPxRect(pitchCacheCtx, kx - 4, ky - 4, 76, 76, outline, px);
@@ -1083,6 +1150,10 @@ export default function App() {
             fillPxRect(pitchCacheCtx, kx + 14, ky + 16, 12, 12, '#16a34a', px);
             fillPxRect(pitchCacheCtx, kx + 17, ky + 19, 6, 6, '#f472b6', px);
             fillPxRect(pitchCacheCtx, kx + 38, ky + 38, 12, 12, '#16a34a', px);
+            // Traditional Japanese Stone Toro Lantern with Warm Amber Light
+            fillPxRect(pitchCacheCtx, kx + 26, ky - 16, 16, 16, outline, px);
+            fillPxRect(pitchCacheCtx, kx + 29, ky - 13, 10, 10, '#cbd5e1', px);
+            fillPxRect(pitchCacheCtx, kx + 31, ky - 11, 6, 6, '#fde047', px);
           }
         }
 
@@ -1182,13 +1253,16 @@ export default function App() {
         pitchCacheCtx.lineWidth = 3;
         pitchCacheCtx.strokeRect(-trackPad + 16, -trackPad + 16, w + (trackPad - 16) * 2, h + (trackPad - 16) * 2);
 
-        // Wrap-Around Double-Decker Champions Grandstands (Top, Bottom, Left & Right Ultras Terraces)
+        // Wrap-Around Double-Decker Champions Grandstands with Gold Star Ribbons
         for (const by of [-106, h + 52]) {
           fillPxRect(pitchCacheCtx, 90, by - 4, w - 180, 56, outline, px);
           fillPxRect(pitchCacheCtx, 94, by, w - 188, 48, '#0f172a', px);
           fillPxRect(pitchCacheCtx, 100, by + 8, w - 200, 12, '#1e3a8a', px);
           fillPxRect(pitchCacheCtx, 100, by + 26, w - 200, 12, '#1e3a8a', px);
           fillPxRect(pitchCacheCtx, 100, by + 2, w - 200, 4, '#fde047', px);
+          for (let sx = 140; sx < w - 140; sx += 110) {
+            fillPxRect(pitchCacheCtx, sx, by + 20, 18, 4, '#fde047', px);
+          }
         }
 
         drawCornerFloodlightTower(pitchCacheCtx, -108, -96, 1, 1, px);
@@ -1208,6 +1282,13 @@ export default function App() {
 
         fillPxRect(pitchCacheCtx, -CACHE_PAD_X, h * 0.5 - 52, w + CACHE_PAD_X * 2, 104, outline, px);
         fillPxRect(pitchCacheCtx, -CACHE_PAD_X, h * 0.5 - 46, w + CACHE_PAD_X * 2, 92, '#e2e8f0', px);
+        // Manicured Royal Boxwood Hedges & Floral Topiary Borders Along Stone Promenade
+        for (const hx of [-145, w + 105]) {
+          fillPxRect(pitchCacheCtx, hx, h * 0.5 - 44, 42, 14, '#15803d', px);
+          fillPxRect(pitchCacheCtx, hx + 4, h * 0.5 - 41, 34, 8, '#22c55e', px);
+          fillPxRect(pitchCacheCtx, hx, h * 0.5 + 30, 42, 14, '#15803d', px);
+          fillPxRect(pitchCacheCtx, hx + 4, h * 0.5 + 33, 34, 8, '#22c55e', px);
+        }
 
         drawParkFountain(pitchCacheCtx, -98, h * 0.24, 34, px);
         drawParkFountain(pitchCacheCtx, -98, h * 0.76, 34, px);
@@ -1320,20 +1401,24 @@ export default function App() {
 
       // Theme-Specific Bespoke Turf Pattern Overlay & Center Circle Art
       if (selectedPitchTheme === 'CLASSIC_TURF') {
-        // Wembley Checkerboard Cross-Mowing Horizontal Bands + Royal Crown Center Emblem
+        // Wembley Checkerboard Cross-Mowing Horizontal Bands + Royal Double Laurel Ring Emblem
         pitchCacheCtx.fillStyle = 'rgba(255, 255, 255, 0.08)';
         const rowH = h / 8;
         for (let r = 0; r < 8; r += 2) {
           pitchCacheCtx.fillRect(0, r * rowH, w, rowH);
         }
-        // Subtle Royal Laurel Ring inside Center Circle
-        pitchCacheCtx.strokeStyle = 'rgba(255, 255, 255, 0.35)';
+        pitchCacheCtx.strokeStyle = 'rgba(255, 255, 255, 0.36)';
         pitchCacheCtx.lineWidth = 4;
         pitchCacheCtx.beginPath();
-        pitchCacheCtx.arc(w * 0.5, h * 0.5, 62, 0, Math.PI * 2);
+        pitchCacheCtx.arc(w * 0.5, h * 0.5, 64, 0, Math.PI * 2);
+        pitchCacheCtx.stroke();
+        pitchCacheCtx.strokeStyle = 'rgba(254, 240, 138, 0.32)';
+        pitchCacheCtx.lineWidth = 2.5;
+        pitchCacheCtx.beginPath();
+        pitchCacheCtx.arc(w * 0.5, h * 0.5, 42, 0, Math.PI * 2);
         pitchCacheCtx.stroke();
       } else if (selectedPitchTheme === 'TURF_AUTUMN') {
-        // Diagonal Argyle Harvest Lawn Mowing + Golden Maple Diamond Center Emblem
+        // Diagonal Argyle Harvest Lawn Mowing + Double Inlaid Golden Maple Diamond Center Emblem
         pitchCacheCtx.strokeStyle = 'rgba(254, 240, 138, 0.24)';
         pitchCacheCtx.lineWidth = 4;
         for (let d = -h; d < w + h; d += 150) {
@@ -1346,17 +1431,26 @@ export default function App() {
           pitchCacheCtx.lineTo(d, h);
           pitchCacheCtx.stroke();
         }
-        pitchCacheCtx.strokeStyle = 'rgba(254, 249, 195, 0.55)';
+        pitchCacheCtx.strokeStyle = 'rgba(254, 249, 195, 0.58)';
         pitchCacheCtx.lineWidth = 5;
         pitchCacheCtx.beginPath();
-        pitchCacheCtx.moveTo(w * 0.5, h * 0.5 - 72);
-        pitchCacheCtx.lineTo(w * 0.5 + 72, h * 0.5);
-        pitchCacheCtx.lineTo(w * 0.5, h * 0.5 + 72);
-        pitchCacheCtx.lineTo(w * 0.5 - 72, h * 0.5);
+        pitchCacheCtx.moveTo(w * 0.5, h * 0.5 - 74);
+        pitchCacheCtx.lineTo(w * 0.5 + 74, h * 0.5);
+        pitchCacheCtx.lineTo(w * 0.5, h * 0.5 + 74);
+        pitchCacheCtx.lineTo(w * 0.5 - 74, h * 0.5);
+        pitchCacheCtx.closePath();
+        pitchCacheCtx.stroke();
+        pitchCacheCtx.strokeStyle = 'rgba(251, 146, 60, 0.42)';
+        pitchCacheCtx.lineWidth = 3;
+        pitchCacheCtx.beginPath();
+        pitchCacheCtx.moveTo(w * 0.5, h * 0.5 - 46);
+        pitchCacheCtx.lineTo(w * 0.5 + 46, h * 0.5);
+        pitchCacheCtx.lineTo(w * 0.5, h * 0.5 + 46);
+        pitchCacheCtx.lineTo(w * 0.5 - 46, h * 0.5);
         pitchCacheCtx.closePath();
         pitchCacheCtx.stroke();
       } else if (selectedPitchTheme === 'TURF_SAKURA') {
-        // Concentric Zen Garden Radial Mowing Circles + 5-Petal Pink Sakura Blossom Center Crest
+        // Concentric Zen Garden Radial Mowing Circles + 5-Petal Pink Sakura Blossom & Golden Stamen Center Crest
         pitchCacheCtx.strokeStyle = 'rgba(255, 255, 255, 0.22)';
         pitchCacheCtx.lineWidth = 6;
         for (const rad of [95, 220, 345, 470]) {
@@ -1364,15 +1458,15 @@ export default function App() {
           pitchCacheCtx.arc(w * 0.5, h * 0.5, rad, 0, Math.PI * 2);
           pitchCacheCtx.stroke();
         }
-        // 5-Petal Sakura Blossom Emblem inside Center Circle
         for (let p = 0; p < 5; p++) {
           const ang = (p * Math.PI * 2) / 5 - Math.PI / 2;
           const pxCenter = w * 0.5 + Math.cos(ang) * 44;
           const pyCenter = h * 0.5 + Math.sin(ang) * 44;
-          fillPxRect(pitchCacheCtx, pxCenter - 14, pyCenter - 14, 28, 28, 'rgba(251, 207, 232, 0.52)', px);
+          fillPxRect(pitchCacheCtx, pxCenter - 14, pyCenter - 14, 28, 28, 'rgba(251, 207, 232, 0.54)', px);
+          fillPxRect(pitchCacheCtx, pxCenter - 6, pyCenter - 6, 12, 12, 'rgba(244, 114, 182, 0.45)', px);
         }
       } else if (selectedPitchTheme === 'TURF_CHAMPIONS') {
-        // Championship V-Chevron Mowing Bands + 8-Point Golden Starball Center Crest
+        // Championship V-Chevron Mowing Bands + Ornate 8-Point Golden Starball Center Crest
         pitchCacheCtx.strokeStyle = 'rgba(255, 255, 255, 0.16)';
         pitchCacheCtx.lineWidth = 14;
         for (let cx = 120; cx < w; cx += 180) {
@@ -1382,11 +1476,15 @@ export default function App() {
           pitchCacheCtx.lineTo(cx - 60, h);
           pitchCacheCtx.stroke();
         }
-        // 8-Point Champions Starball Ring in Center Circle
-        pitchCacheCtx.strokeStyle = 'rgba(254, 240, 138, 0.55)';
+        pitchCacheCtx.strokeStyle = 'rgba(254, 240, 138, 0.58)';
         pitchCacheCtx.lineWidth = 4;
         pitchCacheCtx.beginPath();
         pitchCacheCtx.arc(w * 0.5, h * 0.5, 68, 0, Math.PI * 2);
+        pitchCacheCtx.stroke();
+        pitchCacheCtx.strokeStyle = 'rgba(255, 255, 255, 0.35)';
+        pitchCacheCtx.lineWidth = 2.5;
+        pitchCacheCtx.beginPath();
+        pitchCacheCtx.arc(w * 0.5, h * 0.5, 42, 0, Math.PI * 2);
         pitchCacheCtx.stroke();
         for (let s = 0; s < 8; s++) {
           const ang = (s * Math.PI) / 4;
@@ -1396,12 +1494,12 @@ export default function App() {
             h * 0.5 + Math.sin(ang) * 68 - 6,
             12,
             12,
-            'rgba(254, 240, 138, 0.65)',
+            'rgba(254, 240, 138, 0.68)',
             px
           );
         }
       } else if (selectedPitchTheme === 'COSMIC_SPACE') {
-        // Glowing Constellation Grid Nodes & Orbital Center Ring
+        // Glowing Constellation Grid Nodes & Twin Intersecting Orbital Center Rings
         pitchCacheCtx.strokeStyle = 'rgba(56, 189, 248, 0.16)';
         pitchCacheCtx.lineWidth = 2;
         for (let gy = stripeW; gy < h; gy += stripeW) {
@@ -1410,14 +1508,19 @@ export default function App() {
           pitchCacheCtx.lineTo(w, gy);
           pitchCacheCtx.stroke();
         }
-        pitchCacheCtx.strokeStyle = 'rgba(192, 132, 252, 0.35)';
+        pitchCacheCtx.strokeStyle = 'rgba(192, 132, 252, 0.38)';
         pitchCacheCtx.lineWidth = 4;
         pitchCacheCtx.beginPath();
         pitchCacheCtx.ellipse(w * 0.5, h * 0.5, 92, 38, -0.35, 0, Math.PI * 2);
         pitchCacheCtx.stroke();
+        pitchCacheCtx.strokeStyle = 'rgba(56, 189, 248, 0.34)';
+        pitchCacheCtx.lineWidth = 3;
+        pitchCacheCtx.beginPath();
+        pitchCacheCtx.ellipse(w * 0.5, h * 0.5, 92, 38, 0.35, 0, Math.PI * 2);
+        pitchCacheCtx.stroke();
       } else if (selectedPitchTheme === 'URBAN_CONCRETE') {
-        // Street Asphalt Expansion Joints & Stencil Center Star
-        pitchCacheCtx.strokeStyle = 'rgba(51, 65, 85, 0.32)';
+        // Street Asphalt Expansion Joints & Double-Diamond Stencil Center Crest
+        pitchCacheCtx.strokeStyle = 'rgba(51, 65, 85, 0.34)';
         pitchCacheCtx.lineWidth = 2;
         for (let gy = 140; gy < h; gy += 140) {
           pitchCacheCtx.beginPath();
@@ -1425,9 +1528,10 @@ export default function App() {
           pitchCacheCtx.lineTo(w, gy);
           pitchCacheCtx.stroke();
         }
-        fillPxRect(pitchCacheCtx, w * 0.5 - 38, h * 0.5 - 38, 76, 76, 'rgba(250, 204, 21, 0.22)', px);
+        fillPxRect(pitchCacheCtx, w * 0.5 - 42, h * 0.5 - 42, 84, 84, 'rgba(250, 204, 21, 0.22)', px);
+        fillPxRect(pitchCacheCtx, w * 0.5 - 24, h * 0.5 - 24, 48, 48, 'rgba(56, 189, 248, 0.22)', px);
       } else if (selectedPitchTheme === 'RIO_CLAY') {
-        // Diamond-Cut Clay Grooming Lines & Sunburst Center Ring
+        // Diamond-Cut Clay Grooming Lines & 8-Ray Copacabana Sunburst Center Ring
         pitchCacheCtx.strokeStyle = 'rgba(254, 243, 199, 0.18)';
         pitchCacheCtx.lineWidth = 3;
         for (let d = -h; d < w + h; d += 120) {
@@ -1436,13 +1540,25 @@ export default function App() {
           pitchCacheCtx.lineTo(d + h, h);
           pitchCacheCtx.stroke();
         }
-        pitchCacheCtx.strokeStyle = 'rgba(254, 240, 138, 0.42)';
+        pitchCacheCtx.strokeStyle = 'rgba(254, 240, 138, 0.45)';
         pitchCacheCtx.lineWidth = 5;
         pitchCacheCtx.beginPath();
         pitchCacheCtx.arc(w * 0.5, h * 0.5, 58, 0, Math.PI * 2);
         pitchCacheCtx.stroke();
+        for (let r = 0; r < 8; r++) {
+          const ang = (r * Math.PI) / 4;
+          fillPxRect(
+            pitchCacheCtx,
+            w * 0.5 + Math.cos(ang) * 76 - 5,
+            h * 0.5 + Math.sin(ang) * 76 - 5,
+            10,
+            10,
+            'rgba(254, 240, 138, 0.45)',
+            px
+          );
+        }
       } else if (selectedPitchTheme === 'TWILIGHT_SYNTH') {
-        // Neon Cyber-Circuit Grid Traces & Outrun Center Sun
+        // Neon Cyber-Circuit Grid Traces & Concentric Outrun Center Sun
         pitchCacheCtx.strokeStyle = 'rgba(244, 114, 182, 0.22)';
         pitchCacheCtx.lineWidth = 2;
         for (let gy = 110; gy < h; gy += 110) {
@@ -1451,10 +1567,13 @@ export default function App() {
           pitchCacheCtx.lineTo(w, gy);
           pitchCacheCtx.stroke();
         }
-        fillPxRect(pitchCacheCtx, w * 0.5 - 46, h * 0.5 - 46, 92, 92, 'rgba(244, 114, 182, 0.22)', px);
-        fillPxRect(pitchCacheCtx, w * 0.5 - 30, h * 0.5 - 30, 60, 60, 'rgba(34, 211, 238, 0.24)', px);
+        fillPxRect(pitchCacheCtx, w * 0.5 - 48, h * 0.5 - 48, 96, 96, 'rgba(244, 114, 182, 0.22)', px);
+        fillPxRect(pitchCacheCtx, w * 0.5 - 32, h * 0.5 - 32, 64, 64, 'rgba(34, 211, 238, 0.24)', px);
+        pitchCacheCtx.strokeStyle = 'rgba(232, 121, 249, 0.42)';
+        pitchCacheCtx.lineWidth = 3;
+        pitchCacheCtx.strokeRect(w * 0.5 - 68, h * 0.5 - 68, 136, 136);
       } else if (selectedPitchTheme === 'ARCTIC_ICE') {
-        // Crystalline Diagonal Ice Sheen Streaks & Snowflake Center Crystal
+        // Crystalline Diagonal Ice Sheen Streaks & 8-Point Snowflake Center Crystal
         pitchCacheCtx.fillStyle = 'rgba(255, 255, 255, 0.26)';
         for (let d = -h; d < w; d += 220) {
           pitchCacheCtx.beginPath();
@@ -1465,8 +1584,7 @@ export default function App() {
           pitchCacheCtx.closePath();
           pitchCacheCtx.fill();
         }
-        // 8-Point Snowflake Center Emblem
-        pitchCacheCtx.strokeStyle = 'rgba(255, 255, 255, 0.72)';
+        pitchCacheCtx.strokeStyle = 'rgba(255, 255, 255, 0.75)';
         pitchCacheCtx.lineWidth = 4;
         for (let a = 0; a < 4; a++) {
           const ang = (a * Math.PI) / 4;
@@ -1475,8 +1593,13 @@ export default function App() {
           pitchCacheCtx.lineTo(w * 0.5 + Math.cos(ang) * 68, h * 0.5 + Math.sin(ang) * 68);
           pitchCacheCtx.stroke();
         }
+        pitchCacheCtx.strokeStyle = 'rgba(186, 230, 253, 0.65)';
+        pitchCacheCtx.lineWidth = 3;
+        pitchCacheCtx.beginPath();
+        pitchCacheCtx.arc(w * 0.5, h * 0.5, 42, 0, Math.PI * 2);
+        pitchCacheCtx.stroke();
       } else if (selectedPitchTheme === 'VOLCANO_FORGE') {
-        // Obsidian Basalt Geometric Tiles & Molten Ember Center Ring
+        // Obsidian Basalt Geometric Tiles & Molten Forge Gear-Rune Center Ring
         pitchCacheCtx.strokeStyle = 'rgba(249, 115, 22, 0.22)';
         pitchCacheCtx.lineWidth = 2;
         for (let gy = 140; gy < h; gy += 140) {
@@ -1485,12 +1608,24 @@ export default function App() {
           pitchCacheCtx.lineTo(w, gy);
           pitchCacheCtx.stroke();
         }
-        pitchCacheCtx.strokeStyle = 'rgba(239, 68, 68, 0.45)';
+        pitchCacheCtx.strokeStyle = 'rgba(239, 68, 68, 0.48)';
         pitchCacheCtx.lineWidth = 6;
         pitchCacheCtx.beginPath();
         pitchCacheCtx.arc(w * 0.5, h * 0.5, 68, 0, Math.PI * 2);
         pitchCacheCtx.stroke();
-        fillPxRect(pitchCacheCtx, w * 0.5 - 26, h * 0.5 - 26, 52, 52, 'rgba(249, 115, 22, 0.28)', px);
+        fillPxRect(pitchCacheCtx, w * 0.5 - 28, h * 0.5 - 28, 56, 56, 'rgba(249, 115, 22, 0.3)', px);
+        for (let g = 0; g < 8; g++) {
+          const ang = (g * Math.PI) / 4;
+          fillPxRect(
+            pitchCacheCtx,
+            w * 0.5 + Math.cos(ang) * 68 - 6,
+            h * 0.5 + Math.sin(ang) * 68 - 6,
+            12,
+            12,
+            'rgba(253, 224, 71, 0.5)',
+            px
+          );
+        }
       }
 
       // Hand-crafted pixel grass/surface tufts scattered across the turf
@@ -2504,6 +2639,9 @@ export default function App() {
     let goalBannerSub = '';
     let screenShake = 0;
     let stadiumFlashAlpha = 0;
+    let stadiumFlashColor = '#ffffff';
+    let lastGoalWorldX = PITCH.width;
+    let lastGoalWorldY = PITCH.height * 0.5;
     let dribbleSoundTimer = 0;
 
     let ledBannerMessage = 'REMATCH 0.2 • 3 PASSES = SUPER FLOW';
@@ -2515,7 +2653,19 @@ export default function App() {
     interface WallGlowVfx { x1: number; y1: number; x2: number; y2: number; alpha: number; }
     interface TurfScuffVfx { x: number; y: number; angle: number; alpha: number; color: string; }
     interface AfterimageVfx { x: number; y: number; radius: number; team: 'YOU' | 'AI'; alpha: number; }
-    interface ConfettiVfx { x: number; y: number; vx: number; vy: number; w: number; h: number; rot: number; vRot: number; alpha: number; color: string; }
+    interface ConfettiVfx {
+      x: number;
+      y: number;
+      vx: number;
+      vy: number;
+      w: number;
+      h: number;
+      rot: number;
+      vRot: number;
+      alpha: number;
+      color: string;
+      shape?: 'RECT' | 'PETAL' | 'LEAF' | 'STAR' | 'CRYSTAL' | 'EMBER' | 'SPARK';
+    }
 
     const ripples: RippleVfx[] = [];
     const particles: ParticleVfx[] = [];
@@ -3031,26 +3181,50 @@ export default function App() {
 
     function spawnGoalConfetti(goalX: number, goalY: number, team: 'YOU' | 'AI') {
       const teamKit = team === 'YOU' ? userKitChoice : getContrastingKit(userKitChoice);
-      const palette =
+      const stadiumFx = getStadiumGoalEffect(selectedPitchTheme);
+      const kitPalette =
         teamKit === 'HOME'
-          ? ['#38bdf8', '#60a5fa', '#fde047', '#a7f3d0', '#ffffff']
-          : ['#fb7185', '#fda4af', '#fcd34d', '#f472b6', '#ffffff'];
+          ? ['#38bdf8', '#fde047']
+          : ['#fb7185', '#fcd34d'];
+      const palette = [...stadiumFx.particleColors, ...kitPalette];
       const dirSign = goalX > PITCH.width * 0.5 ? -1 : 1;
-      for (let i = 0; i < 65; i++) {
-        if (confetti.length > 160) confetti.shift();
-        const spreadAngle = (Math.random() - 0.5) * 1.45;
-        const speed = 3.5 + Math.random() * 9.5;
+
+      const shapeMap: Record<typeof stadiumFx.effectStyle, ConfettiVfx['shape']> = {
+        BOTANICAL_FOUNTAIN: 'RECT',
+        MAPLE_SWIRL: 'LEAF',
+        SAKURA_PETAL_STORM: 'PETAL',
+        CHAMPIONS_PYRO: 'STAR',
+        COSMIC_SUPERNOVA: 'STAR',
+        STREET_GRAFFITI_BASS: 'SPARK',
+        CARNIVAL_STREAMERS: 'RECT',
+        SYNTH_LASER_SCAN: 'SPARK',
+        ARCTIC_CRYSTAL_BURST: 'CRYSTAL',
+        VOLCANO_MAGMA_PLUME: 'EMBER',
+      };
+      const shape = shapeMap[stadiumFx.effectStyle] || 'RECT';
+
+      // Spawn stadium-signature concentric shockwave ripples at the goal line & center circle
+      spawnRipple(goalX, goalY, stadiumFx.shockwaveColors[0], 118);
+      spawnRipple(goalX, goalY, stadiumFx.shockwaveColors[1], 168);
+      spawnRipple(PITCH.width * 0.5, PITCH.height * 0.5, stadiumFx.shockwaveColors[0], 145);
+
+      for (let i = 0; i < 68; i++) {
+        if (confetti.length > 170) confetti.shift();
+        const spreadAngle = (Math.random() - 0.5) * 1.48;
+        const speed = 3.4 + Math.random() * 9.6;
+        const isRisingEmber = shape === 'EMBER';
         confetti.push({
           x: goalX,
-          y: goalY + (Math.random() - 0.5) * PITCH.goalWidth * 0.75,
+          y: goalY + (Math.random() - 0.5) * PITCH.goalWidth * 0.78,
           vx: Math.cos(spreadAngle) * speed * dirSign,
-          vy: Math.sin(spreadAngle) * speed - 1.5,
-          w: 6 + Math.random() * 5,
-          h: 4 + Math.random() * 4,
+          vy: Math.sin(spreadAngle) * speed - (isRisingEmber ? 2.8 : 1.5),
+          w: shape === 'STAR' || shape === 'CRYSTAL' ? 7 + Math.random() * 4 : 6 + Math.random() * 5,
+          h: shape === 'PETAL' || shape === 'LEAF' ? 6 + Math.random() * 4 : 4 + Math.random() * 4,
           rot: Math.random() * Math.PI * 2,
           vRot: (Math.random() - 0.5) * 0.25,
           alpha: 1,
           color: palette[i % palette.length],
+          shape,
         });
       }
     }
@@ -4666,12 +4840,16 @@ export default function App() {
       goalBannerTimer = 115;
       screenShake = 18;
       slowMoTimer = 28;
-      stadiumFlashAlpha = 0.6;
+      const stadiumGoalFx = getStadiumGoalEffect(selectedPitchTheme);
+      stadiumFlashAlpha = 0.52;
+      stadiumFlashColor = stadiumGoalFx.flashTint;
       crowdExcitement = 1.0;
       kickChargeState.active = false;
       kickChargeState.power = 0;
 
       const goalX = scoringTeam === 'YOU' ? PITCH.width : 0;
+      lastGoalWorldX = goalX;
+      lastGoalWorldY = ball.y;
       spawnGoalConfetti(goalX, ball.y, scoringTeam);
 
       const isRonaldoLongShot = isLongRangeGoal(
@@ -5556,6 +5734,133 @@ export default function App() {
         ctx.lineTo(wg.x2, wg.y2);
         ctx.stroke();
       }
+
+      // 7. Subtle Per-Stadium Live Goal Celebration Effect on the Pitch & Perimeter
+      if (gameState === 'GOAL_CELEBRATION') {
+        const stadiumFx = getStadiumGoalEffect(selectedPitchTheme);
+        const goalElapsed = Math.max(0, 115 - goalBannerTimer);
+        const fxAlpha = Math.max(0, Math.min(1, (115 - goalElapsed) / 95)) * 0.58;
+        ctx.save();
+        ctx.globalAlpha = fxAlpha;
+
+        // Expanding Stadium-Signature Dual Shockwave Rings from Goal Mouth & Center Circle
+        const ringR1 = 35 + goalElapsed * 4.2;
+        const ringR2 = Math.max(12, -10 + goalElapsed * 3.3);
+        ctx.strokeStyle = stadiumFx.shockwaveColors[0];
+        ctx.lineWidth = 5;
+        ctx.beginPath();
+        ctx.arc(lastGoalWorldX, lastGoalWorldY, ringR1, 0, Math.PI * 2);
+        ctx.stroke();
+
+        ctx.strokeStyle = stadiumFx.shockwaveColors[1];
+        ctx.lineWidth = 3.5;
+        ctx.beginPath();
+        ctx.arc(lastGoalWorldX, lastGoalWorldY, ringR2, 0, Math.PI * 2);
+        ctx.stroke();
+
+        // Subtle Theme-Specific Stadium Celebration Accents
+        if (stadiumFx.effectStyle === 'BOTANICAL_FOUNTAIN') {
+          // Classic Sunlit Turf: 4 Corner Fountains erupt with higher sparkling cyan/gold water rings
+          for (const ftn of [
+            { x: -98, y: h * 0.24 },
+            { x: -98, y: h * 0.76 },
+            { x: w + 98, y: h * 0.24 },
+            { x: w + 98, y: h * 0.76 },
+          ]) {
+            ctx.strokeStyle = '#38bdf8';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.arc(ftn.x, ftn.y, 16 + (goalElapsed % 28), 0, Math.PI * 2);
+            ctx.stroke();
+          }
+        } else if (stadiumFx.effectStyle === 'MAPLE_SWIRL') {
+          // Autumn Harvest Turf: Swirling golden-amber harvest wind vortex ring in center circle
+          ctx.strokeStyle = '#f59e0b';
+          ctx.lineWidth = 4;
+          ctx.setLineDash([16, 12]);
+          ctx.beginPath();
+          ctx.arc(w * 0.5, h * 0.5, 85 + Math.sin(goalElapsed * 0.15) * 14, goalElapsed * 0.08, goalElapsed * 0.08 + Math.PI * 1.8);
+          ctx.stroke();
+          ctx.setLineDash([]);
+        } else if (stadiumFx.effectStyle === 'SAKURA_PETAL_STORM') {
+          // Sakura Blossom Turf: Expanding pink blossom ripple in center & koi ponds
+          ctx.strokeStyle = '#f472b6';
+          ctx.lineWidth = 3.5;
+          ctx.beginPath();
+          ctx.arc(w * 0.5, h * 0.5, 65 + (goalElapsed * 1.6) % 95, 0, Math.PI * 2);
+          ctx.stroke();
+        } else if (stadiumFx.effectStyle === 'CHAMPIONS_PYRO') {
+          // Champions Cathedral: Golden Pyro Flashes along Top & Bottom Touchlines
+          for (let pxIdx = 0; pxIdx < 6; pxIdx++) {
+            const pyroX = 190 + pxIdx * ((w - 380) / 5);
+            const pyroR = 10 + Math.abs(Math.sin(goalElapsed * 0.22 + pxIdx)) * 14;
+            fillPxRect(ctx, pyroX - pyroR * 0.5, -28 - pyroR * 0.5, pyroR, pyroR, '#fde047', px);
+            fillPxRect(ctx, pyroX - pyroR * 0.5, h + 28 - pyroR * 0.5, pyroR, pyroR, '#fde047', px);
+          }
+        } else if (stadiumFx.effectStyle === 'COSMIC_SUPERNOVA') {
+          // Cosmic Orbit Station: Twin Orbital Supernova Ellipses & UFO Tractor Beam Pulse
+          ctx.strokeStyle = '#38bdf8';
+          ctx.lineWidth = 4;
+          ctx.beginPath();
+          ctx.ellipse(w * 0.5, h * 0.5, 110 + goalElapsed * 1.5, 48 + goalElapsed * 0.6, goalElapsed * 0.04, 0, Math.PI * 2);
+          ctx.stroke();
+        } else if (stadiumFx.effectStyle === 'STREET_GRAFFITI_BASS') {
+          // Urban Street Concrete: Booming Boombox Soundwave Rings on Left & Right Courts
+          for (const sx of [-86, w + 86]) {
+            ctx.strokeStyle = '#facc15';
+            ctx.lineWidth = 3.5;
+            ctx.beginPath();
+            ctx.arc(sx, h - 140, 18 + ((goalElapsed * 2.2) % 55), 0, Math.PI * 2);
+            ctx.stroke();
+          }
+        } else if (stadiumFx.effectStyle === 'CARNIVAL_STREAMERS') {
+          // Copacabana Sunset Clay: Golden Sunburst Rays radiating from Center Circle
+          ctx.strokeStyle = '#fde047';
+          ctx.lineWidth = 4;
+          for (let r = 0; r < 8; r++) {
+            const ang = (r * Math.PI) / 4 + goalElapsed * 0.03;
+            ctx.beginPath();
+            ctx.moveTo(w * 0.5 + Math.cos(ang) * 55, h * 0.5 + Math.sin(ang) * 55);
+            ctx.lineTo(w * 0.5 + Math.cos(ang) * 115, h * 0.5 + Math.sin(ang) * 115);
+            ctx.stroke();
+          }
+        } else if (stadiumFx.effectStyle === 'SYNTH_LASER_SCAN') {
+          // Twilight Synthwave: Sweeping Magenta & Cyan Laser Scanlines across Pitch
+          const scanOffset = (goalElapsed * 9) % (w * 0.5);
+          ctx.strokeStyle = '#f472b6';
+          ctx.lineWidth = 3;
+          ctx.beginPath();
+          ctx.moveTo(w * 0.5 - scanOffset, 0);
+          ctx.lineTo(w * 0.5 - scanOffset, h);
+          ctx.moveTo(w * 0.5 + scanOffset, 0);
+          ctx.lineTo(w * 0.5 + scanOffset, h);
+          ctx.stroke();
+        } else if (stadiumFx.effectStyle === 'ARCTIC_CRYSTAL_BURST') {
+          // Glacier Frost Arena: Expanding 8-Point Crystalline Frost Star in Center Circle
+          const frostR = 65 + Math.sin(goalElapsed * 0.16) * 22;
+          ctx.strokeStyle = '#67e8f9';
+          ctx.lineWidth = 4;
+          for (let a = 0; a < 4; a++) {
+            const ang = (a * Math.PI) / 4 + goalElapsed * 0.02;
+            ctx.beginPath();
+            ctx.moveTo(w * 0.5 - Math.cos(ang) * frostR, h * 0.5 - Math.sin(ang) * frostR);
+            ctx.lineTo(w * 0.5 + Math.cos(ang) * frostR, h * 0.5 + Math.sin(ang) * frostR);
+            ctx.stroke();
+          }
+        } else if (stadiumFx.effectStyle === 'VOLCANO_MAGMA_PLUME') {
+          // Magma Caldera Citadel: 8 Perimeter Fire Braziers Surge with Tall Molten Gold Pillars
+          for (const bz of [
+            { x: 170, y: -76 },
+            { x: w - 170, y: -76 },
+            { x: 170, y: h + 76 },
+            { x: w - 170, y: h + 76 },
+          ]) {
+            fillPxRect(ctx, bz.x - 14, bz.y - 42, 28, 34, '#f97316', px);
+            fillPxRect(ctx, bz.x - 8, bz.y - 36, 16, 26, '#fde047', px);
+          }
+        }
+        ctx.restore();
+      }
       ctx.restore();
     }
 
@@ -5783,7 +6088,21 @@ export default function App() {
         ctx.save();
         ctx.globalAlpha = Math.max(0, cf.alpha);
         ctx.fillStyle = cf.color;
-        ctx.fillRect(Math.round(cf.x - cf.w * 0.5), Math.round(cf.y - cf.h * 0.5), Math.round(cf.w), Math.round(cf.h));
+        const cx = Math.round(cf.x);
+        const cy = Math.round(cf.y);
+        const cw = Math.round(cf.w);
+        const ch = Math.round(cf.h);
+        if (cf.shape === 'STAR' || cf.shape === 'CRYSTAL') {
+          // 16-bit Pixel Plus-Star / Ice Crystal Shard
+          ctx.fillRect(cx - cw * 0.5, cy - 1.5, cw, 3);
+          ctx.fillRect(cx - 1.5, cy - cw * 0.5, 3, cw);
+        } else if (cf.shape === 'PETAL' || cf.shape === 'LEAF') {
+          // Stepped Pixel Petal / Autumn Maple Leaf
+          ctx.fillRect(cx - cw * 0.5, cy - ch * 0.5, cw, ch);
+          ctx.fillRect(cx - cw * 0.25, cy - ch * 0.5 - 2, cw * 0.5, ch + 4);
+        } else {
+          ctx.fillRect(cx - cw * 0.5, cy - ch * 0.5, cw, ch);
+        }
         ctx.restore();
       }
 
@@ -7744,12 +8063,16 @@ export default function App() {
       ctx.restore();
 
       if (stadiumFlashAlpha > 0) {
-        ctx.fillStyle = `rgba(255, 255, 255, ${stadiumFlashAlpha})`;
+        ctx.save();
+        ctx.globalAlpha = stadiumFlashAlpha * 0.48;
+        ctx.fillStyle = stadiumFlashColor || '#ffffff';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.restore();
       }
 
       if (gameState === 'GOAL_CELEBRATION') {
-        // Expressive Unboxed 3D Arcade Goal Splash (Zero Black Box Background!)
+        // Expressive Unboxed 3D Arcade Goal Splash with Subtle Per-Stadium Goal Aura (Zero Black Box Background!)
+        const stadiumGoalFx = getStadiumGoalEffect(selectedPitchTheme);
         ctx.save();
         const elapsed = Math.max(0, 115 - goalBannerTimer);
         const popSpring =
@@ -7770,7 +8093,7 @@ export default function App() {
         ctx.scale(popSpring, popSpring);
         ctx.rotate(tilt);
 
-        // 1. Dynamic Radial Starburst Speed-Rays & Floating 16-Bit Pixel Stars Behind the Text
+        // 1. Dynamic Stadium-Tinted Radial Starburst Speed-Rays & Floating 16-Bit Pixel Stars Behind the Text
         const rayCount = 12;
         for (let r = 0; r < rayCount; r++) {
           const ang = (Math.PI * 2 * r) / rayCount + elapsed * 0.022;
@@ -7778,7 +8101,8 @@ export default function App() {
           const outerR = (isCompact ? 115 : 155) + (r % 2 === 0 ? 28 : -12);
           ctx.save();
           ctx.rotate(ang);
-          ctx.fillStyle = r % 2 === 0 ? 'rgba(253, 224, 71, 0.34)' : 'rgba(56, 189, 248, 0.28)';
+          ctx.globalAlpha = fadeOut * (r % 2 === 0 ? 0.34 : 0.26);
+          ctx.fillStyle = r % 2 === 0 ? stadiumGoalFx.shockwaveColors[0] : stadiumGoalFx.shockwaveColors[1];
           ctx.beginPath();
           ctx.moveTo(innerR, -4);
           ctx.lineTo(outerR, -12);
@@ -7788,9 +8112,10 @@ export default function App() {
           ctx.fill();
           ctx.restore();
         }
+        ctx.globalAlpha = fadeOut;
 
-        // Orbiting 16-Bit Pixel Sparkle Stars
-        const starColors = ['#fde047', '#38bdf8', '#ffffff', '#34d399', '#f472b6'];
+        // Orbiting Stadium-Themed 16-Bit Pixel Sparkle Stars
+        const starColors = stadiumGoalFx.particleColors;
         for (let s = 0; s < 8; s++) {
           const sAng = (Math.PI * 2 * s) / 8 - elapsed * 0.03;
           const sDistX = (isCompact ? 145 : 210) + Math.sin(elapsed * 0.15 + s) * 18;
@@ -7920,6 +8245,9 @@ export default function App() {
       },
       getActiveMusicProfile() {
         return getStadiumMusicProfile(selectedPitchTheme);
+      },
+      getActiveGoalEffect() {
+        return getStadiumGoalEffect(selectedPitchTheme);
       },
       triggerGoal(opts?: {
         scoringTeam?: 'YOU' | 'AI';

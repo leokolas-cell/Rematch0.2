@@ -62,8 +62,10 @@ export function drawPixelNumber(
   const startX = Math.round(centerX - totalW / 2);
   const startY = Math.round(centerY - (5 * px) / 2);
 
-  // Dark outer pixel rim + team badge plate
-  ctx.fillStyle = GRAPHICS_CONFIG.palette.outline;
+  // Crisp White Outer Contrast Rim + Dark Ink Rim + Saturated Team Badge Plate
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(startX - px - 2, startY - px - 2, totalW + px * 2 + 4, 5 * px + px * 2 + 4);
+  ctx.fillStyle = '#0f172a';
   ctx.fillRect(startX - px - 1, startY - px - 1, totalW + px * 2 + 2, 5 * px + px * 2 + 2);
   ctx.fillStyle = plateColor;
   ctx.fillRect(startX - px, startY - px, totalW + px * 2, 5 * px + px * 2);
@@ -105,7 +107,7 @@ export interface PixelPlayerRenderData {
 
 /**
  * High-Detail 16-Bit Character Sprite Renderer (`drawPixelPlayer`) with
- * Clean Modern Vector Under-Foot Circles & Charge Bar.
+ * Universal High-Contrast Dual-Bordered Under-Foot Discs & Double Sprite Outlines.
  */
 export function drawPixelPlayer(
   ctx: CanvasRenderingContext2D,
@@ -132,76 +134,104 @@ export function drawPixelPlayer(
   // Smooth floating-point translation for 100% butter-smooth 60-144Hz movement
   ctx.translate(p.x, p.y);
 
-  // 1. CLEAN MODERN VECTOR TEAM RING & CONTROLLED PLAYER (P1) CIRCLE
+  // 1. UNIVERSAL HIGH-CONTRAST UNDER-FOOT TEAM PLATTER & CONTROLLED PLAYER (P1) RING
+  // Guarantees 100% instant readability on dark space/obsidian/synth pitches AND bright ice/clay/turf pitches
+  const baseRadius = opts.isControlled ? p.radius + 9.5 : p.radius + 7.5;
+
+  // Outer pure-white halo ring (makes player pop on dark pitches: Cosmic Space, Volcano Forge, Twilight Synth, Rooftop)
+  ctx.strokeStyle = '#ffffff';
+  ctx.lineWidth = opts.isControlled ? 8.5 : 7.0;
+  ctx.beginPath();
+  ctx.arc(0, 0, baseRadius + 1.5, 0, Math.PI * 2);
+  ctx.stroke();
+
+  // Bold dark ink border ring (makes player pop on bright pitches: Glacier Frost, Rio Clay, Sakura, Sunlit Turf)
+  ctx.strokeStyle = '#0f172a';
+  ctx.lineWidth = opts.isControlled ? 5.5 : 4.5;
+  ctx.beginPath();
+  ctx.arc(0, 0, baseRadius, 0, Math.PI * 2);
+  ctx.stroke();
+
+  // Rich, high-contrast team-colored floor platter fill under the player's feet
+  ctx.fillStyle = opts.superFlow
+    ? 'rgba(234, 179, 8, 0.68)'
+    : wearsHomeKit
+      ? 'rgba(2, 132, 199, 0.65)'
+      : 'rgba(225, 29, 72, 0.65)';
+  ctx.beginPath();
+  ctx.arc(0, 0, baseRadius - 1.5, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Inner bright team accent ring
+  ctx.strokeStyle = opts.superFlow
+    ? '#fef08a'
+    : wearsHomeKit
+      ? '#7dd3fc'
+      : '#fda4af';
+  ctx.lineWidth = opts.isControlled ? 3.2 : 2.5;
+  ctx.beginPath();
+  ctx.arc(0, 0, baseRadius - 2.2, 0, Math.PI * 2);
+  ctx.stroke();
+
+  // Directional facing pointer on the front rim of every player's floor platter
+  const faceAngle = opts.isControlled ? opts.aimAngle : p.angle;
+  ctx.save();
+  ctx.rotate(faceAngle);
+  ctx.fillStyle = opts.superFlow ? '#fde047' : wearsHomeKit ? '#38bdf8' : '#fb7185';
+  ctx.strokeStyle = '#0f172a';
+  ctx.lineWidth = 3.2;
+  ctx.lineJoin = 'round';
+  ctx.beginPath();
+  ctx.moveTo(baseRadius + 13, 0);
+  ctx.lineTo(baseRadius + 2, -8);
+  ctx.lineTo(baseRadius + 4.5, 0);
+  ctx.lineTo(baseRadius + 2, 8);
+  ctx.closePath();
+  ctx.stroke();
+  ctx.fill();
+  ctx.strokeStyle = '#ffffff';
+  ctx.lineWidth = 1.2;
+  ctx.stroke();
+  ctx.restore();
+
   if (opts.isControlled) {
-    const pulseR = p.radius + 10 + Math.sin(opts.matchTick * 0.14) * 2.0;
-
-    // Soft pastel glow fill under controlled player
-    ctx.fillStyle = opts.superFlow
-      ? 'rgba(250, 204, 21, 0.25)'
-      : wearsHomeKit
-        ? 'rgba(56, 189, 248, 0.24)'
-        : 'rgba(251, 113, 133, 0.24)';
+    const pulseR = baseRadius + 5.5 + Math.sin(opts.matchTick * 0.14) * 2.0;
+    ctx.strokeStyle = opts.superFlow ? '#fde047' : '#ffffff';
+    ctx.lineWidth = 2.6;
     ctx.beginPath();
-    ctx.arc(0, 0, pulseR + 3, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Crisp inner white vector ring
-    ctx.strokeStyle = opts.superFlow ? '#fef047' : '#ffffff';
-    ctx.lineWidth = 3.2;
-    ctx.beginPath();
-    ctx.arc(0, 0, p.radius + 8.5, 0, Math.PI * 2);
-    ctx.stroke();
-
-    // Outer accent vector ring
-    ctx.strokeStyle = opts.superFlow ? '#f59e0b' : wearsHomeKit ? '#0284c7' : '#e11d48';
-    ctx.lineWidth = 2.0;
-    ctx.beginPath();
-    ctx.arc(0, 0, p.radius + 11.8, 0, Math.PI * 2);
+    ctx.arc(0, 0, pulseR, 0, Math.PI * 2);
     ctx.stroke();
 
     if (opts.superFlow) {
       ctx.save();
       ctx.rotate(opts.matchTick * 0.05);
-      ctx.strokeStyle = 'rgba(250, 204, 21, 0.9)';
-      ctx.lineWidth = 2.4;
+      ctx.strokeStyle = 'rgba(250, 204, 21, 0.95)';
+      ctx.lineWidth = 2.6;
       ctx.setLineDash([7, 6]);
       ctx.beginPath();
-      ctx.arc(0, 0, p.radius + 16, 0, Math.PI * 2);
+      ctx.arc(0, 0, pulseR + 4.5, 0, Math.PI * 2);
       ctx.stroke();
       ctx.restore();
     }
 
-    // Clean Modern Vector Directional Aim Chevron
-    ctx.save();
-    ctx.rotate(opts.aimAngle);
-    ctx.fillStyle = opts.superFlow ? '#fde047' : '#ffffff';
-    ctx.strokeStyle = '#0f172a';
-    ctx.lineWidth = 2;
-    ctx.lineJoin = 'round';
-    ctx.beginPath();
-    ctx.moveTo(p.radius + 23, 0);
-    ctx.lineTo(p.radius + 12, -8);
-    ctx.lineTo(p.radius + 14.5, 0);
-    ctx.lineTo(p.radius + 12, 8);
-    ctx.closePath();
-    ctx.fill();
-    ctx.stroke();
-    ctx.restore();
-
     // Clean Modern Under-Foot Finesse Charge Bar (with 62%-92% Sweet Spot)
     if (opts.chargePower > 0.04) {
-      const barW = 48;
-      const barH = 7.5;
-      const barY = p.radius + 16;
+      const barW = 50;
+      const barH = 8;
+      const barY = baseRadius + 12;
       const sweetWidth = 0.3;
 
-      ctx.fillStyle = 'rgba(15, 23, 42, 0.88)';
+      ctx.fillStyle = '#ffffff';
       ctx.beginPath();
-      ctx.roundRect(-barW / 2 - 1, barY - 1, barW + 2, barH + 2, 4);
+      ctx.roundRect(-barW / 2 - 3, barY - 3, barW + 6, barH + 6, 5);
       ctx.fill();
 
-      ctx.fillStyle = 'rgba(250, 204, 21, 0.38)';
+      ctx.fillStyle = 'rgba(15, 23, 42, 0.95)';
+      ctx.beginPath();
+      ctx.roundRect(-barW / 2 - 1.5, barY - 1.5, barW + 3, barH + 3, 4);
+      ctx.fill();
+
+      ctx.fillStyle = 'rgba(250, 204, 21, 0.42)';
       ctx.fillRect(-barW / 2 + barW * 0.62, barY, barW * sweetWidth, barH);
 
       const inSweet = opts.chargePower >= 0.62 && opts.chargePower <= 0.92;
@@ -211,37 +241,30 @@ export function drawPixelPlayer(
       ctx.fill();
 
       ctx.strokeStyle = '#ffffff';
-      ctx.lineWidth = 1.4;
+      ctx.lineWidth = 1.5;
       ctx.strokeRect(-barW / 2 + barW * 0.62, barY, barW * sweetWidth, barH);
     }
-  } else {
-    // Clean modern vector team base circle so Home Kit (Sky-Cyan) vs Away Kit (Coral-Crimson) are instantly distinct
-    ctx.fillStyle = wearsHomeKit ? 'rgba(14, 165, 233, 0.18)' : 'rgba(244, 63, 94, 0.20)';
+  } else if (opts.isOpenLane) {
+    const isGiveGo = p.giveAndGoTimer > 0;
+    ctx.save();
+    ctx.strokeStyle = '#0f172a';
+    ctx.lineWidth = 4.8;
+    ctx.setLineDash([6, 5]);
     ctx.beginPath();
-    ctx.arc(0, 1, p.radius + 5, 0, Math.PI * 2);
-    ctx.fill();
-
-    ctx.strokeStyle = wearsHomeKit ? '#0ea5e9' : '#f43f5e';
-    ctx.lineWidth = 2.6;
-    ctx.beginPath();
-    ctx.arc(0, 1, p.radius + 5, 0, Math.PI * 2);
+    ctx.arc(0, 0, baseRadius + 6, 0, Math.PI * 2);
     ctx.stroke();
 
-    if (opts.isOpenLane) {
-      const isGiveGo = p.giveAndGoTimer > 0;
-      ctx.save();
-      ctx.strokeStyle = isGiveGo
-        ? 'rgba(250, 204, 21, 0.95)'
-        : p.commandedRunTimer > 0
-          ? 'rgba(6, 182, 212, 0.92)'
-          : 'rgba(56, 189, 248, 0.65)';
-      ctx.lineWidth = isGiveGo ? 2.8 : 2.2;
-      ctx.setLineDash([6, 5]);
-      ctx.beginPath();
-      ctx.arc(0, 1, p.radius + 9.5, 0, Math.PI * 2);
-      ctx.stroke();
-      ctx.restore();
-    }
+    ctx.strokeStyle = isGiveGo
+      ? '#fde047'
+      : p.commandedRunTimer > 0
+        ? '#22d3ee'
+        : '#ffffff';
+    ctx.lineWidth = isGiveGo ? 3.0 : 2.5;
+    ctx.setLineDash([6, 5]);
+    ctx.beginPath();
+    ctx.arc(0, 0, baseRadius + 6, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
   }
 
   if (opts.isControlled && opts.queuedOneTouch) {
@@ -250,22 +273,19 @@ export function drawPixelPlayer(
     ctx.lineWidth = 3;
     ctx.setLineDash([5, 4]);
     ctx.beginPath();
-    ctx.arc(0, 0, p.radius + 15, 0, Math.PI * 2);
+    ctx.arc(0, 0, baseRadius + 10, 0, Math.PI * 2);
     ctx.stroke();
     ctx.restore();
   }
 
-  // 2. SOFT PIXEL GROUND DROP SHADOW
+  // 2. CELEBRATION HOP OFFSET
   const hopOffset =
     p.celebrateTimer > 0
       ? Math.abs(Math.sin(opts.matchTick * 0.25 + p.index)) * animation.celebrationHopAmp
       : 0;
-
-  fillLocalPx(ctx, -p.radius + 2, 5, p.radius * 2 - 4, p.radius * 1.15, 'rgba(15, 23, 42, 0.22)');
-
   ctx.translate(0, -hopOffset);
 
-  // 3. 16-BIT PIXEL CHARACTER SPRITE BODY (Unmistakably Distinct Home vs Away Kit & Head Design)
+  // 3. 16-BIT PIXEL CHARACTER SPRITE BODY (Unobstructed Saturated Team Jersey + Double Contrast Outline)
   ctx.save();
   ctx.rotate(p.angle);
   ctx.scale(p.scaleX, p.scaleY);
@@ -284,117 +304,141 @@ export function drawPixelPlayer(
   const rightCleatX = -rawStride + (opts.chargePower > 0.1 ? opts.chargePower * 5.5 : 0);
 
   // Left Cleat + Team Sock
-  fillLocalPx(ctx, leftCleatX - 5, -p.radius * 0.82 - 2, dimensions.cleatLength + 2, dimensions.cleatWidth + 2, palette.outline);
-  fillLocalPx(ctx, leftCleatX - 4, -p.radius * 0.82 - 1, dimensions.cleatLength, dimensions.cleatWidth, kit.cleats);
-  fillLocalPx(ctx, leftCleatX - 2, -p.radius * 0.82, 4, dimensions.cleatWidth - 2, kit.socks);
+  fillLocalPx(ctx, leftCleatX - 5, -p.radius * 0.85 - 2, dimensions.cleatLength + 2, dimensions.cleatWidth + 2, '#0f172a');
+  fillLocalPx(ctx, leftCleatX - 4, -p.radius * 0.85 - 1, dimensions.cleatLength, dimensions.cleatWidth, kit.cleats);
+  fillLocalPx(ctx, leftCleatX - 2, -p.radius * 0.85, 4, dimensions.cleatWidth - 2, kit.socks);
 
   // Right Cleat + Team Sock
-  fillLocalPx(ctx, rightCleatX - 5, p.radius * 0.82 - dimensions.cleatWidth, dimensions.cleatLength + 2, dimensions.cleatWidth + 2, palette.outline);
-  fillLocalPx(ctx, rightCleatX - 4, p.radius * 0.82 - dimensions.cleatWidth + 1, dimensions.cleatLength, dimensions.cleatWidth, kit.cleats);
-  fillLocalPx(ctx, rightCleatX - 2, p.radius * 0.82 - dimensions.cleatWidth + 2, 4, dimensions.cleatWidth - 2, kit.socks);
+  fillLocalPx(ctx, rightCleatX - 5, p.radius * 0.85 - dimensions.cleatWidth, dimensions.cleatLength + 2, dimensions.cleatWidth + 2, '#0f172a');
+  fillLocalPx(ctx, rightCleatX - 4, p.radius * 0.85 - dimensions.cleatWidth + 1, dimensions.cleatLength, dimensions.cleatWidth, kit.cleats);
+  fillLocalPx(ctx, rightCleatX - 2, p.radius * 0.85 - dimensions.cleatWidth + 2, 4, dimensions.cleatWidth - 2, kit.socks);
 
-  const sw = dimensions.shoulderWidth;
-  const td = dimensions.torsoDepth;
+  const sw = 36; // Generous 36px wide shoulders so team jersey color is unmistakable
+  const td = 26; // 26px deep torso
 
-  // Pixel Torso Outer Rim
+  // Outer Crisp White Contrast Halo around Torso
+  fillLocalPx(
+    ctx,
+    -td / 2 - 4,
+    -sw / 2 - 4,
+    td + 8,
+    sw + 8,
+    opts.superFlow ? '#fef08a' : '#ffffff'
+  );
+
+  // Bold Dark Ink Pixel Torso Outer Rim
   fillLocalPx(
     ctx,
     -td / 2 - 2,
     -sw / 2 - 2,
     td + 4,
     sw + 4,
-    opts.superFlow ? palette.ui.sweetSpotGold : palette.outline
+    '#0f172a'
   );
 
   if (wearsHomeKit) {
-    // HOME KIT: Bright Sky-Cyan Jersey + Crisp White Sleeves + Sunny Lemon-Gold Chest Sash
+    // HOME KIT: Electric Sky-Cyan Jersey + Crisp White Shoulder Trim + Lemon-Gold Center Stripe
     fillLocalPx(ctx, -td / 2, -sw / 2, td, sw, '#0284c7');
-    fillLocalPx(ctx, -td / 2 + 2, -sw / 2 + 2, td - 2, sw - 4, '#38bdf8');
+    fillLocalPx(ctx, -td / 2 + 2, -sw / 2 + 2, td - 4, sw - 4, '#38bdf8');
     // Crisp White Shoulder Sleeves
-    fillLocalPx(ctx, -td / 2 + 2, -sw / 2 + 2, td - 4, 6, '#ffffff');
-    fillLocalPx(ctx, -td / 2 + 2, sw / 2 - 8, td - 4, 6, '#ffffff');
+    fillLocalPx(ctx, -td / 2 + 2, -sw / 2 + 2, td - 4, 5, '#ffffff');
+    fillLocalPx(ctx, -td / 2 + 2, sw / 2 - 7, td - 4, 5, '#ffffff');
     // Sunny Lemon-Gold Center Chest Stripe
-    fillLocalPx(ctx, -3, -sw / 2 + 2, 6, sw - 4, '#fde047');
-    fillLocalPx(ctx, td / 2 - 4, -5, 4, 10, '#ffffff');
+    fillLocalPx(ctx, -3, -sw / 2 + 5, 6, sw - 10, '#fde047');
   } else {
-    // AWAY KIT: Vibrant Coral-Crimson Jersey + Dark Berry Sleeves + Cream Twin Stripes
-    fillLocalPx(ctx, -td / 2, -sw / 2, td, sw, '#be123c');
-    fillLocalPx(ctx, -td / 2 + 2, -sw / 2 + 2, td - 2, sw - 4, '#fb7185');
-    // Deep Berry-Plum Shoulder Sleeves
-    fillLocalPx(ctx, -td / 2 + 2, -sw / 2 + 2, td - 4, 6, '#881337');
-    fillLocalPx(ctx, -td / 2 + 2, sw / 2 - 8, td - 4, 6, '#881337');
-    // Twin Warm-Cream Vertical Stripes
-    fillLocalPx(ctx, -5, -sw / 2 + 2, 3, sw - 4, '#fff1f2');
-    fillLocalPx(ctx, 2, -sw / 2 + 2, 3, sw - 4, '#fff1f2');
-    fillLocalPx(ctx, td / 2 - 4, -5, 4, 10, '#fde047');
+    // AWAY KIT: Vibrant Coral-Crimson Jersey + White Shoulder Trim + Warm-Gold Center Stripe
+    fillLocalPx(ctx, -td / 2, -sw / 2, td, sw, '#e11d48');
+    fillLocalPx(ctx, -td / 2 + 2, -sw / 2 + 2, td - 4, sw - 4, '#fb7185');
+    // Crisp Cream-White Shoulder Sleeves
+    fillLocalPx(ctx, -td / 2 + 2, -sw / 2 + 2, td - 4, 5, '#fff1f2');
+    fillLocalPx(ctx, -td / 2 + 2, sw / 2 - 7, td - 4, 5, '#fff1f2');
+    // Warm Amber-Gold Center Stripe
+    fillLocalPx(ctx, -3, -sw / 2 + 5, 6, sw - 10, '#fde047');
   }
 
-  // Swinging Pixel Arms / Hands
+  // Swinging Pixel Arms / Hands with Dark Outline
   const armSwing = -rawStride * 0.65;
+  fillLocalPx(ctx, armSwing - 4, -sw / 2 - 6, 9, 6, '#0f172a');
   fillLocalPx(ctx, armSwing - 3, -sw / 2 - 5, 7, 4, kit.skin);
+  fillLocalPx(ctx, -armSwing - 4, sw / 2, 9, 6, '#0f172a');
   fillLocalPx(ctx, -armSwing - 3, sw / 2 + 1, 7, 4, kit.skin);
 
-  // Expressive 16-Bit Head with High-Contrast Team Hair & Visor
-  const hr = dimensions.headRadius;
-  fillLocalPx(ctx, -hr - 2, -hr - 2, hr * 2 + 4, hr * 2 + 4, palette.outline);
-  fillLocalPx(ctx, -hr, -hr, hr * 2, hr * 2, kit.skin);
-  // Golden-Blonde Crown for Home Kit vs Dark Obsidian Hair for Away Kit
-  fillLocalPx(ctx, -hr, -hr, hr * 1.2, hr * 2, wearsHomeKit ? '#fde047' : '#1e293b');
-  // Headband stripe
-  fillLocalPx(ctx, -1, -hr, 3, hr * 2, wearsHomeKit ? '#ffffff' : '#fb7185');
-  // Directional front visor
-  fillLocalPx(ctx, hr - 3, -hr + 2, 5, hr * 2 - 4, wearsHomeKit ? '#38bdf8' : '#ffffff');
+  // Compact Forward-Shifted 16-Bit Head (Leaves the vibrant colored jersey shoulders & back clearly visible!)
+  const hr = 6;
+  const headX = 4;
+  fillLocalPx(ctx, headX - hr - 2, -hr - 2, hr * 2 + 4, hr * 2 + 4, '#0f172a');
+  fillLocalPx(ctx, headX - hr, -hr, hr * 2, hr * 2, kit.skin);
+  fillLocalPx(ctx, headX - hr, -hr, hr * 1.2, hr * 2, wearsHomeKit ? '#fde047' : '#1e293b');
 
   ctx.restore();
 
-  // 4. Upright Pixelated Back Jersey Number (#4, #7, #10 vs #5, #8, #9) on High-Contrast Team Plate
-  drawPixelNumber(ctx, String(p.jerseyNum), 0, 1, '#ffffff', wearsHomeKit ? '#0369a1' : '#9f1239', 2);
+  // 4. HIGH-CONTRAST OVERHEAD TEAM & NUMBER BADGE ABOVE EVERY PLAYER (Never covers the jersey!)
+  const bobY = opts.isControlled
+    ? -p.radius - 22 + Math.sin(opts.matchTick * animation.p1ArrowBobSpeed) * animation.p1ArrowBobAmp
+    : -p.radius - 19;
 
-  // 5. Clean Modern P1 Badge Above Controlled Player
-  if (opts.isControlled) {
-    const bobY = -p.radius - 22 + Math.sin(opts.matchTick * animation.p1ArrowBobSpeed) * animation.p1ArrowBobAmp;
-    ctx.save();
-    ctx.translate(0, bobY);
+  ctx.save();
+  ctx.translate(0, bobY);
 
-    ctx.fillStyle = opts.superFlow ? '#facc15' : wearsHomeKit ? '#0ea5e9' : '#f43f5e';
-    ctx.strokeStyle = '#0f172a';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.moveTo(-5, -3);
-    ctx.lineTo(5, -3);
-    ctx.lineTo(0, 4);
-    ctx.closePath();
-    ctx.fill();
-    ctx.stroke();
+  const labelText = opts.isControlled
+    ? `P1 #${p.jerseyNum}`
+    : !isYou && opts.opponentTag
+      ? opts.opponentTag
+      : `#${p.jerseyNum}`;
 
-    ctx.fillStyle = '#0f172a';
-    ctx.strokeStyle = opts.superFlow ? '#fde047' : wearsHomeKit ? '#38bdf8' : '#fb7185';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.roundRect(-14, -19, 28, 15, 6);
-    ctx.fill();
-    ctx.stroke();
+  ctx.font = opts.isControlled
+    ? '900 10.5px "Plus Jakarta Sans", sans-serif'
+    : '900 9.5px "Plus Jakarta Sans", sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  const measuredW = ctx.measureText(labelText).width;
+  const pillW = Math.max(opts.isControlled ? 46 : 28, measuredW + 12);
+  const pillH = opts.isControlled ? 17 : 15;
 
-    ctx.fillStyle = opts.superFlow ? '#fde047' : '#ffffff';
-    ctx.font = '800 10px "Plus Jakarta Sans", sans-serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText('P1', 0, -11);
-    ctx.restore();
-  }
+  // Downward pointer chevron below the pill
+  ctx.fillStyle = '#ffffff';
+  ctx.beginPath();
+  ctx.moveTo(-7, -2);
+  ctx.lineTo(7, -2);
+  ctx.lineTo(0, 6.5);
+  ctx.closePath();
+  ctx.fill();
 
-  // Opponent gamer tag pill when AI has the ball
-  if (!isYou && opts.opponentTag) {
-    ctx.fillStyle = 'rgba(15, 23, 42, 0.82)';
-    ctx.beginPath();
-    ctx.roundRect(-44, -p.radius - 25, 88, 16, 6);
-    ctx.fill();
-    ctx.fillStyle = wearsHomeKit ? '#7dd3fc' : '#fda4af';
-    ctx.font = '700 9.5px "Plus Jakarta Sans", sans-serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(opts.opponentTag, 0, -p.radius - 16.5);
-  }
+  ctx.fillStyle = opts.superFlow ? '#facc15' : wearsHomeKit ? '#0ea5e9' : '#f43f5e';
+  ctx.strokeStyle = '#0f172a';
+  ctx.lineWidth = 2.4;
+  ctx.beginPath();
+  ctx.moveTo(-5.5, -2);
+  ctx.lineTo(5.5, -2);
+  ctx.lineTo(0, 4.5);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+
+  // Outer pure-white halo around pill (pops on dark pitches)
+  ctx.fillStyle = '#ffffff';
+  ctx.beginPath();
+  ctx.roundRect(-pillW / 2 - 2.5, -pillH - 3.5, pillW + 5, pillH + 5, 7);
+  ctx.fill();
+
+  // Bold team-colored pill with dark slate border (pops on light pitches)
+  ctx.fillStyle = opts.isControlled
+    ? (opts.superFlow ? '#fde047' : '#0f172a')
+    : wearsHomeKit
+      ? '#0284c7'
+      : '#e11d48';
+  ctx.strokeStyle = '#0f172a';
+  ctx.lineWidth = 2.4;
+  ctx.beginPath();
+  ctx.roundRect(-pillW / 2, -pillH - 1, pillW, pillH, 5.5);
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.fillStyle = opts.isControlled
+    ? (opts.superFlow ? '#0f172a' : '#fef08a')
+    : '#ffffff';
+  ctx.fillText(labelText, 0, -pillH / 2 - 0.5);
+  ctx.restore();
 
   ctx.restore();
 }
@@ -421,23 +465,68 @@ export function drawPixelKeeper(
   ctx.save();
   ctx.translate(k.x, k.y);
 
-  // Ground drop shadow
-  fillLocalPx(ctx, -k.radius, 4, k.radius * 2, k.radius * 1.15, 'rgba(15, 23, 42, 0.24)');
+  // High-contrast dual-bordered keeper floor platter
+  const kRingR = k.radius + 7;
+  ctx.strokeStyle = '#ffffff';
+  ctx.lineWidth = 7.0;
+  ctx.beginPath();
+  ctx.arc(0, 0, kRingR + 1, 0, Math.PI * 2);
+  ctx.stroke();
 
+  ctx.strokeStyle = '#0f172a';
+  ctx.lineWidth = 4.5;
+  ctx.beginPath();
+  ctx.arc(0, 0, kRingR, 0, Math.PI * 2);
+  ctx.stroke();
+
+  ctx.fillStyle = wearsHomeKit ? 'rgba(16, 185, 129, 0.62)' : 'rgba(168, 85, 247, 0.62)';
+  ctx.beginPath();
+  ctx.arc(0, 0, kRingR - 1.5, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.strokeStyle = kit.primary;
+  ctx.lineWidth = 2.8;
+  ctx.beginPath();
+  ctx.arc(0, 0, kRingR - 2, 0, Math.PI * 2);
+  ctx.stroke();
+
+  ctx.save();
   ctx.rotate(k.angle);
 
-  const gloveSpread = k.diveTimer > 0 ? k.radius + 7 : k.radius + 3;
-  // Pixel GK Gloves
+  const gloveSpread = k.diveTimer > 0 ? k.radius + 8 : k.radius + 4;
+  // Pixel GK Gloves with White + Dark Double Outline
   [-gloveSpread, gloveSpread - 6].forEach((gy) => {
-    fillLocalPx(ctx, 2, gy - 2, 10, 10, palette.outline);
+    fillLocalPx(ctx, 1, gy - 3, 12, 12, '#ffffff');
+    fillLocalPx(ctx, 2, gy - 2, 10, 10, '#0f172a');
     fillLocalPx(ctx, 4, gy, 6, 6, kit.gloves);
   });
 
-  // Pixel Keeper Torso & Head
-  fillLocalPx(ctx, -k.radius - 2, -k.radius - 2, k.radius * 2 + 4, k.radius * 2 + 4, palette.outline);
+  // Pixel Keeper Torso & Head with Crisp White Outer Halo + Dark Ink Outline
+  fillLocalPx(ctx, -k.radius - 4, -k.radius - 4, k.radius * 2 + 8, k.radius * 2 + 8, '#ffffff');
+  fillLocalPx(ctx, -k.radius - 2, -k.radius - 2, k.radius * 2 + 4, k.radius * 2 + 4, '#0f172a');
   fillLocalPx(ctx, -k.radius, -k.radius, k.radius * 2, k.radius * 2, kit.secondary);
   fillLocalPx(ctx, -k.radius + 2, -k.radius + 2, k.radius * 2 - 4, k.radius * 2 - 4, kit.primary);
-  fillLocalPx(ctx, -4, -4, 8, 8, '#ffffff');
+  fillLocalPx(ctx, -3, -3, 6, 6, '#ffffff');
+  ctx.restore();
+
+  // Upright GK Overhead Badge
+  const gkY = -k.radius - 17;
+  ctx.font = '900 9px "Plus Jakarta Sans", sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = '#ffffff';
+  ctx.beginPath();
+  ctx.roundRect(-15, gkY - 8, 30, 15, 5);
+  ctx.fill();
+  ctx.fillStyle = kit.secondary;
+  ctx.strokeStyle = '#0f172a';
+  ctx.lineWidth = 2.0;
+  ctx.beginPath();
+  ctx.roundRect(-13.5, gkY - 6.5, 27, 12, 4);
+  ctx.fill();
+  ctx.stroke();
+  ctx.fillStyle = '#ffffff';
+  ctx.fillText('GK', 0, gkY - 0.2);
 
   ctx.restore();
 }
@@ -453,7 +542,7 @@ export interface PixelBallRenderData {
 }
 
 /**
- * Multi-Frame Rotating 16-Bit Pixel Soccer Ball with Smooth World Coordinates.
+ * Multi-Frame Rotating 16-Bit Pixel Soccer Ball with High-Contrast Ground Ring & Double Outline.
  */
 export function drawPixelBall(
   ctx: CanvasRenderingContext2D,
@@ -472,11 +561,11 @@ export function drawPixelBall(
     ctx.restore();
   }
 
-  // 2. Decoupled Ground Drop-Shadow (scales with vertical loft height)
+  // 2. Decoupled Ground Drop-Shadow + High-Contrast Ground Ring (scales with vertical loft height)
   const shadowScale = Math.max(0.5, 1 - ball.height / 45);
-  const sw = Math.round(ball.radius * 2.0 * shadowScale);
-  const sh = Math.round(ball.radius * 1.35 * shadowScale);
-  fillLocalPx(ctx, ball.x - sw / 2 + 2, ball.y + 5 - sh / 2, sw, sh, 'rgba(15, 23, 42, 0.28)');
+  const sw = Math.round(ball.radius * 2.15 * shadowScale);
+  const sh = Math.round(ball.radius * 1.45 * shadowScale);
+  fillLocalPx(ctx, ball.x - sw / 2 + 1, ball.y + 4 - sh / 2, sw, sh, 'rgba(15, 23, 42, 0.42)');
 
   // 3. Multi-Frame Rotating 16-Bit Pixel Ball Sprite (Smooth sub-pixel world position)
   const r = Math.round(ball.radius);
@@ -484,9 +573,13 @@ export function drawPixelBall(
   ctx.save();
   ctx.translate(ball.x, ball.y - ball.height);
 
-  // Outer pixel octagon/circle outline
-  fillLocalPx(ctx, -r - 2, -r + 2, r * 2 + 4, r * 2 - 4, palette.outline);
-  fillLocalPx(ctx, -r + 2, -r - 2, r * 2 - 4, r * 2 + 4, palette.outline);
+  // Subtle bright outer contrast halo so the dark-outlined ball pops on dark space/obsidian/synth pitches
+  fillLocalPx(ctx, -r - 3, -r + 2, r * 2 + 6, r * 2 - 4, isGoldenBall ? '#fde047' : 'rgba(255, 255, 255, 0.85)');
+  fillLocalPx(ctx, -r + 2, -r - 3, r * 2 - 4, r * 2 + 6, isGoldenBall ? '#fde047' : 'rgba(255, 255, 255, 0.85)');
+
+  // Outer pixel octagon/circle dark outline
+  fillLocalPx(ctx, -r - 2, -r + 2, r * 2 + 4, r * 2 - 4, '#0f172a');
+  fillLocalPx(ctx, -r + 2, -r - 2, r * 2 - 4, r * 2 + 4, '#0f172a');
 
   // Shaded lower-right hemisphere
   fillLocalPx(

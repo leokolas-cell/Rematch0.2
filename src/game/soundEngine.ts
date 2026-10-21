@@ -17,6 +17,7 @@ declare global {
 export interface StadiumMusicProfile {
   id: PitchThemeId;
   title: string;
+  bpm: number;
   leadWave: OscillatorType;
   harmonyWave: OscillatorType;
   bassWave: OscillatorType;
@@ -34,12 +35,14 @@ export interface StadiumMusicProfile {
   bassNotesB: number[];
   chordVoicings: number[][];
   arpNotes: number[];
+  goalChimeNotes: number[];
 }
 
 export const STADIUM_MUSIC_PROFILES: Record<PitchThemeId, StadiumMusicProfile> = {
   CLASSIC_TURF: {
     id: 'CLASSIC_TURF',
     title: 'Sunlit Botanical Samba-Funk',
+    bpm: 124,
     leadWave: 'triangle',
     harmonyWave: 'sine',
     bassWave: 'triangle',
@@ -97,11 +100,13 @@ export const STADIUM_MUSIC_PROFILES: Record<PitchThemeId, StadiumMusicProfile> =
       [196.0, 246.94, 293.66, 349.23, 440.0],
     ],
     arpNotes: [523.25, 659.25, 783.99, 1046.5, 1318.51, 1046.5, 783.99, 659.25],
+    goalChimeNotes: [523.25, 659.25, 783.99, 1046.5, 1318.51, 1567.98],
   },
 
   TURF_AUTUMN: {
     id: 'TURF_AUTUMN',
     title: 'Golden Maple Folk-Funk Groove',
+    bpm: 118,
     leadWave: 'sine',
     harmonyWave: 'triangle',
     bassWave: 'triangle',
@@ -160,11 +165,13 @@ export const STADIUM_MUSIC_PROFILES: Record<PitchThemeId, StadiumMusicProfile> =
       [110.0, 164.81, 196.0, 277.18, 329.63], // A13
     ],
     arpNotes: [587.33, 739.99, 880.0, 1174.66, 1479.98, 1174.66, 880.0, 739.99],
+    goalChimeNotes: [587.33, 739.99, 880.0, 1174.66, 1479.98, 1760.0],
   },
 
   TURF_SAKURA: {
     id: 'TURF_SAKURA',
     title: 'Kyoto Blossom City-Pop & Koto',
+    bpm: 122,
     leadWave: 'triangle',
     harmonyWave: 'sine',
     bassWave: 'triangle',
@@ -223,11 +230,13 @@ export const STADIUM_MUSIC_PROFILES: Record<PitchThemeId, StadiumMusicProfile> =
       [110.0, 164.81, 220.0, 277.18, 329.63], // A9
     ],
     arpNotes: [659.25, 739.99, 783.99, 987.77, 1318.51, 987.77, 783.99, 739.99],
+    goalChimeNotes: [659.25, 739.99, 783.99, 987.77, 1174.66, 1567.98],
   },
 
   TURF_CHAMPIONS: {
     id: 'TURF_CHAMPIONS',
     title: 'Champions Cathedral Brass Anthem',
+    bpm: 128,
     leadWave: 'sawtooth',
     harmonyWave: 'triangle',
     bassWave: 'triangle',
@@ -286,11 +295,13 @@ export const STADIUM_MUSIC_PROFILES: Record<PitchThemeId, StadiumMusicProfile> =
       [196.0, 261.63, 293.66, 349.23, 440.0], // G11
     ],
     arpNotes: [523.25, 783.99, 1046.5, 1318.51, 1567.98, 1318.51, 1046.5, 783.99],
+    goalChimeNotes: [523.25, 783.99, 1046.5, 1318.51, 1567.98, 2093.0],
   },
 
   COSMIC_SPACE: {
     id: 'COSMIC_SPACE',
     title: 'Zero-G Galactic Synth Odyssey',
+    bpm: 120,
     leadWave: 'sine',
     harmonyWave: 'triangle',
     bassWave: 'sine',
@@ -349,11 +360,13 @@ export const STADIUM_MUSIC_PROFILES: Record<PitchThemeId, StadiumMusicProfile> =
       [130.81, 196.0, 246.94, 293.66, 392.0], // Cmaj9
     ],
     arpNotes: [659.25, 987.77, 1174.66, 1318.51, 1567.98, 1318.51, 1174.66, 987.77],
+    goalChimeNotes: [659.25, 987.77, 1174.66, 1318.51, 1567.98, 1975.53],
   },
 
   URBAN_CONCRETE: {
     id: 'URBAN_CONCRETE',
     title: 'Rooftop Block-Party Boom-Bap Funk',
+    bpm: 112,
     leadWave: 'square',
     harmonyWave: 'triangle',
     bassWave: 'triangle',
@@ -412,11 +425,13 @@ export const STADIUM_MUSIC_PROFILES: Record<PitchThemeId, StadiumMusicProfile> =
       [146.83, 185.0, 233.08, 261.63, 349.23], // D7#9
     ],
     arpNotes: [392.0, 466.16, 587.33, 698.46, 783.99, 698.46, 587.33, 466.16],
+    goalChimeNotes: [392.0, 466.16, 587.33, 698.46, 783.99, 1174.66],
   },
 
   RIO_CLAY: {
     id: 'RIO_CLAY',
     title: 'Copacabana Beach Batucada & Steel Drum',
+    bpm: 130,
     leadWave: 'triangle',
     harmonyWave: 'sine',
     bassWave: 'triangle',
@@ -476,11 +491,13 @@ export const STADIUM_MUSIC_PROFILES: Record<PitchThemeId, StadiumMusicProfile> =
       [164.81, 207.65, 246.94, 293.66, 369.99], // E13
     ],
     arpNotes: [554.37, 659.25, 739.99, 880.0, 1108.73, 880.0, 739.99, 659.25],
+    goalChimeNotes: [440.0, 554.37, 659.25, 739.99, 880.0, 1318.51],
   },
 
   TWILIGHT_SYNTH: {
     id: 'TWILIGHT_SYNTH',
     title: 'Cyber-Metropolis Outrun Synthwave',
+    bpm: 134,
     leadWave: 'sawtooth',
     harmonyWave: 'triangle',
     bassWave: 'sawtooth',
@@ -540,11 +557,13 @@ export const STADIUM_MUSIC_PROFILES: Record<PitchThemeId, StadiumMusicProfile> =
       [82.41, 164.81, 220.0, 246.94, 329.63], // E7sus4
     ],
     arpNotes: [440.0, 523.25, 659.25, 880.0, 1046.5, 880.0, 659.25, 523.25],
+    goalChimeNotes: [440.0, 523.25, 659.25, 880.0, 1046.5, 1318.51],
   },
 
   ARCTIC_ICE: {
     id: 'ARCTIC_ICE',
     title: 'Glacier Frost Aurora Chimes',
+    bpm: 121,
     leadWave: 'sine',
     harmonyWave: 'triangle',
     bassWave: 'triangle',
@@ -603,11 +622,13 @@ export const STADIUM_MUSIC_PROFILES: Record<PitchThemeId, StadiumMusicProfile> =
       [116.54, 174.61, 220.0, 261.63, 349.23], // Bb13
     ],
     arpNotes: [622.25, 783.99, 932.33, 1174.66, 1567.98, 1174.66, 932.33, 783.99],
+    goalChimeNotes: [622.25, 783.99, 932.33, 1174.66, 1567.98, 1864.66],
   },
 
   VOLCANO_FORGE: {
     id: 'VOLCANO_FORGE',
     title: 'Magma Caldera Phrygian Forge Brass',
+    bpm: 136,
     leadWave: 'sawtooth',
     harmonyWave: 'square',
     bassWave: 'sawtooth',
@@ -666,6 +687,7 @@ export const STADIUM_MUSIC_PROFILES: Record<PitchThemeId, StadiumMusicProfile> =
       [123.47, 185.0, 246.94, 293.66, 349.23], // B7(#9)
     ],
     arpNotes: [329.63, 349.23, 415.3, 493.88, 659.25, 493.88, 415.3, 349.23],
+    goalChimeNotes: [329.63, 415.3, 493.88, 659.25, 830.61, 1318.51],
   },
 };
 
@@ -947,27 +969,41 @@ export class IndieSoundEngine {
     this.init();
     if (this.isPlayingMusic) return;
     this.isPlayingMusic = true;
-    this.musicTimer = setInterval(() => {
-      if (this.muted || !this.ctx) return;
-      const stateStr = this.ctx.state as string;
-      if (stateStr !== 'running') {
-        this.ctx.resume().catch(() => {});
-        return;
-      }
+    const scheduleNextStep = () => {
+      if (!this.isPlayingMusic) return;
       const st = this.getGameState ? this.getGameState() : 'PLAYING';
-      if (st === 'PAUSED') {
-        this.updateCrowdAmbience(0, false);
-        return;
-      }
       if (this.getPitchTheme) {
         this.currentPitchTheme = this.getPitchTheme();
       }
-      this.playMusicStep(st);
-    }, 125); // 120 BPM 16th-note pocket
+      const isMenuGroove =
+        this.isMenuMode ||
+        st === 'MENU' ||
+        st === 'SPLASH' ||
+        st === 'MATCH_OVER';
+      const activeBpm = isMenuGroove
+        ? 120
+        : getStadiumMusicProfile(this.currentPitchTheme).bpm || 124;
+      const stepMs = Math.round(60000 / (activeBpm * 4));
+      this.musicTimer = setTimeout(() => {
+        if (this.isPlayingMusic && !this.muted && this.ctx) {
+          const stateStr = this.ctx.state as string;
+          if (stateStr !== 'running') {
+            this.ctx.resume().catch(() => {});
+          } else if (st === 'PAUSED') {
+            this.updateCrowdAmbience(0, false);
+          } else {
+            this.playMusicStep(st);
+          }
+        }
+        scheduleNextStep();
+      }, stepMs) as unknown as ReturnType<typeof setInterval>;
+    };
+    scheduleNextStep();
   }
 
   stopMusic() {
     if (this.musicTimer) {
+      clearTimeout(this.musicTimer as unknown as ReturnType<typeof setTimeout>);
       clearInterval(this.musicTimer);
       this.musicTimer = null;
     }
@@ -987,7 +1023,7 @@ export class IndieSoundEngine {
     if (!this.ensureReady() || !this.ctx || !this.master) return;
     const now = this.ctx.currentTime;
     // Prevent step stacking if browser tab was backgrounded or timer jittered
-    if (now - this.lastStepTime < 0.075) return;
+    if (now - this.lastStepTime < 0.068) return;
     this.lastStepTime = now;
 
     const cycleStep = this.stepIndex % 128;
@@ -1005,7 +1041,7 @@ export class IndieSoundEngine {
       : getStadiumMusicProfile(this.currentPitchTheme);
 
     const superFlow = !isMenuGroove && this.getFlowCombo() >= 3;
-    const volScale = isMenuGroove ? 0.62 : 0.85;
+    const volScale = isMenuGroove ? 0.62 : 0.86;
 
     // 1. Stadium-Specific Kick Drum & Percussion Groove
     const isBoomBapKick = profile.percStyle === 'BOOM_BAP' && (barStep === 0 || barStep === 7 || barStep === 10);
@@ -1019,24 +1055,24 @@ export class IndieSoundEngine {
       const kick = this.ctx.createOscillator();
       const g = this.ctx.createGain();
       kick.type = 'sine';
-      const startFreq = profile.percStyle === 'VOLCANO_FORGE' || profile.percStyle === 'FORGE_ANVIL' ? 148 : 132;
+      const startFreq = profile.percStyle === 'FORGE_ANVIL' ? 148 : profile.percStyle === 'BOOM_BAP' ? 124 : 134;
       kick.frequency.setValueAtTime(startFreq, now);
-      kick.frequency.exponentialRampToValueAtTime(40, now + 0.11);
+      kick.frequency.exponentialRampToValueAtTime(38, now + 0.115);
       g.gain.setValueAtTime(0.0001, now);
-      g.gain.linearRampToValueAtTime(0.18 * volScale, now + 0.006);
-      g.gain.exponentialRampToValueAtTime(0.0001, now + 0.13);
+      g.gain.linearRampToValueAtTime(0.185 * volScale, now + 0.005);
+      g.gain.exponentialRampToValueAtTime(0.0001, now + 0.135);
       kick.connect(g);
       g.connect(this.master);
       kick.start(now);
-      kick.stop(now + 0.14);
+      kick.stop(now + 0.145);
     }
 
-    // 2. Stadium-Specific Chords / Pads
-    if (barStep === 0 || barStep === 6 || (!isMenuGroove && barStep === 12)) {
+    // 2. Stadium-Specific Chords / Warm Pads with Subtle Offbeat Comping
+    if (barStep === 0 || barStep === 6 || (!isMenuGroove && (barStep === 10 || barStep === 12))) {
       const chordIdx = Math.floor(cycleStep / 16) % profile.chordVoicings.length;
       const chord = profile.chordVoicings[chordIdx];
-      const holdDur = barStep === 0 ? 0.52 : 0.28;
-      const peakGain = (barStep === 0 ? 0.022 : 0.015) * volScale;
+      const holdDur = barStep === 0 ? 0.54 : barStep === 10 ? 0.18 : 0.28;
+      const peakGain = (barStep === 0 ? 0.022 : barStep === 10 ? 0.011 : 0.015) * volScale;
 
       chord.forEach((freq, idx) => {
         if (!this.ctx || !this.master) return;
@@ -1044,12 +1080,13 @@ export class IndieSoundEngine {
         const cFilter = this.ctx.createBiquadFilter();
         const cGain = this.ctx.createGain();
         cOsc.type = idx === 0 ? 'sine' : 'triangle';
+        cOsc.detune.setValueAtTime((idx % 2 === 0 ? 1 : -1) * 2.5, now);
         cFilter.type = 'lowpass';
         cFilter.frequency.setValueAtTime(isMenuGroove ? 820 : profile.chordCutoff, now);
         cFilter.frequency.exponentialRampToValueAtTime(480, now + holdDur);
         cOsc.frequency.setValueAtTime(freq, now);
         cGain.gain.setValueAtTime(0.0001, now);
-        cGain.gain.linearRampToValueAtTime(peakGain, now + 0.016);
+        cGain.gain.linearRampToValueAtTime(peakGain, now + 0.015);
         cGain.gain.exponentialRampToValueAtTime(0.0001, now + holdDur);
         cOsc.connect(cFilter);
         cFilter.connect(cGain);
@@ -1059,7 +1096,7 @@ export class IndieSoundEngine {
       });
     }
 
-    // 3. Stadium-Specific Bassline
+    // 3. Stadium-Specific Bassline + Sub-Octave Warmth
     const activeBassPool = section >= 2 ? profile.bassNotesB : profile.bassNotesA;
     const bassFreq = activeBassPool[step % activeBassPool.length];
     if (bassFreq > 0) {
@@ -1069,31 +1106,31 @@ export class IndieSoundEngine {
       osc.type = isMenuGroove ? 'triangle' : profile.bassWave;
       filter.type = 'lowpass';
       filter.frequency.setValueAtTime(isMenuGroove ? 340 : profile.bassCutoff, now);
-      filter.frequency.exponentialRampToValueAtTime(155, now + 0.16);
+      filter.frequency.exponentialRampToValueAtTime(155, now + 0.165);
       osc.frequency.setValueAtTime(bassFreq, now);
-      const bassGain = profile.bassWave === 'sawtooth' ? 0.085 : 0.12;
+      const bassGain = profile.bassWave === 'sawtooth' ? 0.086 : 0.122;
       g.gain.setValueAtTime(0.0001, now);
-      g.gain.linearRampToValueAtTime(bassGain * volScale, now + 0.01);
-      g.gain.exponentialRampToValueAtTime(0.0001, now + 0.17);
+      g.gain.linearRampToValueAtTime(bassGain * volScale, now + 0.009);
+      g.gain.exponentialRampToValueAtTime(0.0001, now + 0.175);
       osc.connect(filter);
       filter.connect(g);
       g.connect(this.master);
       osc.start(now);
-      osc.stop(now + 0.185);
+      osc.stop(now + 0.19);
     }
 
     // 4. Stadium-Specific Hi-Hats, Snares & Signature Auxiliary Percussion
     if (barStep % 2 === 0 || (profile.percStyle === 'FOLK_SHUFFLE' && barStep % 4 === 3)) {
-      const hatFreq = profile.percStyle === 'ICE_CHIME' ? 9200 : profile.percStyle === 'SPACE_ELECTRO' ? 8400 : 7200;
+      const hatFreq = profile.percStyle === 'ICE_CHIME' ? 9400 : profile.percStyle === 'SPACE_ELECTRO' ? 8600 : 7400;
       this.playNoiseBurst(0.022, hatFreq, (barStep % 4 === 2 ? 0.028 : 0.015) * volScale, 2.4);
     }
-    if (barStep % 8 === 4 || (profile.percStyle === 'STADIUM_MARCH' && (barStep === 12 || barStep === 14))) {
-      const snareDur = profile.percStyle === 'SYNTHWAVE' ? 0.095 : 0.065;
+    if (barStep % 8 === 4 || (profile.percStyle === 'STADIUM_MARCH' && (barStep === 12 || barStep === 14 || barStep === 15))) {
+      const snareDur = profile.percStyle === 'SYNTHWAVE' ? 0.098 : 0.066;
       const snareFreq = profile.percStyle === 'BOOM_BAP' ? 1550 : 1950;
-      this.playNoiseBurst(snareDur, snareFreq, (isMenuGroove ? 0.04 : 0.075) * volScale, 1.5);
+      this.playNoiseBurst(snareDur, snareFreq, (isMenuGroove ? 0.04 : 0.076) * volScale, 1.5);
     }
 
-    // Signature Stadium Percussion Accents (Agogo Bell / Kyoto Woodblock / Volcano Anvil / Ice Chime)
+    // Signature Stadium Percussion & Acoustic Flourishes
     if (!isMenuGroove) {
       if (profile.percStyle === 'SAMBA_AGOGO' && (barStep === 2 || barStep === 5 || barStep === 11 || barStep === 14)) {
         const agogo = this.ctx.createOscillator();
@@ -1101,41 +1138,68 @@ export class IndieSoundEngine {
         agogo.type = 'triangle';
         agogo.frequency.setValueAtTime(barStep < 8 ? 880 : 1108.73, now);
         agG.gain.setValueAtTime(0.0001, now);
-        agG.gain.linearRampToValueAtTime(0.024, now + 0.004);
-        agG.gain.exponentialRampToValueAtTime(0.0001, now + 0.065);
+        agG.gain.linearRampToValueAtTime(0.025, now + 0.004);
+        agG.gain.exponentialRampToValueAtTime(0.0001, now + 0.068);
         agogo.connect(agG);
         agG.connect(this.master);
         agogo.start(now);
-        agogo.stop(now + 0.07);
-      } else if (profile.percStyle === 'SAKURA_WOOD' && (barStep === 3 || barStep === 11)) {
+        agogo.stop(now + 0.075);
+      } else if (profile.percStyle === 'SAKURA_WOOD' && (barStep === 3 || barStep === 11 || barStep === 15)) {
         const wood = this.ctx.createOscillator();
         const wG = this.ctx.createGain();
         wood.type = 'sine';
-        wood.frequency.setValueAtTime(barStep === 3 ? 987.77 : 783.99, now);
+        wood.frequency.setValueAtTime(barStep === 3 ? 987.77 : barStep === 11 ? 783.99 : 1174.66, now);
         wG.gain.setValueAtTime(0.0001, now);
-        wG.gain.linearRampToValueAtTime(0.022, now + 0.003);
-        wG.gain.exponentialRampToValueAtTime(0.0001, now + 0.048);
+        wG.gain.linearRampToValueAtTime(0.023, now + 0.003);
+        wG.gain.exponentialRampToValueAtTime(0.0001, now + 0.05);
         wood.connect(wG);
         wG.connect(this.master);
         wood.start(now);
-        wood.stop(now + 0.055);
-      } else if (profile.percStyle === 'FORGE_ANVIL' && barStep === 12) {
+        wood.stop(now + 0.056);
+      } else if (profile.percStyle === 'FORGE_ANVIL' && (barStep === 6 || barStep === 12)) {
         const anvil = this.ctx.createOscillator();
         const aG = this.ctx.createGain();
         anvil.type = 'square';
-        anvil.frequency.setValueAtTime(1318.51, now);
-        anvil.frequency.exponentialRampToValueAtTime(987.77, now + 0.07);
+        anvil.frequency.setValueAtTime(barStep === 12 ? 1318.51 : 987.77, now);
+        anvil.frequency.exponentialRampToValueAtTime(659.25, now + 0.07);
         aG.gain.setValueAtTime(0.0001, now);
-        aG.gain.linearRampToValueAtTime(0.02, now + 0.004);
+        aG.gain.linearRampToValueAtTime(0.021, now + 0.003);
         aG.gain.exponentialRampToValueAtTime(0.0001, now + 0.085);
         anvil.connect(aG);
         aG.connect(this.master);
         anvil.start(now);
         anvil.stop(now + 0.09);
+      } else if (profile.percStyle === 'FOLK_SHUFFLE' && (barStep === 3 || barStep === 9)) {
+        // Warm wooden marimba grace tap
+        const mar = this.ctx.createOscillator();
+        const mG = this.ctx.createGain();
+        mar.type = 'sine';
+        mar.frequency.setValueAtTime(barStep === 3 ? 587.33 : 739.99, now);
+        mG.gain.setValueAtTime(0.0001, now);
+        mG.gain.linearRampToValueAtTime(0.02, now + 0.004);
+        mG.gain.exponentialRampToValueAtTime(0.0001, now + 0.055);
+        mar.connect(mG);
+        mG.connect(this.master);
+        mar.start(now);
+        mar.stop(now + 0.06);
+      } else if (profile.percStyle === 'CLASSIC' && step === 30 && section % 2 === 1) {
+        // Subtle Brazilian apito turnaround whistle chirps
+        const apito = this.ctx.createOscillator();
+        const apG = this.ctx.createGain();
+        apito.type = 'sine';
+        apito.frequency.setValueAtTime(2349.32, now);
+        apito.frequency.exponentialRampToValueAtTime(2637.02, now + 0.065);
+        apG.gain.setValueAtTime(0.0001, now);
+        apG.gain.linearRampToValueAtTime(0.018, now + 0.008);
+        apG.gain.exponentialRampToValueAtTime(0.0001, now + 0.075);
+        apito.connect(apG);
+        apG.connect(this.master);
+        apito.start(now);
+        apito.stop(now + 0.08);
       }
     }
 
-    // 5. Stadium-Specific Lead Melody & Counter-Harmony
+    // 5. Stadium-Specific Lead Melody, Stereo Chorus Unison & Counter-Harmony
     const activeMelody =
       section === 0
         ? profile.melodySectionA
@@ -1154,21 +1218,44 @@ export class IndieSoundEngine {
       const leadCutoff = isMenuGroove
         ? 980
         : superFlow
-          ? profile.leadCutoff * 1.25
+          ? profile.leadCutoff * 1.28
           : profile.leadCutoff;
       filter.frequency.setValueAtTime(leadCutoff, now);
-      filter.frequency.exponentialRampToValueAtTime(580, now + profile.leadDecay);
-      osc.frequency.setValueAtTime(isMenuGroove ? noteFreq * 0.5 : noteFreq, now);
+      filter.frequency.exponentialRampToValueAtTime(560, now + profile.leadDecay);
+      const targetFreq = isMenuGroove ? noteFreq * 0.5 : noteFreq;
+      // Subtle Koto pitch-bend grace slide on Sakura Blossom Turf
+      if (!isMenuGroove && profile.id === 'TURF_SAKURA' && step % 4 === 0) {
+        osc.frequency.setValueAtTime(targetFreq * 0.97, now);
+        osc.frequency.exponentialRampToValueAtTime(targetFreq, now + 0.026);
+      } else {
+        osc.frequency.setValueAtTime(targetFreq, now);
+      }
       const rawPeak = profile.leadWave === 'sawtooth' || profile.leadWave === 'square' ? 0.032 : 0.044;
       const leadPeak = isMenuGroove ? 0.026 : rawPeak;
       g.gain.setValueAtTime(0.0001, now);
-      g.gain.linearRampToValueAtTime(leadPeak, now + 0.011);
+      g.gain.linearRampToValueAtTime(leadPeak, now + 0.01);
       g.gain.exponentialRampToValueAtTime(0.0001, now + profile.leadDecay);
       osc.connect(filter);
       filter.connect(g);
       g.connect(this.master);
       osc.start(now);
       osc.stop(now + profile.leadDecay + 0.02);
+
+      // Subtle detuned unison chorus layer during B/D sections or Super Flow for lush 16-bit polish
+      if (!isMenuGroove && (section === 1 || section === 3 || superFlow)) {
+        const uOsc = this.ctx.createOscillator();
+        const uG = this.ctx.createGain();
+        uOsc.type = 'sine';
+        uOsc.frequency.setValueAtTime(targetFreq, now);
+        uOsc.detune.setValueAtTime(4.5, now);
+        uG.gain.setValueAtTime(0.0001, now);
+        uG.gain.linearRampToValueAtTime(leadPeak * 0.38, now + 0.012);
+        uG.gain.exponentialRampToValueAtTime(0.0001, now + profile.leadDecay);
+        uOsc.connect(filter);
+        uG.connect(this.master);
+        uOsc.start(now);
+        uOsc.stop(now + profile.leadDecay + 0.02);
+      }
 
       const harmFreq = profile.harmonyNotes[step];
       if (!isMenuGroove && (section === 1 || section === 3 || superFlow) && harmFreq > 0) {
@@ -1177,39 +1264,42 @@ export class IndieSoundEngine {
         const hG = this.ctx.createGain();
         hOsc.type = profile.harmonyWave;
         hFilter.type = 'lowpass';
-        hFilter.frequency.setValueAtTime(1200, now);
+        hFilter.frequency.setValueAtTime(1250, now);
         hOsc.frequency.setValueAtTime(harmFreq, now);
         const harmPeak = profile.harmonyWave === 'square' ? 0.014 : 0.022;
         hG.gain.setValueAtTime(0.0001, now);
         hG.gain.linearRampToValueAtTime(harmPeak, now + 0.012);
-        hG.gain.exponentialRampToValueAtTime(0.0001, now + 0.18);
+        hG.gain.exponentialRampToValueAtTime(0.0001, now + 0.185);
         hOsc.connect(hFilter);
         hFilter.connect(hG);
         hG.connect(this.master);
         hOsc.start(now);
-        hOsc.stop(now + 0.195);
+        hOsc.stop(now + 0.2);
       }
     }
 
-    // 6. Super-Flow Gentle Bell Shimmer (or Cosmic / Ice ambient arpeggio)
+    // 6. Stadium-Specific Shimmer Arpeggio & Super-Flow Sparkle
     const ambientArpActive =
       superFlow ||
       (!isMenuGroove &&
-        (this.currentPitchTheme === 'COSMIC_SPACE' || this.currentPitchTheme === 'ARCTIC_ICE') &&
+        (this.currentPitchTheme === 'COSMIC_SPACE' ||
+          this.currentPitchTheme === 'ARCTIC_ICE' ||
+          this.currentPitchTheme === 'TWILIGHT_SYNTH' ||
+          this.currentPitchTheme === 'TURF_SAKURA') &&
         barStep % 4 === 2);
     if (ambientArpActive && barStep % 2 === 0) {
       const arpFreq = profile.arpNotes[this.stepIndex % profile.arpNotes.length];
       const arpOsc = this.ctx.createOscillator();
       const arpG = this.ctx.createGain();
-      arpOsc.type = 'sine';
+      arpOsc.type = this.currentPitchTheme === 'TWILIGHT_SYNTH' ? 'triangle' : 'sine';
       arpOsc.frequency.setValueAtTime(arpFreq, now);
       arpG.gain.setValueAtTime(0.0001, now);
-      arpG.gain.linearRampToValueAtTime(superFlow ? 0.018 : 0.012, now + 0.008);
-      arpG.gain.exponentialRampToValueAtTime(0.0001, now + 0.09);
+      arpG.gain.linearRampToValueAtTime(superFlow ? 0.019 : 0.013, now + 0.007);
+      arpG.gain.exponentialRampToValueAtTime(0.0001, now + 0.095);
       arpOsc.connect(arpG);
       arpG.connect(this.master);
       arpOsc.start(now);
-      arpOsc.stop(now + 0.1);
+      arpOsc.stop(now + 0.105);
     }
 
     this.stepIndex++;
@@ -1531,28 +1621,60 @@ export class IndieSoundEngine {
     });
   }
 
-  playGoal() {
+  playGoal(themeOverride?: PitchThemeId) {
     if (!this.ensureReady() || !this.ctx || !this.master) return;
     const now = this.ctx.currentTime;
+    const activeTheme = themeOverride || this.currentPitchTheme;
+    const profile = getStadiumMusicProfile(activeTheme);
     this.playNetSwish();
-    [523.25, 659.25, 783.99, 1046.5, 1318.51, 1567.98].forEach((freq, i) => {
+
+    const chimeNotes = profile.goalChimeNotes || [523.25, 659.25, 783.99, 1046.5, 1318.51, 1567.98];
+    chimeNotes.forEach((freq, i) => {
       if (!this.ctx || !this.master) return;
       const osc = this.ctx.createOscillator();
       const g = this.ctx.createGain();
-      osc.type = 'sawtooth';
+      osc.type = profile.leadWave === 'sine' ? 'triangle' : profile.leadWave;
       const filter = this.ctx.createBiquadFilter();
       filter.type = 'lowpass';
-      filter.frequency.setValueAtTime(2500, now + i * 0.052);
-      osc.frequency.setValueAtTime(freq, now + i * 0.052);
-      g.gain.setValueAtTime(0.3, now + i * 0.052);
-      g.gain.exponentialRampToValueAtTime(0.001, now + i * 0.052 + 0.55);
+      filter.frequency.setValueAtTime(2600, now + i * 0.048);
+      osc.frequency.setValueAtTime(freq, now + i * 0.048);
+      g.gain.setValueAtTime(0.28, now + i * 0.048);
+      g.gain.exponentialRampToValueAtTime(0.001, now + i * 0.048 + 0.56);
       osc.connect(filter);
       filter.connect(g);
       g.connect(this.master);
-      osc.start(now + i * 0.052);
-      osc.stop(now + i * 0.052 + 0.58);
+      osc.start(now + i * 0.048);
+      osc.stop(now + i * 0.048 + 0.59);
     });
-    this.playNoiseBurst(0.95, 1100, 0.52, 0.8);
+
+    // Subtle Stadium-Specific Goal Acoustic Flourish
+    if (activeTheme === 'COSMIC_SPACE') {
+      const ufoSweep = this.ctx.createOscillator();
+      const ufoG = this.ctx.createGain();
+      ufoSweep.type = 'sine';
+      ufoSweep.frequency.setValueAtTime(440, now + 0.08);
+      ufoSweep.frequency.exponentialRampToValueAtTime(1760, now + 0.48);
+      ufoG.gain.setValueAtTime(0.14, now + 0.08);
+      ufoG.gain.exponentialRampToValueAtTime(0.001, now + 0.52);
+      ufoSweep.connect(ufoG);
+      ufoG.connect(this.master);
+      ufoSweep.start(now + 0.08);
+      ufoSweep.stop(now + 0.54);
+    } else if (activeTheme === 'VOLCANO_FORGE') {
+      const anvil = this.ctx.createOscillator();
+      const aG = this.ctx.createGain();
+      anvil.type = 'square';
+      anvil.frequency.setValueAtTime(1318.51, now + 0.05);
+      anvil.frequency.exponentialRampToValueAtTime(659.25, now + 0.25);
+      aG.gain.setValueAtTime(0.12, now + 0.05);
+      aG.gain.exponentialRampToValueAtTime(0.001, now + 0.28);
+      anvil.connect(aG);
+      aG.connect(this.master);
+      anvil.start(now + 0.05);
+      anvil.stop(now + 0.3);
+    }
+
+    this.playNoiseBurst(0.95, 1100, 0.5, 0.8);
   }
 
   playWhistle() {

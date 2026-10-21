@@ -234,11 +234,11 @@ export const GRAPHICS_CONFIG = {
     keeperRadius: 13.5,
     ballRadius: 9.8,
     pixelGridUnit: 3,
-    cleatLength: 9,
+    cleatLength: 10,
     cleatWidth: 6,
-    shoulderWidth: 30,
-    torsoDepth: 22,
-    headRadius: 9,
+    shoulderWidth: 32,
+    torsoDepth: 24,
+    headRadius: 10,
   },
   animation: {
     strideSpeed: 0.28,
@@ -434,8 +434,8 @@ export const PITCH_THEMES: PitchThemeDefinition[] = [
     id: 'COSMIC_SPACE',
     name: 'Cosmic Orbit',
     subtitle: 'Galactic Starfield',
-    swatchLight: '#1e3a8a',
-    swatchDark: '#090d24',
+    swatchLight: '#1a1635',
+    swatchDark: '#120e26',
     swatchLine: '#38bdf8',
     apron: {
       base: '#060919',
@@ -446,14 +446,14 @@ export const PITCH_THEMES: PitchThemeDefinition[] = [
       innerPath: '#1e293b',
     },
     turf: {
-      stripeLight: '#172e54',
-      stripeDark: '#112240',
-      ditherLight: '#1e3a6d',
-      ditherDark: '#0c1930',
-      tuftHighlight: '#38bdf8',
-      tuftShadow: '#6366f1',
+      stripeLight: '#1b1638',
+      stripeDark: '#14102b',
+      ditherLight: '#241e4a',
+      ditherDark: '#0e0b20',
+      tuftHighlight: '#312e81',
+      tuftShadow: '#1e1b4b',
       chalkLine: '#bae6fd',
-      scuffMark: '#0ea5e9',
+      scuffMark: '#312e81',
       chalk: '#e0f2fe',
       chalkShadow: '#1d4ed8',
     },
@@ -483,8 +483,8 @@ export const PITCH_THEMES: PitchThemeDefinition[] = [
       stripeDark: '#8294ad',
       ditherLight: '#cbd5e1',
       ditherDark: '#64748b',
-      tuftHighlight: '#e2e8f0',
-      tuftShadow: '#475569',
+      tuftHighlight: '#cbd5e1',
+      tuftShadow: '#64748b',
       chalkLine: '#f8fafc',
       scuffMark: '#475569',
       chalk: '#f0f9ff',
@@ -500,8 +500,8 @@ export const PITCH_THEMES: PitchThemeDefinition[] = [
     id: 'RIO_CLAY',
     name: 'Sunset Clay',
     subtitle: 'Copacabana Beach',
-    swatchLight: '#f6ad7b',
-    swatchDark: '#e07a47',
+    swatchLight: '#ebd084',
+    swatchDark: '#dec06d',
     swatchLine: '#fef3c7',
     apron: {
       base: '#0284c7',
@@ -509,19 +509,19 @@ export const PITCH_THEMES: PitchThemeDefinition[] = [
       track: '#9a4419',
       trackLine: '#fde68a',
       outerBorder: '#9a4419',
-      innerPath: '#ea8d5c',
+      innerPath: '#e0be68',
     },
     turf: {
-      stripeLight: '#f6ad7b',
-      stripeDark: '#ec9660',
-      ditherLight: '#fbc49d',
-      ditherDark: '#df8149',
-      tuftHighlight: '#fed7aa',
-      tuftShadow: '#c25e2b',
-      chalkLine: '#fffbeb',
-      scuffMark: '#c25e2b',
-      chalk: '#fffbeb',
-      chalkShadow: '#c26533',
+      stripeLight: '#ebd084',
+      stripeDark: '#dec06d',
+      ditherLight: '#f3dd9d',
+      ditherDark: '#cfb05b',
+      tuftHighlight: '#f7e6b5',
+      tuftShadow: '#c2a048',
+      chalkLine: '#ffffff',
+      scuffMark: '#b8943c',
+      chalk: '#ffffff',
+      chalkShadow: '#b45309',
     },
     cage: {
       wallTop: '#fef3c7',
@@ -533,8 +533,8 @@ export const PITCH_THEMES: PitchThemeDefinition[] = [
     id: 'TWILIGHT_SYNTH',
     name: 'Cobalt Pulse',
     subtitle: 'Cyber Metropolis',
-    swatchLight: '#4338ca',
-    swatchDark: '#312e81',
+    swatchLight: '#261742',
+    swatchDark: '#1c1033',
     swatchLine: '#22d3ee',
     apron: {
       base: '#09051c',
@@ -542,18 +542,18 @@ export const PITCH_THEMES: PitchThemeDefinition[] = [
       track: '#311042',
       trackLine: '#22d3ee',
       outerBorder: '#701a75',
-      innerPath: '#4338ca',
+      innerPath: '#261742',
     },
     turf: {
-      stripeLight: '#3730a3',
-      stripeDark: '#312e81',
-      ditherLight: '#4338ca',
-      ditherDark: '#1e1b4b',
-      tuftHighlight: '#22d3ee',
-      tuftShadow: '#e879f9',
-      chalkLine: '#67e8f9',
-      scuffMark: '#c084fc',
-      chalk: '#67e8f9',
+      stripeLight: '#261742',
+      stripeDark: '#1d1135',
+      ditherLight: '#311d54',
+      ditherDark: '#150b28',
+      tuftHighlight: '#3b2363',
+      tuftShadow: '#2e1065',
+      chalkLine: '#a5f3fc',
+      scuffMark: '#4c1d95',
+      chalk: '#a5f3fc',
       chalkShadow: '#a21caf',
     },
     cage: {
@@ -566,8 +566,8 @@ export const PITCH_THEMES: PitchThemeDefinition[] = [
     id: 'ARCTIC_ICE',
     name: 'Glacier Frost',
     subtitle: 'Aurora Alpine Fjord',
-    swatchLight: '#c7d2fe',
-    swatchDark: '#a5b4fc',
+    swatchLight: '#e2e8f0',
+    swatchDark: '#d1dce8',
     swatchLine: '#ffffff',
     apron: {
       base: '#0f172a',
@@ -575,19 +575,19 @@ export const PITCH_THEMES: PitchThemeDefinition[] = [
       track: '#334155',
       trackLine: '#bae6fd',
       outerBorder: '#38bdf8',
-      innerPath: '#e0e7ff',
+      innerPath: '#e2e8f0',
     },
     turf: {
-      stripeLight: '#c7d2fe',
-      stripeDark: '#b4c6fc',
-      ditherLight: '#e0e7ff',
-      ditherDark: '#93c5fd',
-      tuftHighlight: '#ffffff',
-      tuftShadow: '#6366f1',
-      chalkLine: '#ffffff',
-      scuffMark: '#818cf8',
-      chalk: '#ffffff',
-      chalkShadow: '#4f46e5',
+      stripeLight: '#e2e8f0',
+      stripeDark: '#d5e0ec',
+      ditherLight: '#f1f5f9',
+      ditherDark: '#c5d3e3',
+      tuftHighlight: '#f8fafc',
+      tuftShadow: '#94a3b8',
+      chalkLine: '#475569',
+      scuffMark: '#94a3b8',
+      chalk: '#475569',
+      chalkShadow: '#334155',
     },
     cage: {
       wallTop: '#ecfeff',
@@ -613,12 +613,12 @@ export const PITCH_THEMES: PitchThemeDefinition[] = [
     turf: {
       stripeLight: '#27272a',
       stripeDark: '#1f1f23',
-      ditherLight: '#3f3f46',
+      ditherLight: '#343438',
       ditherDark: '#18181b',
-      tuftHighlight: '#f97316',
-      tuftShadow: '#dc2626',
+      tuftHighlight: '#52525b',
+      tuftShadow: '#3f3f46',
       chalkLine: '#fde047',
-      scuffMark: '#ea580c',
+      scuffMark: '#7c2d12',
       chalk: '#fef08a',
       chalkShadow: '#b45309',
     },
@@ -629,6 +629,112 @@ export const PITCH_THEMES: PitchThemeDefinition[] = [
     },
   },
 ];
+
+export interface StadiumGoalEffectSpec {
+  id: PitchThemeId;
+  name: string;
+  effectStyle:
+    | 'BOTANICAL_FOUNTAIN'
+    | 'MAPLE_SWIRL'
+    | 'SAKURA_PETAL_STORM'
+    | 'CHAMPIONS_PYRO'
+    | 'COSMIC_SUPERNOVA'
+    | 'STREET_GRAFFITI_BASS'
+    | 'CARNIVAL_STREAMERS'
+    | 'SYNTH_LASER_SCAN'
+    | 'ARCTIC_CRYSTAL_BURST'
+    | 'VOLCANO_MAGMA_PLUME';
+  particleColors: string[];
+  shockwaveColors: [string, string];
+  flashTint: string;
+}
+
+export const STADIUM_GOAL_EFFECTS: Record<PitchThemeId, StadiumGoalEffectSpec> = {
+  CLASSIC_TURF: {
+    id: 'CLASSIC_TURF',
+    name: 'Royal Fountain & Botanical Ribbon Burst',
+    effectStyle: 'BOTANICAL_FOUNTAIN',
+    particleColors: ['#34d399', '#38bdf8', '#fde047', '#a7f3d0', '#ffffff'],
+    shockwaveColors: ['#34d399', '#38bdf8'],
+    flashTint: 'rgba(167, 243, 208, 0.42)',
+  },
+  TURF_AUTUMN: {
+    id: 'TURF_AUTUMN',
+    name: 'Golden Maple Leaf Whirlwind',
+    effectStyle: 'MAPLE_SWIRL',
+    particleColors: ['#ea580c', '#f59e0b', '#dc2626', '#fde047', '#fef3c7'],
+    shockwaveColors: ['#f97316', '#facc15'],
+    flashTint: 'rgba(254, 215, 170, 0.44)',
+  },
+  TURF_SAKURA: {
+    id: 'TURF_SAKURA',
+    name: 'Kyoto Cherry Blossom Petal Storm',
+    effectStyle: 'SAKURA_PETAL_STORM',
+    particleColors: ['#f472b6', '#fbcfe8', '#ffe4e6', '#38bdf8', '#ffffff'],
+    shockwaveColors: ['#f472b6', '#38bdf8'],
+    flashTint: 'rgba(251, 207, 232, 0.45)',
+  },
+  TURF_CHAMPIONS: {
+    id: 'TURF_CHAMPIONS',
+    name: 'Champions Gold Pyrotechnic Salute',
+    effectStyle: 'CHAMPIONS_PYRO',
+    particleColors: ['#fde047', '#facc15', '#fef08a', '#60a5fa', '#ffffff'],
+    shockwaveColors: ['#facc15', '#60a5fa'],
+    flashTint: 'rgba(254, 240, 138, 0.46)',
+  },
+  COSMIC_SPACE: {
+    id: 'COSMIC_SPACE',
+    name: 'Zero-G Supernova Plasma Ring',
+    effectStyle: 'COSMIC_SUPERNOVA',
+    particleColors: ['#38bdf8', '#e879f9', '#a855f7', '#2dd4bf', '#fef08a'],
+    shockwaveColors: ['#38bdf8', '#e879f9'],
+    flashTint: 'rgba(56, 189, 248, 0.42)',
+  },
+  URBAN_CONCRETE: {
+    id: 'URBAN_CONCRETE',
+    name: 'Street Neon Graffiti & Boombox Bass',
+    effectStyle: 'STREET_GRAFFITI_BASS',
+    particleColors: ['#f97316', '#22d3ee', '#facc15', '#f43f5e', '#a855f7'],
+    shockwaveColors: ['#f97316', '#22d3ee'],
+    flashTint: 'rgba(253, 224, 71, 0.4)',
+  },
+  RIO_CLAY: {
+    id: 'RIO_CLAY',
+    name: 'Copacabana Carnival Samba Streamers',
+    effectStyle: 'CARNIVAL_STREAMERS',
+    particleColors: ['#facc15', '#10b981', '#0ea5e9', '#f43f5e', '#fef08a'],
+    shockwaveColors: ['#facc15', '#0ea5e9'],
+    flashTint: 'rgba(253, 230, 138, 0.44)',
+  },
+  TWILIGHT_SYNTH: {
+    id: 'TWILIGHT_SYNTH',
+    name: 'Cyber-Grid Outrun Laser Pulse',
+    effectStyle: 'SYNTH_LASER_SCAN',
+    particleColors: ['#f472b6', '#22d3ee', '#e879f9', '#67e8f9', '#fde047'],
+    shockwaveColors: ['#f472b6', '#22d3ee'],
+    flashTint: 'rgba(244, 114, 182, 0.42)',
+  },
+  ARCTIC_ICE: {
+    id: 'ARCTIC_ICE',
+    name: 'Glacial Diamond-Frost Shatter',
+    effectStyle: 'ARCTIC_CRYSTAL_BURST',
+    particleColors: ['#ecfeff', '#7dd3fc', '#38bdf8', '#c4b5fd', '#ffffff'],
+    shockwaveColors: ['#7dd3fc', '#c4b5fd'],
+    flashTint: 'rgba(186, 230, 253, 0.46)',
+  },
+  VOLCANO_FORGE: {
+    id: 'VOLCANO_FORGE',
+    name: 'Caldera Magma Geyser Eruption',
+    effectStyle: 'VOLCANO_MAGMA_PLUME',
+    particleColors: ['#ef4444', '#f97316', '#facc15', '#fde047', '#fca5a5'],
+    shockwaveColors: ['#ef4444', '#fde047'],
+    flashTint: 'rgba(251, 146, 60, 0.45)',
+  },
+};
+
+export function getStadiumGoalEffect(themeId: PitchThemeId): StadiumGoalEffectSpec {
+  return STADIUM_GOAL_EFFECTS[themeId] || STADIUM_GOAL_EFFECTS.CLASSIC_TURF;
+}
 
 export function applyPitchTheme(themeId: PitchThemeId): PitchThemeDefinition {
   const theme = PITCH_THEMES.find((t) => t.id === themeId) || PITCH_THEMES[0];
@@ -650,5 +756,6 @@ export function applyPitchTheme(themeId: PitchThemeId): PitchThemeDefinition {
   GRAPHICS_CONFIG.pitch.apronDarkBorder = theme.apron.outerBorder;
   return theme;
 }
+
 
 
