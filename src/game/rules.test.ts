@@ -29,11 +29,13 @@ import {
   getUserRankInfo,
   getNextRankInfo,
   computeRankProgressSummary,
+  buildGoalCelebrationMessage,
   RANK_TIERS,
   type PlayerStateSnapshot,
   type KeeperStateSnapshot,
 } from './rules.ts';
-import { GRAPHICS_CONFIG, PIXEL_DIGITS_3X5 } from './graphicsConfig.ts';
+import { GRAPHICS_CONFIG, PIXEL_DIGITS_3X5, PITCH_THEMES, applyPitchTheme } from './graphicsConfig.ts';
+import { STADIUM_MUSIC_PROFILES, getStadiumMusicProfile } from './soundEngine.ts';
 
 test('Expanded PITCH specification provides spread-out tiki-taka passing room and 3-game Tournament config', () => {
   assert.equal(PITCH.width, 2720);
@@ -477,6 +479,133 @@ test('getUserRankInfo starts player at Bronze I (0 wins) and ranks up as wins in
   assert.ok(summaryAfterFirstWin.progressPct > summaryAfterFirstWin.prevProgressPct);
   assert.ok(summaryAfterFirstWin.statusHeadline.includes('RANK UP!'));
 });
+
+test('buildGoalCelebrationMessage generates dynamic headlines & callouts for goal types and match score states, and PITCH_THEMES includes COSMIC_SPACE', () => {
+  const spaceTheme = PITCH_THEMES.find((t) => t.id === 'COSMIC_SPACE');
+  assert.ok(spaceTheme, 'COSMIC_SPACE theme exists in PITCH_THEMES');
+  assert.equal(spaceTheme?.name, 'Cosmic Orbit');
+
+  const arcticTheme = PITCH_THEMES.find((t) => t.id === 'ARCTIC_ICE');
+  assert.ok(arcticTheme, 'ARCTIC_ICE theme exists in PITCH_THEMES');
+  assert.equal(arcticTheme?.name, 'Glacier Frost');
+
+  const volcanoTheme = PITCH_THEMES.find((t) => t.id === 'VOLCANO_FORGE');
+  assert.ok(volcanoTheme, 'VOLCANO_FORGE theme exists in PITCH_THEMES');
+  assert.equal(volcanoTheme?.name, 'Magma Caldera');
+
+  const autumnTurf = PITCH_THEMES.find((t) => t.id === 'TURF_AUTUMN');
+  assert.ok(autumnTurf, 'TURF_AUTUMN theme exists in PITCH_THEMES');
+  assert.equal(autumnTurf?.name, 'Autumn Harvest Turf');
+
+  const sakuraTurf = PITCH_THEMES.find((t) => t.id === 'TURF_SAKURA');
+  assert.ok(sakuraTurf, 'TURF_SAKURA theme exists in PITCH_THEMES');
+  assert.equal(sakuraTurf?.name, 'Sakura Blossom Turf');
+
+  const championsTurf = PITCH_THEMES.find((t) => t.id === 'TURF_CHAMPIONS');
+  assert.ok(championsTurf, 'TURF_CHAMPIONS theme exists in PITCH_THEMES');
+  assert.equal(championsTurf?.name, 'Champions Cathedral');
+
+  assert.equal(PITCH_THEMES.length, 10);
+
+  // Verify every stadium has its own distinct musical profile
+  const titles = new Set<string>();
+  const melodies = new Set<string>();
+  for (const theme of PITCH_THEMES) {
+    const applied = applyPitchTheme(theme.id);
+    assert.equal(applied.id, theme.id);
+    const music = getStadiumMusicProfile(theme.id);
+    assert.equal(music.id, theme.id);
+    assert.equal(music.melodySectionA.length, 32);
+    assert.equal(music.bassNotesA.length, 32);
+    assert.equal(music.chordVoicings.length, 4);
+    titles.add(music.title);
+    melodies.add(music.melodySectionA.join(','));
+  }
+  assert.equal(titles.size, 10, 'All 10 stadiums have unique soundtrack titles');
+  assert.equal(melodies.size, 10, 'All 10 stadiums have unique lead melodies');
+  assert.equal(Object.keys(STADIUM_MUSIC_PROFILES).length, 10);
+
+  // 1. Long-Range Ronaldo Goal
+  const ronaldoGoal = buildGoalCelebrationMessage({
+    scoringTeam: 'YOU',
+    scoreYou: 1,
+    scoreAi: 0,
+    prevScoreYou: 0,
+    prevScoreAi: 0,
+    isLongRange: true,
+    isPerfectStrike: false,
+    isOneTouch: false,
+    wasWallBounce: false,
+    spinMagnitude: 0,
+    flowCombo: 1,
+    isGoldenGoal: false,
+    matchTimeRemaining: 95,
+    opponentTag: 'Zico_99',
+  });
+  assert.equal(ronaldoGoal.headline, 'RONALDO GOAL!');
+  assert.match(ronaldoGoal.subheadline, /LONG-RANGE SCREAMER/);
+
+  // 2. Equalizer Goal (2-2)
+  const equalizerGoal = buildGoalCelebrationMessage({
+    scoringTeam: 'YOU',
+    scoreYou: 2,
+    scoreAi: 2,
+    prevScoreYou: 1,
+    prevScoreAi: 2,
+    isLongRange: false,
+    isPerfectStrike: false,
+    isOneTouch: false,
+    wasWallBounce: false,
+    spinMagnitude: 0,
+    flowCombo: 1,
+    isGoldenGoal: false,
+    matchTimeRemaining: 50,
+    opponentTag: 'Zico_99',
+  });
+  assert.equal(equalizerGoal.headline, 'ICE IN THE VEINS!');
+  assert.match(equalizerGoal.subheadline, /EQUALIZER/);
+
+  // 3. Wall Bank Shot Goal
+  const bankGoal = buildGoalCelebrationMessage({
+    scoringTeam: 'YOU',
+    scoreYou: 2,
+    scoreAi: 1,
+    prevScoreYou: 1,
+    prevScoreAi: 1,
+    isLongRange: false,
+    isPerfectStrike: false,
+    isOneTouch: false,
+    wasWallBounce: true,
+    spinMagnitude: 0,
+    flowCombo: 2,
+    isGoldenGoal: false,
+    matchTimeRemaining: 60,
+    opponentTag: 'Zico_99',
+  });
+  assert.equal(bankGoal.headline, 'PINBALL WIZARD!');
+  assert.match(bankGoal.subheadline, /CAGE BANK SHOT/);
+
+  // 4. Mercy Rule KO (3-0)
+  const mercyGoal = buildGoalCelebrationMessage({
+    scoringTeam: 'YOU',
+    scoreYou: 3,
+    scoreAi: 0,
+    prevScoreYou: 2,
+    prevScoreAi: 0,
+    isLongRange: false,
+    isPerfectStrike: true,
+    isOneTouch: false,
+    wasWallBounce: false,
+    spinMagnitude: 0,
+    flowCombo: 3,
+    isGoldenGoal: false,
+    matchTimeRemaining: 40,
+    opponentTag: 'Zico_99',
+  });
+  assert.equal(mercyGoal.headline, 'MERCY RULE KO!');
+  assert.match(mercyGoal.subheadline, /MERCY RULE KNOCKOUT/);
+});
+
 
 
 

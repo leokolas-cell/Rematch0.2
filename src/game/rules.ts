@@ -1262,3 +1262,261 @@ export function simulateCurvedPreviewArc(
   return computeCurvedKickTrajectory(startX, startY, targetX, targetY, speed, appliedSpin, steps).points;
 }
 
+export interface GoalCelebrationInput {
+  scoringTeam: 'YOU' | 'AI';
+  scoreYou: number;
+  scoreAi: number;
+  prevScoreYou: number;
+  prevScoreAi: number;
+  isLongRange: boolean;
+  isPerfectStrike: boolean;
+  isOneTouch: boolean;
+  wasWallBounce: boolean;
+  spinMagnitude: number;
+  flowCombo: number;
+  isGoldenGoal: boolean;
+  matchTimeRemaining: number;
+  opponentTag: string;
+}
+
+export interface GoalCelebrationSpec {
+  headline: string;
+  subheadline: string;
+  kickerBadge: string;
+  primaryColor: string;
+  secondaryColor: string;
+  glowColor: string;
+  pitchCallouts: { text: string; color: string }[];
+  ledMessage: string;
+}
+
+/**
+ * Generates dynamic, expressive goal celebration messages depending on both
+ * the overall match score state (opening goal, equalizer, comeback lead, mercy KO, golden goal, buzzer beater)
+ * and the specific type of goal scored (long-range Ronaldo screamer, curved bender, wall bank shot,
+ * one-touch volley, tiki-taka Super Flow teamwork, or sweet-spot laser).
+ */
+export function buildGoalCelebrationMessage(input: GoalCelebrationInput): GoalCelebrationSpec {
+  const {
+    scoringTeam,
+    scoreYou,
+    scoreAi,
+    prevScoreYou,
+    prevScoreAi,
+    isLongRange,
+    isPerfectStrike,
+    isOneTouch,
+    wasWallBounce,
+    spinMagnitude,
+    flowCombo,
+    isGoldenGoal,
+    matchTimeRemaining,
+    opponentTag,
+  } = input;
+
+  const isCurved = spinMagnitude > 0.0032;
+  const isSuperFlow = flowCombo >= PASSES_FOR_FLOW_BOOST;
+  const leadDiff = scoreYou - scoreAi;
+  const isMercyKnockout = Math.abs(leadDiff) >= MERCY_RULE_LEAD;
+  const isBuzzerBeater = !isGoldenGoal && matchTimeRemaining > 0 && matchTimeRemaining <= 15;
+  const scoreDisplay = `${scoreYou} - ${scoreAi}`;
+
+  // 1. Describe the Type of Goal
+  let styleTag = 'CLINICAL FINISH';
+  let styleCallout = 'TOP BINS!';
+  let styleColor = '#fde047';
+
+  if (isLongRange) {
+    styleTag = 'LONG-RANGE SCREAMER';
+    styleCallout = 'RONALDO GOAL! 🚀';
+    styleColor = '#fde047';
+  } else if (wasWallBounce) {
+    styleTag = '200 IQ CAGE BANK SHOT';
+    styleCallout = 'PINBALL WIZARD! 🎱';
+    styleColor = '#38bdf8';
+  } else if (isCurved && isPerfectStrike) {
+    styleTag = 'SWEET-SPOT CURVED LASER';
+    styleCallout = 'BEND IT LIKE BECKHAM! 🌀';
+    styleColor = '#c084fc';
+  } else if (isCurved) {
+    styleTag = 'FILTHY BANANA CURVE';
+    styleCallout = 'WHAT A BENDER! 🌀';
+    styleColor = '#38bdf8';
+  } else if (isOneTouch) {
+    styleTag = 'INSTANT ONE-TOUCH VOLLEY';
+    styleCallout = 'THUNDERVOLLEY! ⚡';
+    styleColor = '#facc15';
+  } else if (isSuperFlow) {
+    styleTag = `${flowCombo}-PASS TIKI-TAKA FLOW`;
+    styleCallout = `LIQUID FOOTBALL! x${flowCombo} 🔥`;
+    styleColor = '#fde047';
+  } else if (isPerfectStrike) {
+    styleTag = 'SWEET-SPOT LASER MISSILE';
+    styleCallout = 'TOP BINS LASER! 🎯';
+    styleColor = '#34d399';
+  }
+
+  // 2. Describe the Overall Score Situation
+  let scoreSituationTag = `SCORE ${scoreDisplay}`;
+  if (isGoldenGoal) {
+    scoreSituationTag = `GOLDEN GOAL OVERTIME WINNER (${scoreDisplay})`;
+  } else if (isMercyKnockout) {
+    scoreSituationTag = `+${MERCY_RULE_LEAD} MERCY RULE KNOCKOUT (${scoreDisplay})`;
+  } else if (scoreYou === scoreAi) {
+    scoreSituationTag = scoreYou >= 2 ? `HIGH-OCTANE EQUALIZER (${scoreDisplay})` : `ALL LEVEL (${scoreDisplay})`;
+  } else if (scoringTeam === 'YOU') {
+    if (prevScoreYou === 0 && prevScoreAi === 0) {
+      scoreSituationTag = `OPENING GOAL • YOU LEAD ${scoreDisplay}`;
+    } else if (prevScoreYou <= prevScoreAi && scoreYou > scoreAi && prevScoreAi >= 1) {
+      scoreSituationTag = `COMEBACK LEAD • YOU LEAD ${scoreDisplay}`;
+    } else if (leadDiff === 2) {
+      scoreSituationTag = `2-GOAL CUSHION • 1 AWAY FROM MERCY (${scoreDisplay})`;
+    } else {
+      scoreSituationTag = `YOU LEAD ${opponentTag.toUpperCase()} ${scoreDisplay}`;
+    }
+  } else {
+    if (prevScoreYou === 0 && prevScoreAi === 0) {
+      scoreSituationTag = `${opponentTag.toUpperCase()} STRIKES FIRST (${scoreDisplay})`;
+    } else if (scoreAi > scoreYou && prevScoreAi <= prevScoreYou && prevScoreYou >= 1) {
+      scoreSituationTag = `${opponentTag.toUpperCase()} TAKES THE LEAD (${scoreDisplay})`;
+    } else {
+      scoreSituationTag = `${opponentTag.toUpperCase()} GOAL (${scoreDisplay})`;
+    }
+  }
+
+  // 3. Combine Goal Type + Match Score Context into Headline, Subheadline & Pitch Callouts
+  if (scoringTeam === 'YOU') {
+    let headline = 'GOOOAAAL!';
+    let kickerBadge = '⚽ GOAL SCORED';
+    let primaryColor = '#fde047';
+    let secondaryColor = '#38bdf8';
+    let glowColor = '#f59e0b';
+
+    if (isGoldenGoal) {
+      headline = isLongRange ? 'RONALDO GOLDEN GOAL!' : 'GOLDEN GOAL WINNER!';
+      kickerBadge = '👑 OVERTIME WALK-OFF';
+      primaryColor = '#fde047';
+      secondaryColor = '#fbbf24';
+      glowColor = '#eab308';
+    } else if (isMercyKnockout) {
+      headline = isLongRange ? 'RONALDO MERCY KO!' : 'MERCY RULE KO!';
+      kickerBadge = `💥 +${MERCY_RULE_LEAD} WALK-OFF VICTORY`;
+      primaryColor = '#fde047';
+      secondaryColor = '#34d399';
+      glowColor = '#f59e0b';
+    } else if (isLongRange) {
+      headline = 'RONALDO GOAL!';
+      kickerBadge = '🚀 LONG-RANGE SCREAMER';
+      primaryColor = '#fde047';
+      secondaryColor = '#f97316';
+      glowColor = '#eab308';
+    } else if (wasWallBounce) {
+      headline = 'PINBALL WIZARD!';
+      kickerBadge = '🎱 CAGE BANK SHOT';
+      primaryColor = '#38bdf8';
+      secondaryColor = '#fde047';
+      glowColor = '#0284c7';
+    } else if (isCurved && isPerfectStrike) {
+      headline = 'BEND IT LIKE BECKHAM!';
+      kickerBadge = '🌀 SWEET-SPOT CURVE';
+      primaryColor = '#e879f9';
+      secondaryColor = '#fde047';
+      glowColor = '#a855f7';
+    } else if (isOneTouch) {
+      headline = 'THUNDERVOLLEY!';
+      kickerBadge = '⚡ ONE-TOUCH FINISH';
+      primaryColor = '#fde047';
+      secondaryColor = '#38bdf8';
+      glowColor = '#f59e0b';
+    } else if (isSuperFlow) {
+      headline = 'TIKI-TAKA MAGIC!';
+      kickerBadge = `🔥 SUPER FLOW x${flowCombo}`;
+      primaryColor = '#34d399';
+      secondaryColor = '#fde047';
+      glowColor = '#059669';
+    } else if (isBuzzerBeater) {
+      headline = 'BUZZER BEATER!';
+      kickerBadge = '⏰ LAST-SECOND CLUTCH';
+      primaryColor = '#fde047';
+      secondaryColor = '#fb7185';
+      glowColor = '#f59e0b';
+    } else if (scoreYou === scoreAi) {
+      headline = scoreYou >= 2 ? 'ICE IN THE VEINS!' : 'WE ARE LEVEL!';
+      kickerBadge = `🥶 CLUTCH EQUALIZER • ${scoreDisplay}`;
+      primaryColor = '#38bdf8';
+      secondaryColor = '#fde047';
+      glowColor = '#0284c7';
+    } else if (prevScoreYou <= prevScoreAi && scoreYou > scoreAi && prevScoreAi >= 1) {
+      headline = 'COMEBACK KINGS!';
+      kickerBadge = `🔥 TURNED THE TABLES • ${scoreDisplay}`;
+      primaryColor = '#fde047';
+      secondaryColor = '#34d399';
+      glowColor = '#f59e0b';
+    } else if (prevScoreYou === 0 && prevScoreAi === 0) {
+      headline = isPerfectStrike ? 'TOP BINS LASER!' : 'FIRST BLOOD!';
+      kickerBadge = `⚡ OPENING STRIKE • ${scoreDisplay}`;
+      primaryColor = '#fde047';
+      secondaryColor = '#38bdf8';
+      glowColor = '#eab308';
+    } else if (leadDiff === 2) {
+      headline = isPerfectStrike ? 'TOP BINS LASER!' : 'CRUISING! +2 LEAD!';
+      kickerBadge = `🌊 TWO-GOAL CUSHION • ${scoreDisplay}`;
+      primaryColor = '#34d399';
+      secondaryColor = '#fde047';
+      glowColor = '#10b981';
+    } else if (isPerfectStrike) {
+      headline = 'TOP BINS LASER!';
+      kickerBadge = `🎯 PERFECT STRIKE • ${scoreDisplay}`;
+      primaryColor = '#fde047';
+      secondaryColor = '#34d399';
+      glowColor = '#eab308';
+    }
+
+    const subheadline = `${styleTag} • ${scoreSituationTag}`;
+    const pitchCallouts: { text: string; color: string }[] = [
+      { text: styleCallout, color: styleColor },
+      {
+        text: isMercyKnockout
+          ? `MERCY KO! ${scoreDisplay}`
+          : scoreYou === scoreAi
+            ? `TIED UP ${scoreDisplay}!`
+            : `YOU LEAD ${scoreDisplay}!`,
+        color: '#34d399',
+      },
+    ];
+
+    return {
+      headline,
+      subheadline,
+      kickerBadge,
+      primaryColor,
+      secondaryColor,
+      glowColor,
+      pitchCallouts,
+      ledMessage: `⚡ ${headline} ${subheadline} ⚡`,
+    };
+  }
+
+  // AI Goal Scored
+  const aiHeadline = isLongRange
+    ? 'RONALDO SCREAMER!'
+    : scoreYou === scoreAi
+      ? 'RIVAL EQUALIZER!'
+      : isMercyKnockout
+        ? `${opponentTag.toUpperCase()} KO!`
+        : `${opponentTag.toUpperCase()} SCORES!`;
+  const aiSub = `${styleTag} • ${scoreSituationTag}`;
+
+  return {
+    headline: aiHeadline,
+    subheadline: aiSub,
+    kickerBadge: `⚠️ RIVAL GOAL • ${scoreDisplay}`,
+    primaryColor: '#fb7185',
+    secondaryColor: '#fde047',
+    glowColor: '#e11d48',
+    pitchCallouts: [{ text: `${opponentTag.toUpperCase()} GOAL! (${scoreDisplay})`, color: '#fb7185' }],
+    ledMessage: `${aiHeadline} • ${aiSub}`,
+  };
+}
+
+

@@ -251,7 +251,17 @@ export const GRAPHICS_CONFIG = {
   },
 };
 
-export type PitchThemeId = 'CLASSIC_TURF' | 'URBAN_CONCRETE' | 'RIO_CLAY' | 'TWILIGHT_SYNTH';
+export type PitchThemeId =
+  | 'CLASSIC_TURF'
+  | 'TURF_AUTUMN'
+  | 'TURF_SAKURA'
+  | 'TURF_CHAMPIONS'
+  | 'URBAN_CONCRETE'
+  | 'RIO_CLAY'
+  | 'TWILIGHT_SYNTH'
+  | 'COSMIC_SPACE'
+  | 'ARCTIC_ICE'
+  | 'VOLCANO_FORGE';
 
 export interface PitchThemeDefinition {
   id: PitchThemeId;
@@ -280,18 +290,23 @@ export interface PitchThemeDefinition {
     chalk: string;
     chalkShadow: string;
   };
+  cage?: {
+    wallTop: string;
+    wallExtrude: string;
+    cornerCap: string;
+  };
 }
 
 export const PITCH_THEMES: PitchThemeDefinition[] = [
   {
     id: 'CLASSIC_TURF',
     name: 'Sunlit Turf',
-    subtitle: 'Emerald Grass',
+    subtitle: 'Royal Botanical Park',
     swatchLight: '#88ebb0',
     swatchDark: '#63d297',
     swatchLine: '#ffffff',
     apron: {
-      base: '#63d297',
+      base: '#52c488',
       dither: '#52c286',
       track: '#4db880',
       trackLine: '#a7f3d0',
@@ -310,16 +325,153 @@ export const PITCH_THEMES: PitchThemeDefinition[] = [
       chalk: '#ffffff',
       chalkShadow: '#5bc886',
     },
+    cage: {
+      wallTop: '#ffffff',
+      wallExtrude: '#334155',
+      cornerCap: '#facc15',
+    },
+  },
+  {
+    id: 'TURF_AUTUMN',
+    name: 'Autumn Harvest Turf',
+    subtitle: 'Golden Maple Park',
+    swatchLight: '#a3e635',
+    swatchDark: '#84cc16',
+    swatchLine: '#fefce8',
+    apron: {
+      base: '#65a30d',
+      dither: '#4d7c0f',
+      track: '#b45309',
+      trackLine: '#fef08a',
+      outerBorder: '#78350f',
+      innerPath: '#84cc16',
+    },
+    turf: {
+      stripeLight: '#a3e635',
+      stripeDark: '#8ce022',
+      ditherLight: '#bef264',
+      ditherDark: '#74c414',
+      tuftHighlight: '#d9f99d',
+      tuftShadow: '#65a30d',
+      chalkLine: '#fefce8',
+      scuffMark: '#65a30d',
+      chalk: '#fefce8',
+      chalkShadow: '#65a30d',
+    },
+    cage: {
+      wallTop: '#fef3c7',
+      wallExtrude: '#78350f',
+      cornerCap: '#f97316',
+    },
+  },
+  {
+    id: 'TURF_SAKURA',
+    name: 'Sakura Blossom Turf',
+    subtitle: 'Kyoto Imperial Garden',
+    swatchLight: '#7ce8be',
+    swatchDark: '#5ad6a6',
+    swatchLine: '#fff1f2',
+    apron: {
+      base: '#34b88a',
+      dither: '#2da379',
+      track: '#f472b6',
+      trackLine: '#ffe4e6',
+      outerBorder: '#be185d',
+      innerPath: '#6ee7b7',
+    },
+    turf: {
+      stripeLight: '#7ce8be',
+      stripeDark: '#64dba8',
+      ditherLight: '#a7f3d0',
+      ditherDark: '#4bca94',
+      tuftHighlight: '#fbcfe8',
+      tuftShadow: '#34b88a',
+      chalkLine: '#ffffff',
+      scuffMark: '#34b88a',
+      chalk: '#ffffff',
+      chalkShadow: '#34b88a',
+    },
+    cage: {
+      wallTop: '#ffe4e6',
+      wallExtrude: '#831843',
+      cornerCap: '#f472b6',
+    },
+  },
+  {
+    id: 'TURF_CHAMPIONS',
+    name: 'Champions Cathedral',
+    subtitle: 'Floodlit Trophy Turf',
+    swatchLight: '#5eead4',
+    swatchDark: '#34d399',
+    swatchLine: '#ffffff',
+    apron: {
+      base: '#1e3a8a',
+      dither: '#172554',
+      track: '#1d4ed8',
+      trackLine: '#fde047',
+      outerBorder: '#0f172a',
+      innerPath: '#34d399',
+    },
+    turf: {
+      stripeLight: '#6ee7b7',
+      stripeDark: '#52d6a0',
+      ditherLight: '#a7f3d0',
+      ditherDark: '#3bc48c',
+      tuftHighlight: '#d1fae5',
+      tuftShadow: '#10b981',
+      chalkLine: '#ffffff',
+      scuffMark: '#10b981',
+      chalk: '#ffffff',
+      chalkShadow: '#059669',
+    },
+    cage: {
+      wallTop: '#fef08a',
+      wallExtrude: '#1e3a8a',
+      cornerCap: '#38bdf8',
+    },
+  },
+  {
+    id: 'COSMIC_SPACE',
+    name: 'Cosmic Orbit',
+    subtitle: 'Galactic Starfield',
+    swatchLight: '#1e3a8a',
+    swatchDark: '#090d24',
+    swatchLine: '#38bdf8',
+    apron: {
+      base: '#060919',
+      dither: '#0f1738',
+      track: '#1e1b4b',
+      trackLine: '#38bdf8',
+      outerBorder: '#312e81',
+      innerPath: '#1e293b',
+    },
+    turf: {
+      stripeLight: '#172e54',
+      stripeDark: '#112240',
+      ditherLight: '#1e3a6d',
+      ditherDark: '#0c1930',
+      tuftHighlight: '#38bdf8',
+      tuftShadow: '#6366f1',
+      chalkLine: '#bae6fd',
+      scuffMark: '#0ea5e9',
+      chalk: '#e0f2fe',
+      chalkShadow: '#1d4ed8',
+    },
+    cage: {
+      wallTop: '#7dd3fc',
+      wallExtrude: '#312e81',
+      cornerCap: '#e879f9',
+    },
   },
   {
     id: 'URBAN_CONCRETE',
     name: 'Rooftop Cage',
-    subtitle: 'Street Slate',
+    subtitle: 'Street Block Party',
     swatchLight: '#94a3b8',
     swatchDark: '#64748b',
     swatchLine: '#38bdf8',
     apron: {
-      base: '#64748b',
+      base: '#1e293b',
       dither: '#475569',
       track: '#334155',
       trackLine: '#bae6fd',
@@ -333,21 +485,26 @@ export const PITCH_THEMES: PitchThemeDefinition[] = [
       ditherDark: '#64748b',
       tuftHighlight: '#e2e8f0',
       tuftShadow: '#475569',
-      chalkLine: '#e0f2fe',
+      chalkLine: '#f8fafc',
       scuffMark: '#475569',
       chalk: '#f0f9ff',
       chalkShadow: '#475569',
+    },
+    cage: {
+      wallTop: '#fde047',
+      wallExtrude: '#1e293b',
+      cornerCap: '#f97316',
     },
   },
   {
     id: 'RIO_CLAY',
     name: 'Sunset Clay',
-    subtitle: 'Warm Terracotta',
+    subtitle: 'Copacabana Beach',
     swatchLight: '#f6ad7b',
     swatchDark: '#e07a47',
     swatchLine: '#fef3c7',
     apron: {
-      base: '#d97742',
+      base: '#0284c7',
       dither: '#c25e2b',
       track: '#9a4419',
       trackLine: '#fde68a',
@@ -366,33 +523,109 @@ export const PITCH_THEMES: PitchThemeDefinition[] = [
       chalk: '#fffbeb',
       chalkShadow: '#c26533',
     },
+    cage: {
+      wallTop: '#fef3c7',
+      wallExtrude: '#7c2d12',
+      cornerCap: '#2dd4bf',
+    },
   },
   {
     id: 'TWILIGHT_SYNTH',
     name: 'Cobalt Pulse',
-    subtitle: 'Hardcourt Blue',
-    swatchLight: '#7dd3fc',
-    swatchDark: '#38bdf8',
-    swatchLine: '#ffffff',
+    subtitle: 'Cyber Metropolis',
+    swatchLight: '#4338ca',
+    swatchDark: '#312e81',
+    swatchLine: '#22d3ee',
     apron: {
-      base: '#38bdf8',
-      dither: '#0284c7',
-      track: '#0369a1',
-      trackLine: '#e0f2fe',
-      outerBorder: '#0369a1',
-      innerPath: '#7dd3fc',
+      base: '#09051c',
+      dither: '#1e1b4b',
+      track: '#311042',
+      trackLine: '#22d3ee',
+      outerBorder: '#701a75',
+      innerPath: '#4338ca',
     },
     turf: {
-      stripeLight: '#7dd3fc',
-      stripeDark: '#5cc4f8',
-      ditherLight: '#bae6fd',
-      ditherDark: '#38bdf8',
-      tuftHighlight: '#e0f2fe',
-      tuftShadow: '#0284c7',
+      stripeLight: '#3730a3',
+      stripeDark: '#312e81',
+      ditherLight: '#4338ca',
+      ditherDark: '#1e1b4b',
+      tuftHighlight: '#22d3ee',
+      tuftShadow: '#e879f9',
+      chalkLine: '#67e8f9',
+      scuffMark: '#c084fc',
+      chalk: '#67e8f9',
+      chalkShadow: '#a21caf',
+    },
+    cage: {
+      wallTop: '#f472b6',
+      wallExtrude: '#311042',
+      cornerCap: '#22d3ee',
+    },
+  },
+  {
+    id: 'ARCTIC_ICE',
+    name: 'Glacier Frost',
+    subtitle: 'Aurora Alpine Fjord',
+    swatchLight: '#c7d2fe',
+    swatchDark: '#a5b4fc',
+    swatchLine: '#ffffff',
+    apron: {
+      base: '#0f172a',
+      dither: '#1e293b',
+      track: '#334155',
+      trackLine: '#bae6fd',
+      outerBorder: '#38bdf8',
+      innerPath: '#e0e7ff',
+    },
+    turf: {
+      stripeLight: '#c7d2fe',
+      stripeDark: '#b4c6fc',
+      ditherLight: '#e0e7ff',
+      ditherDark: '#93c5fd',
+      tuftHighlight: '#ffffff',
+      tuftShadow: '#6366f1',
       chalkLine: '#ffffff',
-      scuffMark: '#0284c7',
+      scuffMark: '#818cf8',
       chalk: '#ffffff',
-      chalkShadow: '#0ea5e9',
+      chalkShadow: '#4f46e5',
+    },
+    cage: {
+      wallTop: '#ecfeff',
+      wallExtrude: '#1e3a8a',
+      cornerCap: '#38bdf8',
+    },
+  },
+  {
+    id: 'VOLCANO_FORGE',
+    name: 'Magma Caldera',
+    subtitle: 'Obsidian Dragon Forge',
+    swatchLight: '#27272a',
+    swatchDark: '#18181b',
+    swatchLine: '#fde047',
+    apron: {
+      base: '#7c2d12',
+      dither: '#9a3412',
+      track: '#450a0a',
+      trackLine: '#facc15',
+      outerBorder: '#ea580c',
+      innerPath: '#27272a',
+    },
+    turf: {
+      stripeLight: '#27272a',
+      stripeDark: '#1f1f23',
+      ditherLight: '#3f3f46',
+      ditherDark: '#18181b',
+      tuftHighlight: '#f97316',
+      tuftShadow: '#dc2626',
+      chalkLine: '#fde047',
+      scuffMark: '#ea580c',
+      chalk: '#fef08a',
+      chalkShadow: '#b45309',
+    },
+    cage: {
+      wallTop: '#fdba74',
+      wallExtrude: '#450a0a',
+      cornerCap: '#ef4444',
     },
   },
 ];
@@ -401,6 +634,11 @@ export function applyPitchTheme(themeId: PitchThemeId): PitchThemeDefinition {
   const theme = PITCH_THEMES.find((t) => t.id === themeId) || PITCH_THEMES[0];
   Object.assign(GRAPHICS_CONFIG.palette.apron, theme.apron);
   Object.assign(GRAPHICS_CONFIG.palette.turf, theme.turf);
+  if (theme.cage) {
+    GRAPHICS_CONFIG.palette.cage.wallTop = theme.cage.wallTop;
+    GRAPHICS_CONFIG.palette.cage.wallExtrude = theme.cage.wallExtrude;
+    GRAPHICS_CONFIG.palette.cage.cornerCap = theme.cage.cornerCap;
+  }
   GRAPHICS_CONFIG.pitch.grassLight = theme.turf.stripeLight;
   GRAPHICS_CONFIG.pitch.grassDark = theme.turf.stripeDark;
   GRAPHICS_CONFIG.pitch.ditherLight = theme.turf.ditherLight;
@@ -412,4 +650,5 @@ export function applyPitchTheme(themeId: PitchThemeId): PitchThemeDefinition {
   GRAPHICS_CONFIG.pitch.apronDarkBorder = theme.apron.outerBorder;
   return theme;
 }
+
 

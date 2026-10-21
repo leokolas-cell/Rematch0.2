@@ -1,7 +1,9 @@
 /**
- * Upgraded 16-Bit Arcade Samba-Funk & Stadium Brass Procedural Audio Engine
- * (Web Audio API + Tone.js integration).
+ * Upgraded 16-Bit Arcade Multi-Stadium Procedural Audio Engine
+ * (Web Audio API + Tone.js integration) with 10 bespoke stadium soundtracks.
  */
+
+import type { PitchThemeId } from './graphicsConfig';
 
 declare global {
   interface Window {
@@ -10,6 +12,665 @@ declare global {
     };
     webkitAudioContext?: typeof AudioContext;
   }
+}
+
+export interface StadiumMusicProfile {
+  id: PitchThemeId;
+  title: string;
+  leadWave: OscillatorType;
+  harmonyWave: OscillatorType;
+  bassWave: OscillatorType;
+  leadCutoff: number;
+  bassCutoff: number;
+  chordCutoff: number;
+  leadDecay: number;
+  percStyle: 'CLASSIC' | 'FOLK_SHUFFLE' | 'SAKURA_WOOD' | 'STADIUM_MARCH' | 'SPACE_ELECTRO' | 'BOOM_BAP' | 'SAMBA_AGOGO' | 'SYNTHWAVE' | 'ICE_CHIME' | 'FORGE_ANVIL';
+  melodySectionA: number[];
+  melodySectionB: number[];
+  melodySectionC: number[];
+  melodySectionD: number[];
+  harmonyNotes: number[];
+  bassNotesA: number[];
+  bassNotesB: number[];
+  chordVoicings: number[][];
+  arpNotes: number[];
+}
+
+export const STADIUM_MUSIC_PROFILES: Record<PitchThemeId, StadiumMusicProfile> = {
+  CLASSIC_TURF: {
+    id: 'CLASSIC_TURF',
+    title: 'Sunlit Botanical Samba-Funk',
+    leadWave: 'triangle',
+    harmonyWave: 'sine',
+    bassWave: 'triangle',
+    leadCutoff: 1450,
+    bassCutoff: 520,
+    chordCutoff: 1280,
+    leadDecay: 0.21,
+    percStyle: 'CLASSIC',
+    melodySectionA: [
+      523.25, 0, 659.25, 0, 783.99, 0, 659.25, 523.25,
+      0, 587.33, 0, 659.25, 523.25, 0, 440.0, 0,
+      523.25, 0, 659.25, 783.99, 880.0, 0, 783.99, 659.25,
+      587.33, 0, 523.25, 0, 440.0, 0, 0, 0,
+    ],
+    melodySectionB: [
+      659.25, 0, 783.99, 0, 880.0, 0, 783.99, 659.25,
+      587.33, 0, 659.25, 0, 783.99, 0, 587.33, 0,
+      523.25, 0, 659.25, 0, 880.0, 0, 783.99, 659.25,
+      587.33, 523.25, 440.0, 0, 523.25, 0, 0, 0,
+    ],
+    melodySectionC: [
+      0, 0, 783.99, 0, 659.25, 0, 523.25, 0,
+      0, 0, 587.33, 0, 523.25, 0, 440.0, 0,
+      0, 0, 880.0, 0, 783.99, 0, 659.25, 0,
+      587.33, 0, 523.25, 0, 440.0, 0, 0, 0,
+    ],
+    melodySectionD: [
+      880.0, 0, 783.99, 659.25, 523.25, 0, 659.25, 0,
+      587.33, 0, 659.25, 783.99, 659.25, 0, 523.25, 0,
+      880.0, 0, 1046.5, 0, 880.0, 783.99, 659.25, 0,
+      587.33, 0, 523.25, 0, 659.25, 0, 0, 0,
+    ],
+    harmonyNotes: [
+      392.0, 0, 523.25, 0, 587.33, 0, 523.25, 392.0,
+      0, 440.0, 0, 523.25, 392.0, 0, 329.63, 0,
+      392.0, 0, 523.25, 587.33, 659.25, 0, 587.33, 523.25,
+      440.0, 0, 392.0, 0, 329.63, 0, 0, 0,
+    ],
+    bassNotesA: [
+      87.31, 0, 87.31, 174.61, 0, 87.31, 130.81, 0,
+      82.41, 0, 82.41, 164.81, 0, 82.41, 123.47, 0,
+      73.42, 0, 73.42, 146.83, 0, 73.42, 110.0, 0,
+      98.0, 0, 98.0, 196.0, 0, 110.0, 123.47, 130.81,
+    ],
+    bassNotesB: [
+      87.31, 0, 130.81, 174.61, 0, 87.31, 0, 130.81,
+      82.41, 0, 123.47, 164.81, 0, 82.41, 0, 123.47,
+      73.42, 0, 110.0, 146.83, 0, 73.42, 0, 110.0,
+      98.0, 0, 146.83, 196.0, 0, 123.47, 130.81, 146.83,
+    ],
+    chordVoicings: [
+      [174.61, 220.0, 261.63, 329.63, 392.0],
+      [164.81, 196.0, 246.94, 293.66, 392.0],
+      [146.83, 220.0, 261.63, 329.63, 392.0],
+      [196.0, 246.94, 293.66, 349.23, 440.0],
+    ],
+    arpNotes: [523.25, 659.25, 783.99, 1046.5, 1318.51, 1046.5, 783.99, 659.25],
+  },
+
+  TURF_AUTUMN: {
+    id: 'TURF_AUTUMN',
+    title: 'Golden Maple Folk-Funk Groove',
+    leadWave: 'sine',
+    harmonyWave: 'triangle',
+    bassWave: 'triangle',
+    leadCutoff: 1320,
+    bassCutoff: 480,
+    chordCutoff: 1120,
+    leadDecay: 0.19,
+    percStyle: 'FOLK_SHUFFLE',
+    // Warm D-Major / B-Minor pentatonic wooden marimba hook
+    melodySectionA: [
+      587.33, 0, 659.25, 739.99, 880.0, 0, 739.99, 587.33,
+      0, 493.88, 587.33, 0, 659.25, 0, 493.88, 0,
+      587.33, 0, 739.99, 880.0, 987.77, 0, 880.0, 739.99,
+      659.25, 0, 587.33, 493.88, 440.0, 0, 0, 0,
+    ],
+    melodySectionB: [
+      739.99, 0, 880.0, 0, 987.77, 880.0, 739.99, 659.25,
+      587.33, 0, 659.25, 739.99, 659.25, 0, 493.88, 0,
+      587.33, 659.25, 739.99, 0, 880.0, 0, 739.99, 587.33,
+      659.25, 587.33, 493.88, 0, 587.33, 0, 0, 0,
+    ],
+    melodySectionC: [
+      0, 587.33, 0, 739.99, 0, 659.25, 493.88, 0,
+      0, 440.0, 0, 587.33, 0, 493.88, 369.99, 0,
+      0, 739.99, 0, 880.0, 0, 739.99, 659.25, 0,
+      587.33, 0, 493.88, 0, 440.0, 0, 0, 0,
+    ],
+    melodySectionD: [
+      987.77, 0, 880.0, 739.99, 587.33, 0, 739.99, 0,
+      659.25, 0, 739.99, 880.0, 739.99, 0, 587.33, 0,
+      987.77, 0, 1174.66, 0, 987.77, 880.0, 739.99, 0,
+      659.25, 0, 587.33, 0, 739.99, 0, 0, 0,
+    ],
+    harmonyNotes: [
+      440.0, 0, 493.88, 587.33, 659.25, 0, 587.33, 440.0,
+      0, 369.99, 440.0, 0, 493.88, 0, 369.99, 0,
+      440.0, 0, 587.33, 659.25, 739.99, 0, 659.25, 587.33,
+      493.88, 0, 440.0, 369.99, 329.63, 0, 0, 0,
+    ],
+    bassNotesA: [
+      73.42, 0, 110.0, 146.83, 0, 110.0, 98.0, 0,
+      61.74, 0, 92.5, 123.47, 0, 92.5, 110.0, 0,
+      82.41, 0, 123.47, 164.81, 0, 123.47, 110.0, 0,
+      110.0, 0, 110.0, 164.81, 0, 123.47, 146.83, 164.81,
+    ],
+    bassNotesB: [
+      73.42, 92.5, 110.0, 146.83, 0, 110.0, 0, 146.83,
+      61.74, 82.41, 92.5, 123.47, 0, 92.5, 0, 123.47,
+      82.41, 98.0, 123.47, 164.81, 0, 123.47, 0, 164.81,
+      110.0, 0, 138.59, 164.81, 0, 146.83, 138.59, 110.0,
+    ],
+    chordVoicings: [
+      [146.83, 185.0, 220.0, 277.18, 329.63], // Dmaj9
+      [123.47, 185.0, 220.0, 293.66, 369.99], // Bm7
+      [164.81, 196.0, 246.94, 293.66, 369.99], // Em9
+      [110.0, 164.81, 196.0, 277.18, 329.63], // A13
+    ],
+    arpNotes: [587.33, 739.99, 880.0, 1174.66, 1479.98, 1174.66, 880.0, 739.99],
+  },
+
+  TURF_SAKURA: {
+    id: 'TURF_SAKURA',
+    title: 'Kyoto Blossom City-Pop & Koto',
+    leadWave: 'triangle',
+    harmonyWave: 'sine',
+    bassWave: 'triangle',
+    leadCutoff: 1950,
+    bassCutoff: 560,
+    chordCutoff: 1420,
+    leadDecay: 0.16,
+    percStyle: 'SAKURA_WOOD',
+    // Japanese Hirajoshi / Gmaj7 City-Pop plucked koto melody (E, F#, G, B, C, D)
+    melodySectionA: [
+      659.25, 739.99, 783.99, 0, 987.77, 0, 783.99, 739.99,
+      659.25, 0, 493.88, 0, 587.33, 659.25, 0, 0,
+      659.25, 739.99, 783.99, 987.77, 1046.5, 0, 987.77, 783.99,
+      739.99, 0, 659.25, 0, 493.88, 0, 0, 0,
+    ],
+    melodySectionB: [
+      987.77, 0, 1046.5, 987.77, 783.99, 0, 739.99, 659.25,
+      587.33, 0, 659.25, 739.99, 783.99, 0, 659.25, 0,
+      783.99, 0, 987.77, 0, 1174.66, 0, 987.77, 783.99,
+      739.99, 659.25, 587.33, 0, 659.25, 0, 0, 0,
+    ],
+    melodySectionC: [
+      0, 0, 987.77, 0, 783.99, 739.99, 659.25, 0,
+      0, 0, 739.99, 0, 659.25, 587.33, 493.88, 0,
+      0, 0, 1046.5, 0, 987.77, 783.99, 739.99, 0,
+      659.25, 0, 587.33, 0, 493.88, 0, 0, 0,
+    ],
+    melodySectionD: [
+      1174.66, 0, 987.77, 783.99, 659.25, 0, 783.99, 987.77,
+      1046.5, 987.77, 783.99, 739.99, 659.25, 0, 493.88, 0,
+      1174.66, 0, 1318.51, 0, 1174.66, 987.77, 783.99, 0,
+      739.99, 0, 659.25, 0, 783.99, 0, 0, 0,
+    ],
+    harmonyNotes: [
+      493.88, 0, 587.33, 0, 659.25, 0, 587.33, 493.88,
+      440.0, 0, 392.0, 0, 440.0, 493.88, 0, 0,
+      493.88, 0, 587.33, 659.25, 783.99, 0, 659.25, 587.33,
+      493.88, 0, 440.0, 0, 392.0, 0, 0, 0,
+    ],
+    bassNotesA: [
+      98.0, 0, 98.0, 196.0, 0, 98.0, 146.83, 0,
+      92.5, 0, 92.5, 185.0, 0, 92.5, 138.59, 0,
+      82.41, 0, 82.41, 164.81, 0, 82.41, 123.47, 0,
+      110.0, 0, 110.0, 220.0, 0, 123.47, 146.83, 164.81,
+    ],
+    bassNotesB: [
+      98.0, 0, 146.83, 196.0, 0, 146.83, 98.0, 0,
+      92.5, 0, 138.59, 185.0, 0, 138.59, 92.5, 0,
+      82.41, 0, 123.47, 164.81, 0, 123.47, 82.41, 0,
+      110.0, 0, 164.81, 220.0, 0, 146.83, 164.81, 185.0,
+    ],
+    chordVoicings: [
+      [196.0, 246.94, 293.66, 369.99, 440.0], // Gmaj9
+      [185.0, 220.0, 277.18, 329.63, 440.0], // F#m7
+      [164.81, 196.0, 246.94, 293.66, 392.0], // Em9
+      [110.0, 164.81, 220.0, 277.18, 329.63], // A9
+    ],
+    arpNotes: [659.25, 739.99, 783.99, 987.77, 1318.51, 987.77, 783.99, 739.99],
+  },
+
+  TURF_CHAMPIONS: {
+    id: 'TURF_CHAMPIONS',
+    title: 'Champions Cathedral Brass Anthem',
+    leadWave: 'sawtooth',
+    harmonyWave: 'triangle',
+    bassWave: 'triangle',
+    leadCutoff: 1580,
+    bassCutoff: 580,
+    chordCutoff: 1380,
+    leadDecay: 0.24,
+    percStyle: 'STADIUM_MARCH',
+    // Uplifting Stadium Brass Fanfare in C Major / A Minor
+    melodySectionA: [
+      523.25, 0, 783.99, 0, 1046.5, 0, 987.77, 783.99,
+      880.0, 0, 659.25, 0, 783.99, 0, 523.25, 0,
+      698.46, 0, 880.0, 1046.5, 1174.66, 0, 1046.5, 880.0,
+      783.99, 0, 659.25, 587.33, 783.99, 0, 0, 0,
+    ],
+    melodySectionB: [
+      1046.5, 0, 987.77, 880.0, 783.99, 0, 659.25, 523.25,
+      698.46, 0, 783.99, 880.0, 783.99, 0, 587.33, 0,
+      1046.5, 0, 1174.66, 1318.51, 1046.5, 0, 880.0, 783.99,
+      880.0, 783.99, 659.25, 587.33, 523.25, 0, 0, 0,
+    ],
+    melodySectionC: [
+      0, 523.25, 659.25, 783.99, 0, 880.0, 783.99, 0,
+      0, 440.0, 523.25, 659.25, 0, 783.99, 659.25, 0,
+      0, 587.33, 698.46, 880.0, 0, 1046.5, 880.0, 0,
+      783.99, 0, 659.25, 0, 587.33, 0, 0, 0,
+    ],
+    melodySectionD: [
+      1046.5, 0, 1318.51, 0, 1174.66, 1046.5, 880.0, 783.99,
+      880.0, 0, 1046.5, 0, 987.77, 880.0, 783.99, 0,
+      1046.5, 0, 1318.51, 1567.98, 1318.51, 1174.66, 1046.5, 0,
+      987.77, 0, 880.0, 783.99, 1046.5, 0, 0, 0,
+    ],
+    harmonyNotes: [
+      392.0, 0, 523.25, 0, 659.25, 0, 587.33, 523.25,
+      523.25, 0, 440.0, 0, 523.25, 0, 392.0, 0,
+      440.0, 0, 587.33, 659.25, 698.46, 0, 659.25, 587.33,
+      523.25, 0, 440.0, 392.0, 523.25, 0, 0, 0,
+    ],
+    bassNotesA: [
+      65.41, 130.81, 65.41, 130.81, 65.41, 130.81, 98.0, 130.81,
+      110.0, 220.0, 110.0, 220.0, 110.0, 220.0, 98.0, 110.0,
+      87.31, 174.61, 87.31, 174.61, 87.31, 174.61, 110.0, 130.81,
+      98.0, 196.0, 98.0, 196.0, 110.0, 123.47, 130.81, 146.83,
+    ],
+    bassNotesB: [
+      65.41, 0, 130.81, 196.0, 65.41, 130.81, 0, 130.81,
+      110.0, 0, 164.81, 220.0, 110.0, 164.81, 0, 164.81,
+      87.31, 0, 130.81, 174.61, 87.31, 130.81, 0, 174.61,
+      98.0, 0, 146.83, 196.0, 110.0, 123.47, 146.83, 196.0,
+    ],
+    chordVoicings: [
+      [130.81, 196.0, 246.94, 293.66, 329.63], // Cmaj9
+      [110.0, 164.81, 196.0, 246.94, 329.63], // Am9
+      [174.61, 220.0, 261.63, 329.63, 392.0], // Fmaj9
+      [196.0, 261.63, 293.66, 349.23, 440.0], // G11
+    ],
+    arpNotes: [523.25, 783.99, 1046.5, 1318.51, 1567.98, 1318.51, 1046.5, 783.99],
+  },
+
+  COSMIC_SPACE: {
+    id: 'COSMIC_SPACE',
+    title: 'Zero-G Galactic Synth Odyssey',
+    leadWave: 'sine',
+    harmonyWave: 'triangle',
+    bassWave: 'sine',
+    leadCutoff: 2150,
+    bassCutoff: 440,
+    chordCutoff: 1650,
+    leadDecay: 0.25,
+    percStyle: 'SPACE_ELECTRO',
+    // Lydian Sci-Fi Starfield Melody (F, G, A, B, C, E)
+    melodySectionA: [
+      659.25, 0, 783.99, 987.77, 0, 880.0, 783.99, 0,
+      587.33, 0, 659.25, 783.99, 0, 493.88, 0, 0,
+      659.25, 0, 987.77, 1174.66, 0, 1046.5, 987.77, 783.99,
+      659.25, 0, 587.33, 493.88, 659.25, 0, 0, 0,
+    ],
+    melodySectionB: [
+      987.77, 0, 1046.5, 0, 1174.66, 987.77, 880.0, 783.99,
+      659.25, 0, 783.99, 0, 987.77, 783.99, 659.25, 0,
+      1046.5, 0, 1174.66, 0, 1318.51, 1174.66, 987.77, 783.99,
+      880.0, 783.99, 659.25, 0, 587.33, 0, 0, 0,
+    ],
+    melodySectionC: [
+      1318.51, 0, 987.77, 0, 783.99, 0, 659.25, 0,
+      1174.66, 0, 880.0, 0, 659.25, 0, 493.88, 0,
+      1318.51, 0, 1046.5, 0, 987.77, 0, 783.99, 0,
+      659.25, 0, 587.33, 0, 493.88, 0, 0, 0,
+    ],
+    melodySectionD: [
+      1174.66, 0, 987.77, 1046.5, 1318.51, 0, 987.77, 783.99,
+      880.0, 0, 987.77, 783.99, 659.25, 0, 587.33, 0,
+      1318.51, 0, 1567.98, 0, 1318.51, 1174.66, 987.77, 0,
+      880.0, 0, 783.99, 0, 659.25, 0, 0, 0,
+    ],
+    harmonyNotes: [
+      493.88, 0, 587.33, 659.25, 0, 587.33, 493.88, 0,
+      392.0, 0, 440.0, 523.25, 0, 392.0, 0, 0,
+      493.88, 0, 659.25, 783.99, 0, 783.99, 659.25, 587.33,
+      493.88, 0, 440.0, 392.0, 493.88, 0, 0, 0,
+    ],
+    bassNotesA: [
+      87.31, 0, 174.61, 0, 87.31, 0, 174.61, 130.81,
+      82.41, 0, 164.81, 0, 82.41, 0, 164.81, 123.47,
+      73.42, 0, 146.83, 0, 73.42, 0, 146.83, 110.0,
+      65.41, 0, 130.81, 0, 98.0, 0, 123.47, 130.81,
+    ],
+    bassNotesB: [
+      87.31, 174.61, 0, 174.61, 87.31, 0, 130.81, 174.61,
+      82.41, 164.81, 0, 164.81, 82.41, 0, 123.47, 164.81,
+      73.42, 146.83, 0, 146.83, 73.42, 0, 110.0, 146.83,
+      65.41, 130.81, 0, 130.81, 98.0, 110.0, 123.47, 146.83,
+    ],
+    chordVoicings: [
+      [174.61, 246.94, 261.63, 329.63, 392.0], // Fmaj7#11
+      [164.81, 196.0, 246.94, 293.66, 392.0], // Em7
+      [146.83, 207.65, 220.0, 277.18, 329.63], // Dmaj7#11
+      [130.81, 196.0, 246.94, 293.66, 392.0], // Cmaj9
+    ],
+    arpNotes: [659.25, 987.77, 1174.66, 1318.51, 1567.98, 1318.51, 1174.66, 987.77],
+  },
+
+  URBAN_CONCRETE: {
+    id: 'URBAN_CONCRETE',
+    title: 'Rooftop Block-Party Boom-Bap Funk',
+    leadWave: 'square',
+    harmonyWave: 'triangle',
+    bassWave: 'triangle',
+    leadCutoff: 1180,
+    bassCutoff: 490,
+    chordCutoff: 1050,
+    leadDecay: 0.17,
+    percStyle: 'BOOM_BAP',
+    // G-Dorian Street Funk Clavinet Riff (G, Bb, C, D, E, F)
+    melodySectionA: [
+      392.0, 0, 466.16, 523.25, 587.33, 0, 523.25, 466.16,
+      392.0, 0, 0, 349.23, 392.0, 0, 466.16, 0,
+      392.0, 0, 466.16, 523.25, 659.25, 587.33, 523.25, 466.16,
+      587.33, 0, 523.25, 466.16, 392.0, 0, 0, 0,
+    ],
+    melodySectionB: [
+      587.33, 0, 698.46, 587.33, 523.25, 0, 466.16, 392.0,
+      466.16, 0, 523.25, 587.33, 523.25, 0, 392.0, 0,
+      587.33, 0, 698.46, 783.99, 698.46, 587.33, 523.25, 466.16,
+      523.25, 466.16, 392.0, 349.23, 392.0, 0, 0, 0,
+    ],
+    melodySectionC: [
+      0, 392.0, 0, 466.16, 523.25, 0, 392.0, 0,
+      0, 349.23, 0, 466.16, 523.25, 0, 349.23, 0,
+      0, 392.0, 0, 587.33, 659.25, 0, 587.33, 0,
+      523.25, 0, 466.16, 0, 392.0, 0, 0, 0,
+    ],
+    melodySectionD: [
+      783.99, 0, 698.46, 587.33, 523.25, 466.16, 392.0, 0,
+      466.16, 523.25, 587.33, 0, 659.25, 587.33, 523.25, 0,
+      783.99, 0, 932.33, 783.99, 698.46, 587.33, 523.25, 0,
+      466.16, 0, 392.0, 349.23, 392.0, 0, 0, 0,
+    ],
+    harmonyNotes: [
+      293.66, 0, 349.23, 392.0, 440.0, 0, 392.0, 349.23,
+      293.66, 0, 0, 261.63, 293.66, 0, 349.23, 0,
+      293.66, 0, 349.23, 392.0, 493.88, 440.0, 392.0, 349.23,
+      440.0, 0, 392.0, 349.23, 293.66, 0, 0, 0,
+    ],
+    bassNotesA: [
+      98.0, 0, 98.0, 0, 116.54, 130.81, 146.83, 0,
+      65.41, 0, 65.41, 0, 98.0, 116.54, 130.81, 0,
+      77.78, 0, 77.78, 0, 116.54, 146.83, 155.56, 0,
+      73.42, 0, 73.42, 146.83, 0, 116.54, 98.0, 87.31,
+    ],
+    bassNotesB: [
+      98.0, 98.0, 0, 146.83, 0, 130.81, 116.54, 98.0,
+      65.41, 65.41, 0, 130.81, 0, 116.54, 98.0, 65.41,
+      77.78, 77.78, 0, 155.56, 0, 146.83, 116.54, 77.78,
+      73.42, 0, 110.0, 146.83, 0, 130.81, 116.54, 98.0,
+    ],
+    chordVoicings: [
+      [196.0, 233.08, 293.66, 349.23, 440.0], // Gm9
+      [130.81, 196.0, 233.08, 293.66, 329.63], // C9
+      [155.56, 196.0, 233.08, 293.66, 349.23], // Ebmaj9
+      [146.83, 185.0, 233.08, 261.63, 349.23], // D7#9
+    ],
+    arpNotes: [392.0, 466.16, 587.33, 698.46, 783.99, 698.46, 587.33, 466.16],
+  },
+
+  RIO_CLAY: {
+    id: 'RIO_CLAY',
+    title: 'Copacabana Beach Batucada & Steel Drum',
+    leadWave: 'triangle',
+    harmonyWave: 'sine',
+    bassWave: 'triangle',
+    leadCutoff: 1750,
+    bassCutoff: 540,
+    chordCutoff: 1360,
+    leadDecay: 0.18,
+    percStyle: 'SAMBA_AGOGO',
+    // Sunny Brazilian A6/9 Samba-Batucada Hook (A, B, C#, E, F#, G#)
+    melodySectionA: [
+      440.0, 554.37, 659.25, 0, 739.99, 659.25, 554.37, 0,
+      493.88, 554.37, 659.25, 0, 554.37, 493.88, 440.0, 0,
+      440.0, 554.37, 659.25, 739.99, 880.0, 0, 739.99, 659.25,
+      554.37, 0, 493.88, 440.0, 554.37, 0, 0, 0,
+    ],
+    melodySectionB: [
+      659.25, 0, 739.99, 880.0, 0, 739.99, 659.25, 554.37,
+      493.88, 0, 554.37, 659.25, 0, 554.37, 493.88, 0,
+      659.25, 739.99, 880.0, 0, 987.77, 880.0, 739.99, 659.25,
+      554.37, 493.88, 440.0, 0, 440.0, 0, 0, 0,
+    ],
+    melodySectionC: [
+      0, 659.25, 0, 554.37, 440.0, 0, 554.37, 0,
+      0, 554.37, 0, 493.88, 369.99, 0, 493.88, 0,
+      0, 739.99, 0, 659.25, 554.37, 0, 659.25, 0,
+      493.88, 0, 440.0, 0, 369.99, 0, 0, 0,
+    ],
+    melodySectionD: [
+      880.0, 0, 739.99, 659.25, 554.37, 0, 659.25, 739.99,
+      880.0, 739.99, 659.25, 554.37, 493.88, 0, 440.0, 0,
+      880.0, 0, 1108.73, 987.77, 880.0, 739.99, 659.25, 0,
+      554.37, 0, 493.88, 440.0, 659.25, 0, 0, 0,
+    ],
+    harmonyNotes: [
+      329.63, 440.0, 554.37, 0, 554.37, 493.88, 440.0, 0,
+      369.99, 440.0, 493.88, 0, 440.0, 369.99, 329.63, 0,
+      329.63, 440.0, 554.37, 587.33, 659.25, 0, 587.33, 554.37,
+      440.0, 0, 369.99, 329.63, 440.0, 0, 0, 0,
+    ],
+    // Partido-Alto Syncopated Samba Bass
+    bassNotesA: [
+      110.0, 0, 0, 164.81, 110.0, 0, 164.81, 0,
+      92.5, 0, 0, 138.59, 92.5, 0, 138.59, 0,
+      123.47, 0, 0, 185.0, 123.47, 0, 185.0, 0,
+      82.41, 0, 123.47, 164.81, 82.41, 92.5, 98.0, 103.83,
+    ],
+    bassNotesB: [
+      110.0, 0, 164.81, 220.0, 0, 164.81, 110.0, 0,
+      92.5, 0, 138.59, 185.0, 0, 138.59, 92.5, 0,
+      123.47, 0, 185.0, 246.94, 0, 185.0, 123.47, 0,
+      82.41, 0, 123.47, 164.81, 0, 110.0, 123.47, 138.59,
+    ],
+    chordVoicings: [
+      [110.0, 164.81, 220.0, 277.18, 369.99], // A6/9
+      [185.0, 220.0, 277.18, 329.63, 415.3], // F#m9
+      [123.47, 185.0, 220.0, 277.18, 369.99], // Bm9
+      [164.81, 207.65, 246.94, 293.66, 369.99], // E13
+    ],
+    arpNotes: [554.37, 659.25, 739.99, 880.0, 1108.73, 880.0, 739.99, 659.25],
+  },
+
+  TWILIGHT_SYNTH: {
+    id: 'TWILIGHT_SYNTH',
+    title: 'Cyber-Metropolis Outrun Synthwave',
+    leadWave: 'sawtooth',
+    harmonyWave: 'triangle',
+    bassWave: 'sawtooth',
+    leadCutoff: 1820,
+    bassCutoff: 620,
+    chordCutoff: 1450,
+    leadDecay: 0.22,
+    percStyle: 'SYNTHWAVE',
+    // A-Minor Outrun Synthwave Lead Hook (A, B, C, D, E, G)
+    melodySectionA: [
+      440.0, 0, 523.25, 659.25, 587.33, 0, 523.25, 493.88,
+      440.0, 0, 392.0, 0, 440.0, 523.25, 659.25, 0,
+      440.0, 0, 523.25, 659.25, 783.99, 0, 659.25, 587.33,
+      523.25, 0, 493.88, 440.0, 392.0, 0, 0, 0,
+    ],
+    melodySectionB: [
+      659.25, 0, 783.99, 880.0, 783.99, 659.25, 587.33, 523.25,
+      493.88, 0, 523.25, 587.33, 659.25, 0, 440.0, 0,
+      659.25, 0, 783.99, 880.0, 1046.5, 0, 880.0, 783.99,
+      659.25, 587.33, 523.25, 493.88, 440.0, 0, 0, 0,
+    ],
+    melodySectionC: [
+      880.0, 659.25, 523.25, 440.0, 880.0, 659.25, 523.25, 440.0,
+      783.99, 587.33, 493.88, 392.0, 783.99, 587.33, 493.88, 392.0,
+      698.46, 523.25, 440.0, 349.23, 698.46, 523.25, 440.0, 349.23,
+      659.25, 0, 587.33, 0, 493.88, 0, 0, 0,
+    ],
+    melodySectionD: [
+      880.0, 0, 1046.5, 880.0, 783.99, 0, 659.25, 523.25,
+      587.33, 0, 659.25, 783.99, 659.25, 0, 440.0, 0,
+      880.0, 0, 1046.5, 1318.51, 1174.66, 1046.5, 880.0, 0,
+      783.99, 0, 659.25, 587.33, 440.0, 0, 0, 0,
+    ],
+    harmonyNotes: [
+      329.63, 0, 392.0, 440.0, 392.0, 0, 349.23, 329.63,
+      293.66, 0, 261.63, 0, 329.63, 392.0, 440.0, 0,
+      329.63, 0, 392.0, 440.0, 523.25, 0, 440.0, 392.0,
+      349.23, 0, 329.63, 293.66, 261.63, 0, 0, 0,
+    ],
+    // Rolling 16th-note Synthwave Octave Bassline
+    bassNotesA: [
+      110.0, 220.0, 110.0, 220.0, 110.0, 220.0, 110.0, 220.0,
+      87.31, 174.61, 87.31, 174.61, 87.31, 174.61, 87.31, 174.61,
+      65.41, 130.81, 65.41, 130.81, 65.41, 130.81, 65.41, 130.81,
+      82.41, 164.81, 82.41, 164.81, 98.0, 196.0, 110.0, 123.47,
+    ],
+    bassNotesB: [
+      110.0, 110.0, 220.0, 110.0, 110.0, 220.0, 164.81, 220.0,
+      87.31, 87.31, 174.61, 87.31, 87.31, 174.61, 130.81, 174.61,
+      65.41, 65.41, 130.81, 65.41, 65.41, 130.81, 98.0, 130.81,
+      82.41, 82.41, 164.81, 82.41, 98.0, 110.0, 123.47, 164.81,
+    ],
+    chordVoicings: [
+      [110.0, 164.81, 196.0, 246.94, 329.63], // Am9
+      [87.31, 174.61, 220.0, 261.63, 329.63], // Fmaj7
+      [130.81, 196.0, 246.94, 293.66, 329.63], // Cmaj9
+      [82.41, 164.81, 220.0, 246.94, 329.63], // E7sus4
+    ],
+    arpNotes: [440.0, 523.25, 659.25, 880.0, 1046.5, 880.0, 659.25, 523.25],
+  },
+
+  ARCTIC_ICE: {
+    id: 'ARCTIC_ICE',
+    title: 'Glacier Frost Aurora Chimes',
+    leadWave: 'sine',
+    harmonyWave: 'triangle',
+    bassWave: 'triangle',
+    leadCutoff: 2450,
+    bassCutoff: 460,
+    chordCutoff: 1750,
+    leadDecay: 0.22,
+    percStyle: 'ICE_CHIME',
+    // Sparkling Eb-Major9 / C-Minor9 Crystalline Glockenspiel Melody (Eb, F, G, Bb, C, D)
+    melodySectionA: [
+      622.25, 0, 783.99, 932.33, 1046.5, 0, 932.33, 783.99,
+      698.46, 0, 783.99, 0, 622.25, 0, 587.33, 0,
+      622.25, 0, 783.99, 932.33, 1174.66, 0, 1046.5, 932.33,
+      783.99, 0, 698.46, 622.25, 587.33, 0, 0, 0,
+    ],
+    melodySectionB: [
+      932.33, 0, 1046.5, 1174.66, 1244.51, 0, 1174.66, 932.33,
+      783.99, 0, 932.33, 1046.5, 932.33, 0, 698.46, 0,
+      932.33, 1046.5, 1174.66, 0, 1244.51, 1174.66, 932.33, 783.99,
+      698.46, 622.25, 587.33, 0, 622.25, 0, 0, 0,
+    ],
+    melodySectionC: [
+      1244.51, 0, 932.33, 0, 783.99, 0, 622.25, 0,
+      1174.66, 0, 932.33, 0, 698.46, 0, 587.33, 0,
+      1244.51, 0, 1046.5, 0, 932.33, 0, 783.99, 0,
+      698.46, 0, 622.25, 0, 587.33, 0, 0, 0,
+    ],
+    melodySectionD: [
+      1244.51, 0, 1174.66, 932.33, 783.99, 0, 932.33, 1046.5,
+      1174.66, 0, 932.33, 783.99, 698.46, 0, 622.25, 0,
+      1244.51, 0, 1567.98, 0, 1244.51, 1174.66, 932.33, 0,
+      783.99, 0, 698.46, 622.25, 783.99, 0, 0, 0,
+    ],
+    harmonyNotes: [
+      466.16, 0, 587.33, 622.25, 783.99, 0, 622.25, 587.33,
+      523.25, 0, 587.33, 0, 466.16, 0, 440.0, 0,
+      466.16, 0, 587.33, 622.25, 932.33, 0, 783.99, 622.25,
+      587.33, 0, 523.25, 466.16, 440.0, 0, 0, 0,
+    ],
+    bassNotesA: [
+      77.78, 0, 116.54, 155.56, 0, 116.54, 155.56, 0,
+      65.41, 0, 98.0, 130.81, 0, 98.0, 130.81, 0,
+      103.83, 0, 155.56, 207.65, 0, 155.56, 207.65, 0,
+      116.54, 0, 116.54, 174.61, 0, 130.81, 146.83, 155.56,
+    ],
+    bassNotesB: [
+      77.78, 0, 155.56, 0, 116.54, 155.56, 0, 116.54,
+      65.41, 0, 130.81, 0, 98.0, 130.81, 0, 98.0,
+      103.83, 0, 207.65, 0, 155.56, 207.65, 0, 155.56,
+      116.54, 0, 174.61, 233.08, 0, 174.61, 146.83, 116.54,
+    ],
+    chordVoicings: [
+      [155.56, 196.0, 233.08, 293.66, 349.23], // Ebmaj9
+      [130.81, 196.0, 233.08, 293.66, 392.0], // Cm9
+      [207.65, 261.63, 311.13, 392.0, 466.16], // Abmaj9
+      [116.54, 174.61, 220.0, 261.63, 349.23], // Bb13
+    ],
+    arpNotes: [622.25, 783.99, 932.33, 1174.66, 1567.98, 1174.66, 932.33, 783.99],
+  },
+
+  VOLCANO_FORGE: {
+    id: 'VOLCANO_FORGE',
+    title: 'Magma Caldera Phrygian Forge Brass',
+    leadWave: 'sawtooth',
+    harmonyWave: 'square',
+    bassWave: 'sawtooth',
+    leadCutoff: 1420,
+    bassCutoff: 540,
+    chordCutoff: 1180,
+    leadDecay: 0.2,
+    percStyle: 'FORGE_ANVIL',
+    // E Phrygian-Dominant Boss Groove (E, F, G#, A, B, C, D)
+    melodySectionA: [
+      329.63, 349.23, 415.3, 0, 440.0, 415.3, 349.23, 329.63,
+      0, 293.66, 329.63, 349.23, 329.63, 0, 246.94, 0,
+      329.63, 349.23, 415.3, 440.0, 493.88, 0, 440.0, 415.3,
+      349.23, 0, 329.63, 293.66, 329.63, 0, 0, 0,
+    ],
+    melodySectionB: [
+      493.88, 0, 523.25, 493.88, 440.0, 415.3, 349.23, 329.63,
+      349.23, 0, 415.3, 440.0, 493.88, 0, 329.63, 0,
+      493.88, 0, 587.33, 523.25, 493.88, 440.0, 415.3, 349.23,
+      415.3, 349.23, 329.63, 293.66, 329.63, 0, 0, 0,
+    ],
+    melodySectionC: [
+      0, 329.63, 349.23, 0, 415.3, 0, 329.63, 0,
+      0, 349.23, 440.0, 0, 523.25, 0, 349.23, 0,
+      0, 293.66, 349.23, 0, 440.0, 0, 293.66, 0,
+      246.94, 0, 293.66, 0, 329.63, 0, 0, 0,
+    ],
+    melodySectionD: [
+      659.25, 0, 587.33, 523.25, 493.88, 440.0, 415.3, 349.23,
+      415.3, 440.0, 493.88, 0, 415.3, 349.23, 329.63, 0,
+      659.25, 0, 698.46, 659.25, 587.33, 523.25, 493.88, 415.3,
+      440.0, 415.3, 349.23, 329.63, 329.63, 0, 0, 0,
+    ],
+    harmonyNotes: [
+      246.94, 261.63, 329.63, 0, 349.23, 329.63, 261.63, 246.94,
+      0, 220.0, 246.94, 261.63, 246.94, 0, 196.0, 0,
+      246.94, 261.63, 329.63, 349.23, 392.0, 0, 349.23, 329.63,
+      261.63, 0, 246.94, 220.0, 246.94, 0, 0, 0,
+    ],
+    bassNotesA: [
+      82.41, 82.41, 164.81, 82.41, 0, 82.41, 87.31, 82.41,
+      87.31, 87.31, 174.61, 87.31, 0, 87.31, 98.0, 87.31,
+      73.42, 73.42, 146.83, 73.42, 0, 73.42, 87.31, 73.42,
+      61.74, 61.74, 123.47, 61.74, 73.42, 82.41, 87.31, 98.0,
+    ],
+    bassNotesB: [
+      82.41, 0, 82.41, 164.81, 87.31, 0, 82.41, 164.81,
+      87.31, 0, 87.31, 174.61, 98.0, 0, 87.31, 174.61,
+      73.42, 0, 73.42, 146.83, 87.31, 0, 73.42, 146.83,
+      61.74, 0, 92.5, 123.47, 87.31, 82.41, 73.42, 61.74,
+    ],
+    chordVoicings: [
+      [164.81, 207.65, 246.94, 293.66, 349.23], // E7(b9)
+      [174.61, 220.0, 261.63, 329.63, 415.3], // FmMaj7 / Fmaj7#5
+      [146.83, 220.0, 261.63, 293.66, 349.23], // Dm7
+      [123.47, 185.0, 246.94, 293.66, 349.23], // B7(#9)
+    ],
+    arpNotes: [329.63, 349.23, 415.3, 493.88, 659.25, 493.88, 415.3, 349.23],
+  },
+};
+
+export function getStadiumMusicProfile(themeId: PitchThemeId): StadiumMusicProfile {
+  return STADIUM_MUSIC_PROFILES[themeId] || STADIUM_MUSIC_PROFILES.CLASSIC_TURF;
 }
 
 export class IndieSoundEngine {
@@ -23,75 +684,12 @@ export class IndieSoundEngine {
   stepIndex = 0;
   musicTimer: ReturnType<typeof setInterval> | null = null;
   toneReady = false;
+  currentPitchTheme: PitchThemeId = 'CLASSIC_TURF';
   getGameState: () => string;
   getFlowCombo: () => number;
+  getPitchTheme: () => PitchThemeId;
 
   lastStepTime = 0;
-
-  // Warm, infectious pentatonic marimba/synth hook with musical breathing room (0 = rest)
-  melodySectionA = [
-    523.25, 0, 659.25, 0, 783.99, 0, 659.25, 523.25,
-    0, 587.33, 0, 659.25, 523.25, 0, 440.0, 0,
-    523.25, 0, 659.25, 783.99, 880.0, 0, 783.99, 659.25,
-    587.33, 0, 523.25, 0, 440.0, 0, 0, 0,
-  ];
-
-  // Section B: Uplifting call-and-response phrase
-  melodySectionB = [
-    659.25, 0, 783.99, 0, 880.0, 0, 783.99, 659.25,
-    587.33, 0, 659.25, 0, 783.99, 0, 587.33, 0,
-    523.25, 0, 659.25, 0, 880.0, 0, 783.99, 659.25,
-    587.33, 523.25, 440.0, 0, 523.25, 0, 0, 0,
-  ];
-
-  // Section C: Deep Rhodes & Bass Pocket Breakdown (sparse airy bells)
-  melodySectionC = [
-    0, 0, 783.99, 0, 659.25, 0, 523.25, 0,
-    0, 0, 587.33, 0, 523.25, 0, 440.0, 0,
-    0, 0, 880.0, 0, 783.99, 0, 659.25, 0,
-    587.33, 0, 523.25, 0, 440.0, 0, 0, 0,
-  ];
-
-  // Section D: Warm Octave Hook
-  melodySectionD = [
-    880.0, 0, 783.99, 659.25, 523.25, 0, 659.25, 0,
-    587.33, 0, 659.25, 783.99, 659.25, 0, 523.25, 0,
-    880.0, 0, 1046.5, 0, 880.0, 783.99, 659.25, 0,
-    587.33, 0, 523.25, 0, 659.25, 0, 0, 0,
-  ];
-
-  // Soft 3rd/6th Counter-Harmony
-  harmonyNotes = [
-    392.0, 0, 523.25, 0, 587.33, 0, 523.25, 392.0,
-    0, 440.0, 0, 523.25, 392.0, 0, 329.63, 0,
-    392.0, 0, 523.25, 587.33, 659.25, 0, 587.33, 523.25,
-    440.0, 0, 392.0, 0, 329.63, 0, 0, 0,
-  ];
-
-  // Syncopated Nu-Disco / French-Touch Sub Bassline (0 = rest for pocket groove)
-  bassNotesA = [
-    87.31, 0, 87.31, 174.61, 0, 87.31, 130.81, 0,   // Fmaj9
-    82.41, 0, 82.41, 164.81, 0, 82.41, 123.47, 0,   // Em7
-    73.42, 0, 73.42, 146.83, 0, 73.42, 110.0, 0,    // Dm9
-    98.0,  0, 98.0,  196.0,  0, 110.0, 123.47, 130.81, // G13 turnaround
-  ];
-  bassNotesB = [
-    87.31, 0, 130.81, 174.61, 0, 87.31, 0, 130.81,
-    82.41, 0, 123.47, 164.81, 0, 82.41, 0, 123.47,
-    73.42, 0, 110.0,  146.83, 0, 73.42, 0, 110.0,
-    98.0,  0, 146.83, 196.0,  0, 123.47, 130.81, 146.83,
-  ];
-
-  // Lush Warm Rhodes Electric Piano Voicings (Fmaj9 -> Em7 -> Dm9 -> G13)
-  chordVoicings = [
-    [174.61, 220.0, 261.63, 329.63, 392.0], // Fmaj9
-    [164.81, 196.0, 246.94, 293.66, 392.0], // Em7
-    [146.83, 220.0, 261.63, 329.63, 392.0], // Dm9
-    [196.0,  246.94, 293.66, 349.23, 440.0], // G13
-  ];
-
-  // Super-Flow Gentle Bell Shimmer Notes
-  arpNotes = [523.25, 659.25, 783.99, 1046.5, 1318.51, 1046.5, 783.99, 659.25];
 
   private iosUnlocked = false;
   private htmlAudioUnlockEl: HTMLAudioElement | null = null;
@@ -99,10 +697,20 @@ export class IndieSoundEngine {
 
   constructor(
     getGameState: () => string = () => 'PLAYING',
-    getFlowCombo: () => number = () => 0
+    getFlowCombo: () => number = () => 0,
+    getPitchTheme: () => PitchThemeId = () => 'CLASSIC_TURF'
   ) {
     this.getGameState = getGameState;
     this.getFlowCombo = getFlowCombo;
+    this.getPitchTheme = getPitchTheme;
+  }
+
+  setPitchTheme(themeId: PitchThemeId) {
+    if (this.currentPitchTheme !== themeId) {
+      this.currentPitchTheme = themeId;
+      // Align step to start of bar so stadium theme switches feel immediately musical
+      this.stepIndex = 0;
+    }
   }
 
   private getSilentWavUrl(): string {
@@ -142,7 +750,6 @@ export class IndieSoundEngine {
 
   init() {
     try {
-      // Configure iOS 16.4+ WebKit AudioSession to 'playback' so sound plays even if iPhone physical Silent Switch is on
       const navWithAudioSession = navigator as Navigator & {
         audioSession?: { type: string };
       };
@@ -203,11 +810,6 @@ export class IndieSoundEngine {
     }
   }
 
-  /**
-   * Explicitly unlocks iOS Safari / Chrome WebKit & Android audio within a direct user gesture.
-   * Plays a silent AudioBuffer + micro-oscillator + silent HTMLAudioElement WAV so iOS promotes WebAudio
-   * to the active media playback channel (bypassing the hardware silent switch).
-   */
   unlock() {
     try {
       const navWithAudioSession = navigator as Navigator & {
@@ -330,6 +932,7 @@ export class IndieSoundEngine {
       isPlaying?: boolean;
       isSuperFlow?: boolean;
       flowCombo: number;
+      pitchTheme?: PitchThemeId;
     }
   ) {
     if (stateGetter) {
@@ -339,6 +942,7 @@ export class IndieSoundEngine {
         return s.isPlaying ? 'PLAYING' : 'MENU';
       };
       this.getFlowCombo = () => stateGetter().flowCombo;
+      this.getPitchTheme = () => stateGetter().pitchTheme || this.currentPitchTheme;
     }
     this.init();
     if (this.isPlayingMusic) return;
@@ -354,6 +958,9 @@ export class IndieSoundEngine {
       if (st === 'PAUSED') {
         this.updateCrowdAmbience(0, false);
         return;
+      }
+      if (this.getPitchTheme) {
+        this.currentPitchTheme = this.getPitchTheme();
       }
       this.playMusicStep(st);
     }, 125); // 120 BPM 16th-note pocket
@@ -392,16 +999,29 @@ export class IndieSoundEngine {
       currentState === 'MENU' ||
       currentState === 'SPLASH' ||
       currentState === 'MATCH_OVER';
+
+    const profile = isMenuGroove
+      ? STADIUM_MUSIC_PROFILES.CLASSIC_TURF
+      : getStadiumMusicProfile(this.currentPitchTheme);
+
     const superFlow = !isMenuGroove && this.getFlowCombo() >= 3;
     const volScale = isMenuGroove ? 0.62 : 0.85;
 
-    // 1. Warm Round Kick Drum (Four-on-the-floor + subtle syncopation)
-    if (barStep % 4 === 0 || (!isMenuGroove && barStep === 14 && section % 2 === 1)) {
+    // 1. Stadium-Specific Kick Drum & Percussion Groove
+    const isBoomBapKick = profile.percStyle === 'BOOM_BAP' && (barStep === 0 || barStep === 7 || barStep === 10);
+    const isSambaKick = profile.percStyle === 'SAMBA_AGOGO' && (barStep % 4 === 0 || barStep % 4 === 3);
+    const isStandardKick =
+      profile.percStyle !== 'BOOM_BAP' &&
+      profile.percStyle !== 'SAMBA_AGOGO' &&
+      (barStep % 4 === 0 || (!isMenuGroove && barStep === 14 && section % 2 === 1));
+
+    if (isBoomBapKick || isSambaKick || isStandardKick) {
       const kick = this.ctx.createOscillator();
       const g = this.ctx.createGain();
       kick.type = 'sine';
-      kick.frequency.setValueAtTime(132, now);
-      kick.frequency.exponentialRampToValueAtTime(42, now + 0.11);
+      const startFreq = profile.percStyle === 'VOLCANO_FORGE' || profile.percStyle === 'FORGE_ANVIL' ? 148 : 132;
+      kick.frequency.setValueAtTime(startFreq, now);
+      kick.frequency.exponentialRampToValueAtTime(40, now + 0.11);
       g.gain.setValueAtTime(0.0001, now);
       g.gain.linearRampToValueAtTime(0.18 * volScale, now + 0.006);
       g.gain.exponentialRampToValueAtTime(0.0001, now + 0.13);
@@ -411,10 +1031,10 @@ export class IndieSoundEngine {
       kick.stop(now + 0.14);
     }
 
-    // 2. Lush Rhodes Electric Piano Chords (Smooth attack, warm lowpass, zero clicks)
+    // 2. Stadium-Specific Chords / Pads
     if (barStep === 0 || barStep === 6 || (!isMenuGroove && barStep === 12)) {
-      const chordIdx = Math.floor(cycleStep / 16) % this.chordVoicings.length;
-      const chord = this.chordVoicings[chordIdx];
+      const chordIdx = Math.floor(cycleStep / 16) % profile.chordVoicings.length;
+      const chord = profile.chordVoicings[chordIdx];
       const holdDur = barStep === 0 ? 0.52 : 0.28;
       const peakGain = (barStep === 0 ? 0.022 : 0.015) * volScale;
 
@@ -425,7 +1045,7 @@ export class IndieSoundEngine {
         const cGain = this.ctx.createGain();
         cOsc.type = idx === 0 ? 'sine' : 'triangle';
         cFilter.type = 'lowpass';
-        cFilter.frequency.setValueAtTime(isMenuGroove ? 820 : 1280, now);
+        cFilter.frequency.setValueAtTime(isMenuGroove ? 820 : profile.chordCutoff, now);
         cFilter.frequency.exponentialRampToValueAtTime(480, now + holdDur);
         cOsc.frequency.setValueAtTime(freq, now);
         cGain.gain.setValueAtTime(0.0001, now);
@@ -439,20 +1059,21 @@ export class IndieSoundEngine {
       });
     }
 
-    // 3. Deep Sub-Funk Bassline (Warm filtered triangle with pocket rests)
-    const activeBassPool = section >= 2 ? this.bassNotesB : this.bassNotesA;
+    // 3. Stadium-Specific Bassline
+    const activeBassPool = section >= 2 ? profile.bassNotesB : profile.bassNotesA;
     const bassFreq = activeBassPool[step % activeBassPool.length];
     if (bassFreq > 0) {
       const osc = this.ctx.createOscillator();
       const filter = this.ctx.createBiquadFilter();
       const g = this.ctx.createGain();
-      osc.type = 'triangle';
+      osc.type = isMenuGroove ? 'triangle' : profile.bassWave;
       filter.type = 'lowpass';
-      filter.frequency.setValueAtTime(isMenuGroove ? 340 : 520, now);
-      filter.frequency.exponentialRampToValueAtTime(160, now + 0.16);
+      filter.frequency.setValueAtTime(isMenuGroove ? 340 : profile.bassCutoff, now);
+      filter.frequency.exponentialRampToValueAtTime(155, now + 0.16);
       osc.frequency.setValueAtTime(bassFreq, now);
+      const bassGain = profile.bassWave === 'sawtooth' ? 0.085 : 0.12;
       g.gain.setValueAtTime(0.0001, now);
-      g.gain.linearRampToValueAtTime(0.12 * volScale, now + 0.01);
+      g.gain.linearRampToValueAtTime(bassGain * volScale, now + 0.01);
       g.gain.exponentialRampToValueAtTime(0.0001, now + 0.17);
       osc.connect(filter);
       filter.connect(g);
@@ -461,68 +1082,129 @@ export class IndieSoundEngine {
       osc.stop(now + 0.185);
     }
 
-    // 4. Silky Brushed Hat & Warm Rim-Snare
-    if (barStep % 2 === 0) {
-      this.playNoiseBurst(0.022, 7200, (barStep % 4 === 2 ? 0.028 : 0.015) * volScale, 2.4);
+    // 4. Stadium-Specific Hi-Hats, Snares & Signature Auxiliary Percussion
+    if (barStep % 2 === 0 || (profile.percStyle === 'FOLK_SHUFFLE' && barStep % 4 === 3)) {
+      const hatFreq = profile.percStyle === 'ICE_CHIME' ? 9200 : profile.percStyle === 'SPACE_ELECTRO' ? 8400 : 7200;
+      this.playNoiseBurst(0.022, hatFreq, (barStep % 4 === 2 ? 0.028 : 0.015) * volScale, 2.4);
     }
-    if (barStep % 8 === 4) {
-      this.playNoiseBurst(0.065, 1950, (isMenuGroove ? 0.04 : 0.075) * volScale, 1.5);
+    if (barStep % 8 === 4 || (profile.percStyle === 'STADIUM_MARCH' && (barStep === 12 || barStep === 14))) {
+      const snareDur = profile.percStyle === 'SYNTHWAVE' ? 0.095 : 0.065;
+      const snareFreq = profile.percStyle === 'BOOM_BAP' ? 1550 : 1950;
+      this.playNoiseBurst(snareDur, snareFreq, (isMenuGroove ? 0.04 : 0.075) * volScale, 1.5);
     }
 
-    // 5. Rounded Marimba / Bell-Synth Lead Melody (Smooth sine+triangle, never harsh)
+    // Signature Stadium Percussion Accents (Agogo Bell / Kyoto Woodblock / Volcano Anvil / Ice Chime)
+    if (!isMenuGroove) {
+      if (profile.percStyle === 'SAMBA_AGOGO' && (barStep === 2 || barStep === 5 || barStep === 11 || barStep === 14)) {
+        const agogo = this.ctx.createOscillator();
+        const agG = this.ctx.createGain();
+        agogo.type = 'triangle';
+        agogo.frequency.setValueAtTime(barStep < 8 ? 880 : 1108.73, now);
+        agG.gain.setValueAtTime(0.0001, now);
+        agG.gain.linearRampToValueAtTime(0.024, now + 0.004);
+        agG.gain.exponentialRampToValueAtTime(0.0001, now + 0.065);
+        agogo.connect(agG);
+        agG.connect(this.master);
+        agogo.start(now);
+        agogo.stop(now + 0.07);
+      } else if (profile.percStyle === 'SAKURA_WOOD' && (barStep === 3 || barStep === 11)) {
+        const wood = this.ctx.createOscillator();
+        const wG = this.ctx.createGain();
+        wood.type = 'sine';
+        wood.frequency.setValueAtTime(barStep === 3 ? 987.77 : 783.99, now);
+        wG.gain.setValueAtTime(0.0001, now);
+        wG.gain.linearRampToValueAtTime(0.022, now + 0.003);
+        wG.gain.exponentialRampToValueAtTime(0.0001, now + 0.048);
+        wood.connect(wG);
+        wG.connect(this.master);
+        wood.start(now);
+        wood.stop(now + 0.055);
+      } else if (profile.percStyle === 'FORGE_ANVIL' && barStep === 12) {
+        const anvil = this.ctx.createOscillator();
+        const aG = this.ctx.createGain();
+        anvil.type = 'square';
+        anvil.frequency.setValueAtTime(1318.51, now);
+        anvil.frequency.exponentialRampToValueAtTime(987.77, now + 0.07);
+        aG.gain.setValueAtTime(0.0001, now);
+        aG.gain.linearRampToValueAtTime(0.02, now + 0.004);
+        aG.gain.exponentialRampToValueAtTime(0.0001, now + 0.085);
+        anvil.connect(aG);
+        aG.connect(this.master);
+        anvil.start(now);
+        anvil.stop(now + 0.09);
+      }
+    }
+
+    // 5. Stadium-Specific Lead Melody & Counter-Harmony
     const activeMelody =
       section === 0
-        ? this.melodySectionA
+        ? profile.melodySectionA
         : section === 1
-          ? this.melodySectionB
+          ? profile.melodySectionB
           : section === 2
-            ? this.melodySectionC
-            : this.melodySectionD;
+            ? profile.melodySectionC
+            : profile.melodySectionD;
     const noteFreq = activeMelody[step];
     if (noteFreq > 0 && (!isMenuGroove || step % 4 === 0)) {
       const osc = this.ctx.createOscillator();
       const filter = this.ctx.createBiquadFilter();
       const g = this.ctx.createGain();
-      osc.type = 'triangle';
+      osc.type = isMenuGroove ? 'triangle' : profile.leadWave;
       filter.type = 'lowpass';
-      filter.frequency.setValueAtTime(isMenuGroove ? 980 : superFlow ? 1850 : 1450, now);
-      filter.frequency.exponentialRampToValueAtTime(620, now + 0.2);
+      const leadCutoff = isMenuGroove
+        ? 980
+        : superFlow
+          ? profile.leadCutoff * 1.25
+          : profile.leadCutoff;
+      filter.frequency.setValueAtTime(leadCutoff, now);
+      filter.frequency.exponentialRampToValueAtTime(580, now + profile.leadDecay);
       osc.frequency.setValueAtTime(isMenuGroove ? noteFreq * 0.5 : noteFreq, now);
-      const leadPeak = isMenuGroove ? 0.026 : 0.044;
+      const rawPeak = profile.leadWave === 'sawtooth' || profile.leadWave === 'square' ? 0.032 : 0.044;
+      const leadPeak = isMenuGroove ? 0.026 : rawPeak;
       g.gain.setValueAtTime(0.0001, now);
-      g.gain.linearRampToValueAtTime(leadPeak, now + 0.012);
-      g.gain.exponentialRampToValueAtTime(0.0001, now + 0.21);
+      g.gain.linearRampToValueAtTime(leadPeak, now + 0.011);
+      g.gain.exponentialRampToValueAtTime(0.0001, now + profile.leadDecay);
       osc.connect(filter);
       filter.connect(g);
       g.connect(this.master);
       osc.start(now);
-      osc.stop(now + 0.225);
+      osc.stop(now + profile.leadDecay + 0.02);
 
-      const harmFreq = this.harmonyNotes[step];
+      const harmFreq = profile.harmonyNotes[step];
       if (!isMenuGroove && (section === 1 || section === 3 || superFlow) && harmFreq > 0) {
         const hOsc = this.ctx.createOscillator();
+        const hFilter = this.ctx.createBiquadFilter();
         const hG = this.ctx.createGain();
-        hOsc.type = 'sine';
+        hOsc.type = profile.harmonyWave;
+        hFilter.type = 'lowpass';
+        hFilter.frequency.setValueAtTime(1200, now);
         hOsc.frequency.setValueAtTime(harmFreq, now);
+        const harmPeak = profile.harmonyWave === 'square' ? 0.014 : 0.022;
         hG.gain.setValueAtTime(0.0001, now);
-        hG.gain.linearRampToValueAtTime(0.024, now + 0.012);
+        hG.gain.linearRampToValueAtTime(harmPeak, now + 0.012);
         hG.gain.exponentialRampToValueAtTime(0.0001, now + 0.18);
-        hOsc.connect(hG);
+        hOsc.connect(hFilter);
+        hFilter.connect(hG);
         hG.connect(this.master);
         hOsc.start(now);
         hOsc.stop(now + 0.195);
       }
     }
 
-    // 6. Super-Flow Gentle Bell Shimmer
-    if (superFlow && barStep % 2 === 0) {
-      const arpFreq = this.arpNotes[this.stepIndex % this.arpNotes.length];
+    // 6. Super-Flow Gentle Bell Shimmer (or Cosmic / Ice ambient arpeggio)
+    const ambientArpActive =
+      superFlow ||
+      (!isMenuGroove &&
+        (this.currentPitchTheme === 'COSMIC_SPACE' || this.currentPitchTheme === 'ARCTIC_ICE') &&
+        barStep % 4 === 2);
+    if (ambientArpActive && barStep % 2 === 0) {
+      const arpFreq = profile.arpNotes[this.stepIndex % profile.arpNotes.length];
       const arpOsc = this.ctx.createOscillator();
       const arpG = this.ctx.createGain();
       arpOsc.type = 'sine';
       arpOsc.frequency.setValueAtTime(arpFreq, now);
       arpG.gain.setValueAtTime(0.0001, now);
-      arpG.gain.linearRampToValueAtTime(0.018, now + 0.008);
+      arpG.gain.linearRampToValueAtTime(superFlow ? 0.018 : 0.012, now + 0.008);
       arpG.gain.exponentialRampToValueAtTime(0.0001, now + 0.09);
       arpOsc.connect(arpG);
       arpG.connect(this.master);

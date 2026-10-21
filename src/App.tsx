@@ -34,10 +34,12 @@ import {
   getUserRankInfo,
   getNextRankInfo,
   computeRankProgressSummary,
+  buildGoalCelebrationMessage,
   RANK_TIERS,
+  type GoalCelebrationSpec,
 } from './game/rules';
 import { GRAPHICS_CONFIG, PITCH_THEMES, applyPitchTheme, type PitchThemeId } from './game/graphicsConfig';
-import { IndieSoundEngine } from './game/soundEngine';
+import { IndieSoundEngine, getStadiumMusicProfile } from './game/soundEngine';
 import {
   snapPx,
   fillPxRect,
@@ -86,13 +88,467 @@ export default function App() {
 
     const sound = new IndieSoundEngine();
 
-    // Offscreen static 16-bit pixel stadium apron, bleachers, meadow flowers, turf & chalk line cache
+    // Offscreen static 16-bit pixel stadium complex, park trees, stone concourse, floodlight towers, bleachers, turf & chalk line cache
     // Eliminates hundreds of per-frame fillRect calls for locked 60-144Hz butter-smooth performance
-    const CACHE_PAD = 380;
+    const CACHE_PAD_X = 860;
+    const CACHE_PAD_Y = 540;
     const pitchCacheCanvas = document.createElement('canvas');
-    pitchCacheCanvas.width = PITCH.width + CACHE_PAD * 2;
-    pitchCacheCanvas.height = PITCH.height + CACHE_PAD * 2;
+    pitchCacheCanvas.width = PITCH.width + CACHE_PAD_X * 2;
+    pitchCacheCanvas.height = PITCH.height + CACHE_PAD_Y * 2;
     const pitchCacheCtx = pitchCacheCanvas.getContext('2d');
+
+    function drawPixelTree(
+      cCtx: CanvasRenderingContext2D,
+      tx: number,
+      ty: number,
+      scale = 1,
+      variant = 0,
+      px = 3
+    ) {
+      const s = Math.max(1, Math.round(scale));
+      const p = px * s;
+      const outline = GRAPHICS_CONFIG.palette.outline;
+      const darkLeaf = variant % 2 === 0 ? '#15803d' : '#0f766e';
+      const midLeaf = variant % 2 === 0 ? '#22c55e' : '#14b8a6';
+      const lightLeaf = variant % 2 === 0 ? '#86efac' : '#5eead4';
+
+      // Ground drop shadow
+      cCtx.fillStyle = 'rgba(15, 23, 42, 0.22)';
+      cCtx.fillRect(Math.round(tx - p * 5), Math.round(ty + p * 4), p * 10, p * 3);
+
+      // Tree trunk
+      fillPxRect(cCtx, tx - p * 2, ty + p * 1, p * 4, p * 5, outline, px);
+      fillPxRect(cCtx, tx - p * 1, ty + p * 1, p * 2, p * 4, '#78350f', px);
+
+      // Outer dark pixel outline of canopy
+      fillPxRect(cCtx, tx - p * 5, ty - p * 4, p * 10, p * 6, outline, px);
+      fillPxRect(cCtx, tx - p * 4, ty - p * 6, p * 8, p * 8, outline, px);
+      fillPxRect(cCtx, tx - p * 3, ty - p * 7, p * 6, p * 3, outline, px);
+
+      // Shadow foliage layer
+      fillPxRect(cCtx, tx - p * 4, ty - p * 3, p * 8, p * 4, darkLeaf, px);
+      // Mid foliage layer
+      fillPxRect(cCtx, tx - p * 4, ty - p * 5, p * 8, p * 4, midLeaf, px);
+      fillPxRect(cCtx, tx - p * 3, ty - p * 6, p * 6, p * 3, midLeaf, px);
+      // Sunlit top crown highlights
+      fillPxRect(cCtx, tx - p * 2, ty - p * 6, p * 4, p * 2, lightLeaf, px);
+      fillPxRect(cCtx, tx - p * 3, ty - p * 4, p * 3, p * 2, lightLeaf, px);
+    }
+
+    function drawCornerFloodlightTower(
+      cCtx: CanvasRenderingContext2D,
+      fx: number,
+      fy: number,
+      dirX: number,
+      dirY: number,
+      px = 3
+    ) {
+      const outline = GRAPHICS_CONFIG.palette.outline;
+      // Soft radial stadium light glow pool toward pitch corner
+      const grad = cCtx.createRadialGradient(
+        fx + dirX * 45,
+        fy + dirY * 45,
+        8,
+        fx + dirX * 95,
+        fy + dirY * 95,
+        220
+      );
+      grad.addColorStop(0, 'rgba(254, 240, 138, 0.34)');
+      grad.addColorStop(0.55, 'rgba(254, 249, 195, 0.14)');
+      grad.addColorStop(1, 'rgba(254, 249, 195, 0)');
+      cCtx.fillStyle = grad;
+      cCtx.beginPath();
+      cCtx.arc(fx + dirX * 85, fy + dirY * 85, 220, 0, Math.PI * 2);
+      cCtx.fill();
+
+      // Tower shadow
+      cCtx.fillStyle = 'rgba(15, 23, 42, 0.26)';
+      cCtx.fillRect(fx - 26, fy + 24, 56, 16);
+
+      // Concrete foundation & steel pylon base
+      fillPxRect(cCtx, fx - 28, fy - 28, 56, 56, outline, px);
+      fillPxRect(cCtx, fx - 24, fy - 24, 48, 48, '#475569', px);
+      fillPxRect(cCtx, fx - 18, fy - 18, 36, 36, '#64748b', px);
+
+      // Angled Halide Lamp Bank Hood
+      const bankX = fx + dirX * 8;
+      const bankY = fy + dirY * 8;
+      fillPxRect(cCtx, bankX - 22, bankY - 16, 44, 32, outline, px);
+      fillPxRect(cCtx, bankX - 18, bankY - 12, 36, 24, '#1e293b', px);
+
+      // 6 Glowing Pixel Halide Bulbs
+      for (let bx = -12; bx <= 8; bx += 10) {
+        for (let by = -7; by <= 3; by += 10) {
+          fillPxRect(cCtx, bankX + bx, bankY + by, 6, 6, '#fde047', px);
+          fillPxRect(cCtx, bankX + bx + 1, bankY + by + 1, 3, 3, '#ffffff', px);
+        }
+      }
+    }
+
+    function drawAutumnMapleTree(
+      cCtx: CanvasRenderingContext2D,
+      tx: number,
+      ty: number,
+      scale = 2,
+      variant = 0,
+      px = 3
+    ) {
+      const s = Math.max(1, Math.round(scale));
+      const p = px * s;
+      const outline = GRAPHICS_CONFIG.palette.outline;
+      const palettes = [
+        { dark: '#9a3412', mid: '#ea580c', light: '#fde047' }, // Fiery Orange-Gold Maple
+        { dark: '#991b1b', mid: '#dc2626', light: '#fca5a5' }, // Crimson Red Maple
+        { dark: '#b45309', mid: '#f59e0b', light: '#fef08a' }, // Golden Ginkgo
+      ];
+      const pal = palettes[variant % palettes.length];
+
+      cCtx.fillStyle = 'rgba(15, 23, 42, 0.24)';
+      cCtx.fillRect(Math.round(tx - p * 5), Math.round(ty + p * 4), p * 10, p * 3);
+
+      fillPxRect(cCtx, tx - p * 2, ty + p * 1, p * 4, p * 5, outline, px);
+      fillPxRect(cCtx, tx - p * 1, ty + p * 1, p * 2, p * 4, '#5c280a', px);
+
+      fillPxRect(cCtx, tx - p * 5, ty - p * 4, p * 10, p * 6, outline, px);
+      fillPxRect(cCtx, tx - p * 4, ty - p * 6, p * 8, p * 8, outline, px);
+      fillPxRect(cCtx, tx - p * 3, ty - p * 7, p * 6, p * 3, outline, px);
+
+      fillPxRect(cCtx, tx - p * 4, ty - p * 3, p * 8, p * 4, pal.dark, px);
+      fillPxRect(cCtx, tx - p * 4, ty - p * 5, p * 8, p * 4, pal.mid, px);
+      fillPxRect(cCtx, tx - p * 3, ty - p * 6, p * 6, p * 3, pal.mid, px);
+      fillPxRect(cCtx, tx - p * 2, ty - p * 6, p * 4, p * 2, pal.light, px);
+      fillPxRect(cCtx, tx - p * 3, ty - p * 4, p * 3, p * 2, pal.light, px);
+    }
+
+    function drawSakuraBlossomTree(
+      cCtx: CanvasRenderingContext2D,
+      tx: number,
+      ty: number,
+      scale = 2,
+      variant = 0,
+      px = 3
+    ) {
+      const s = Math.max(1, Math.round(scale));
+      const p = px * s;
+      const outline = GRAPHICS_CONFIG.palette.outline;
+      const darkPink = variant % 2 === 0 ? '#db2777' : '#e11d48';
+      const midPink = variant % 2 === 0 ? '#f472b6' : '#fb7185';
+      const lightPink = variant % 2 === 0 ? '#fce7f3' : '#ffe4e6';
+
+      cCtx.fillStyle = 'rgba(15, 23, 42, 0.22)';
+      cCtx.fillRect(Math.round(tx - p * 5), Math.round(ty + p * 4), p * 10, p * 3);
+
+      fillPxRect(cCtx, tx - p * 2, ty + p * 1, p * 4, p * 5, outline, px);
+      fillPxRect(cCtx, tx - p * 1, ty + p * 1, p * 2, p * 4, '#4a1d1f', px);
+
+      fillPxRect(cCtx, tx - p * 5, ty - p * 4, p * 10, p * 6, outline, px);
+      fillPxRect(cCtx, tx - p * 4, ty - p * 6, p * 8, p * 8, outline, px);
+      fillPxRect(cCtx, tx - p * 3, ty - p * 7, p * 6, p * 3, outline, px);
+
+      fillPxRect(cCtx, tx - p * 4, ty - p * 3, p * 8, p * 4, darkPink, px);
+      fillPxRect(cCtx, tx - p * 4, ty - p * 5, p * 8, p * 4, midPink, px);
+      fillPxRect(cCtx, tx - p * 3, ty - p * 6, p * 6, p * 3, midPink, px);
+      fillPxRect(cCtx, tx - p * 2, ty - p * 6, p * 4, p * 2, lightPink, px);
+      fillPxRect(cCtx, tx - p * 3, ty - p * 4, p * 3, p * 2, lightPink, px);
+    }
+
+    let selectedPitchTheme: PitchThemeId = 'CLASSIC_TURF';
+    let preferredArenaMode: 'RANDOM' | PitchThemeId = 'RANDOM';
+    const urlPitchParam =
+      typeof window !== 'undefined'
+        ? (new URLSearchParams(window.location.search).get('pitch') || '').toUpperCase()
+        : '';
+    if (urlPitchParam === 'SPACE' || urlPitchParam === 'COSMIC_SPACE') {
+      preferredArenaMode = 'COSMIC_SPACE';
+      selectedPitchTheme = 'COSMIC_SPACE';
+    } else if (urlPitchParam === 'STREET' || urlPitchParam === 'URBAN_CONCRETE') {
+      preferredArenaMode = 'URBAN_CONCRETE';
+      selectedPitchTheme = 'URBAN_CONCRETE';
+    } else if (urlPitchParam === 'CLAY' || urlPitchParam === 'BEACH' || urlPitchParam === 'RIO_CLAY') {
+      preferredArenaMode = 'RIO_CLAY';
+      selectedPitchTheme = 'RIO_CLAY';
+    } else if (urlPitchParam === 'SYNTH' || urlPitchParam === 'NIGHT' || urlPitchParam === 'TWILIGHT_SYNTH') {
+      preferredArenaMode = 'TWILIGHT_SYNTH';
+      selectedPitchTheme = 'TWILIGHT_SYNTH';
+    } else if (urlPitchParam === 'ICE' || urlPitchParam === 'SNOW' || urlPitchParam === 'ARCTIC_ICE') {
+      preferredArenaMode = 'ARCTIC_ICE';
+      selectedPitchTheme = 'ARCTIC_ICE';
+    } else if (urlPitchParam === 'VOLCANO' || urlPitchParam === 'LAVA' || urlPitchParam === 'VOLCANO_FORGE') {
+      preferredArenaMode = 'VOLCANO_FORGE';
+      selectedPitchTheme = 'VOLCANO_FORGE';
+    } else if (urlPitchParam === 'AUTUMN' || urlPitchParam === 'TURF_AUTUMN') {
+      preferredArenaMode = 'TURF_AUTUMN';
+      selectedPitchTheme = 'TURF_AUTUMN';
+    } else if (urlPitchParam === 'SAKURA' || urlPitchParam === 'TURF_SAKURA') {
+      preferredArenaMode = 'TURF_SAKURA';
+      selectedPitchTheme = 'TURF_SAKURA';
+    } else if (urlPitchParam === 'CHAMPIONS' || urlPitchParam === 'TURF_CHAMPIONS') {
+      preferredArenaMode = 'TURF_CHAMPIONS';
+      selectedPitchTheme = 'TURF_CHAMPIONS';
+    } else if (urlPitchParam === 'TURF' || urlPitchParam === 'CLASSIC_TURF') {
+      preferredArenaMode = 'CLASSIC_TURF';
+      selectedPitchTheme = 'CLASSIC_TURF';
+    } else {
+      const initialRandom = PITCH_THEMES[Math.floor(Math.random() * PITCH_THEMES.length)];
+      selectedPitchTheme = initialRandom.id;
+    }
+    applyPitchTheme(selectedPitchTheme);
+    sound.setPitchTheme(selectedPitchTheme);
+
+    function drawRingedPlanet(
+      cCtx: CanvasRenderingContext2D,
+      cx: number,
+      cy: number,
+      r: number,
+      px = 3
+    ) {
+      const outline = GRAPHICS_CONFIG.palette.outline;
+      const glow = cCtx.createRadialGradient(cx, cy, r * 0.4, cx, cy, r * 2.2);
+      glow.addColorStop(0, 'rgba(192, 132, 252, 0.36)');
+      glow.addColorStop(0.55, 'rgba(56, 189, 248, 0.16)');
+      glow.addColorStop(1, 'rgba(15, 23, 42, 0)');
+      cCtx.fillStyle = glow;
+      cCtx.beginPath();
+      cCtx.arc(cx, cy, r * 2.2, 0, Math.PI * 2);
+      cCtx.fill();
+
+      cCtx.save();
+      cCtx.translate(cx, cy);
+      cCtx.rotate(-0.34);
+      for (let a = Math.PI; a <= Math.PI * 2; a += 0.045) {
+        const rx = Math.cos(a) * (r * 1.95);
+        const ry = Math.sin(a) * (r * 0.56);
+        fillPxRect(cCtx, rx - 4, ry - 4, 10, 8, outline, px);
+        fillPxRect(cCtx, rx - 3, ry - 3, 8, 6, '#38bdf8', px);
+        const rxInner = Math.cos(a) * (r * 1.56);
+        const ryInner = Math.sin(a) * (r * 0.44);
+        fillPxRect(cCtx, rxInner - 3, ryInner - 3, 6, 6, '#fde047', px);
+      }
+      cCtx.restore();
+
+      cCtx.save();
+      cCtx.beginPath();
+      cCtx.arc(cx, cy, r + 4, 0, Math.PI * 2);
+      cCtx.fillStyle = outline;
+      cCtx.fill();
+
+      cCtx.beginPath();
+      cCtx.arc(cx, cy, r, 0, Math.PI * 2);
+      cCtx.clip();
+
+      cCtx.fillStyle = '#7c3aed';
+      cCtx.fillRect(cx - r, cy - r, r * 2, r * 2);
+      fillPxRect(cCtx, cx - r, cy - r * 0.65, r * 2, r * 0.26, '#a855f7', px);
+      fillPxRect(cCtx, cx - r, cy - r * 0.22, r * 2, r * 0.28, '#ec4899', px);
+      fillPxRect(cCtx, cx - r, cy + r * 0.16, r * 2, r * 0.24, '#6366f1', px);
+      fillPxRect(cCtx, cx - r, cy + r * 0.52, r * 2, r * 0.25, '#4338ca', px);
+      cCtx.fillStyle = 'rgba(254, 240, 138, 0.28)';
+      cCtx.beginPath();
+      cCtx.arc(cx - r * 0.28, cy - r * 0.28, r * 0.72, 0, Math.PI * 2);
+      cCtx.fill();
+      cCtx.restore();
+
+      cCtx.save();
+      cCtx.translate(cx, cy);
+      cCtx.rotate(-0.34);
+      for (let a = 0; a <= Math.PI; a += 0.045) {
+        const rx = Math.cos(a) * (r * 1.95);
+        const ry = Math.sin(a) * (r * 0.56);
+        fillPxRect(cCtx, rx - 4, ry - 4, 10, 8, outline, px);
+        fillPxRect(cCtx, rx - 3, ry - 3, 8, 6, '#38bdf8', px);
+        const rxInner = Math.cos(a) * (r * 1.56);
+        const ryInner = Math.sin(a) * (r * 0.44);
+        fillPxRect(cCtx, rxInner - 3, ryInner - 3, 6, 6, '#fde047', px);
+      }
+      cCtx.restore();
+    }
+
+    function drawPixelUfo(
+      cCtx: CanvasRenderingContext2D,
+      ux: number,
+      uy: number,
+      tick: number,
+      px = 3
+    ) {
+      const outline = GRAPHICS_CONFIG.palette.outline;
+      const beamPulse = 0.22 + 0.1 * Math.sin(tick * 0.09);
+      cCtx.save();
+      const beamGrad = cCtx.createLinearGradient(ux, uy + 10, ux, uy + 115);
+      beamGrad.addColorStop(0, `rgba(52, 211, 153, ${beamPulse + 0.18})`);
+      beamGrad.addColorStop(0.6, `rgba(56, 189, 248, ${beamPulse})`);
+      beamGrad.addColorStop(1, 'rgba(56, 189, 248, 0)');
+      cCtx.fillStyle = beamGrad;
+      cCtx.beginPath();
+      cCtx.moveTo(ux - 14, uy + 10);
+      cCtx.lineTo(ux + 14, uy + 10);
+      cCtx.lineTo(ux + 48, uy + 112);
+      cCtx.lineTo(ux - 48, uy + 112);
+      cCtx.closePath();
+      cCtx.fill();
+      cCtx.restore();
+
+      fillPxRect(cCtx, ux - 20, uy - 24, 40, 18, outline, px);
+      fillPxRect(cCtx, ux - 16, uy - 20, 32, 14, '#38bdf8', px);
+      fillPxRect(cCtx, ux - 10, uy - 17, 12, 6, '#e0f2fe', px);
+      fillPxRect(cCtx, ux - 4, uy - 15, 8, 8, '#4ade80', px);
+      fillPxRect(cCtx, ux - 3, uy - 13, 2, 2, outline, px);
+      fillPxRect(cCtx, ux + 1, uy - 13, 2, 2, outline, px);
+
+      fillPxRect(cCtx, ux - 42, uy - 8, 84, 18, outline, px);
+      fillPxRect(cCtx, ux - 38, uy - 5, 76, 12, '#94a3b8', px);
+      fillPxRect(cCtx, ux - 32, uy - 8, 64, 6, '#e2e8f0', px);
+      fillPxRect(cCtx, ux - 22, uy + 7, 44, 6, outline, px);
+      fillPxRect(cCtx, ux - 18, uy + 7, 36, 4, '#475569', px);
+
+      const rimColors = ['#fde047', '#38bdf8', '#f43f5e', '#4ade80'];
+      const activeIdx = Math.floor(tick * 0.15) % 4;
+      for (let i = 0; i < 5; i++) {
+        const lx = ux - 28 + i * 14;
+        const col = rimColors[(i + activeIdx) % rimColors.length];
+        fillPxRect(cCtx, lx - 3, uy - 1, 6, 5, col, px);
+      }
+    }
+
+    function drawPixelPalmTree(
+      cCtx: CanvasRenderingContext2D,
+      tx: number,
+      ty: number,
+      px = 3
+    ) {
+      const outline = GRAPHICS_CONFIG.palette.outline;
+      cCtx.fillStyle = 'rgba(180, 83, 9, 0.22)';
+      cCtx.fillRect(tx - 24, ty + 14, 48, 14);
+
+      fillPxRect(cCtx, tx - 7, ty - 6, 14, 24, outline, px);
+      fillPxRect(cCtx, tx - 5, ty - 4, 10, 20, '#92400e', px);
+      fillPxRect(cCtx, tx - 9, ty - 22, 14, 18, outline, px);
+      fillPxRect(cCtx, tx - 7, ty - 20, 10, 14, '#b45309', px);
+
+      fillPxRect(cCtx, tx - 9, ty - 24, 7, 7, '#451a03', px);
+      fillPxRect(cCtx, tx + 2, ty - 24, 7, 7, '#451a03', px);
+
+      const fronds = [
+        { dx: -28, dy: -28, w: 24, h: 10, c: '#16a34a' },
+        { dx: 4, dy: -28, w: 24, h: 10, c: '#16a34a' },
+        { dx: -34, dy: -18, w: 26, h: 9, c: '#22c55e' },
+        { dx: 8, dy: -18, w: 26, h: 9, c: '#22c55e' },
+        { dx: -12, dy: -40, w: 24, h: 14, c: '#4ade80' },
+      ];
+      for (const fr of fronds) {
+        fillPxRect(cCtx, tx + fr.dx - 2, ty + fr.dy - 2, fr.w + 4, fr.h + 4, outline, px);
+        fillPxRect(cCtx, tx + fr.dx, ty + fr.dy, fr.w, fr.h, fr.c, px);
+      }
+    }
+
+    function drawSnowPineTree(
+      cCtx: CanvasRenderingContext2D,
+      tx: number,
+      ty: number,
+      px = 3
+    ) {
+      const outline = GRAPHICS_CONFIG.palette.outline;
+      cCtx.fillStyle = 'rgba(15, 23, 42, 0.25)';
+      cCtx.fillRect(tx - 22, ty + 10, 44, 14);
+      // Trunk
+      fillPxRect(cCtx, tx - 6, ty + 2, 12, 16, outline, px);
+      fillPxRect(cCtx, tx - 4, ty + 4, 8, 12, '#78350f', px);
+      // Bottom pine tier + snow cap
+      fillPxRect(cCtx, tx - 24, ty - 14, 48, 20, outline, px);
+      fillPxRect(cCtx, tx - 21, ty - 11, 42, 14, '#0f766e', px);
+      fillPxRect(cCtx, tx - 18, ty - 11, 36, 6, '#f8fafc', px);
+      // Middle pine tier + snow cap
+      fillPxRect(cCtx, tx - 18, ty - 28, 36, 18, outline, px);
+      fillPxRect(cCtx, tx - 15, ty - 25, 30, 12, '#14b8a6', px);
+      fillPxRect(cCtx, tx - 12, ty - 25, 24, 6, '#ffffff', px);
+      // Top pine peak + snow cap
+      fillPxRect(cCtx, tx - 12, ty - 40, 24, 16, outline, px);
+      fillPxRect(cCtx, tx - 9, ty - 37, 18, 10, '#2dd4bf', px);
+      fillPxRect(cCtx, tx - 6, ty - 37, 12, 6, '#ffffff', px);
+    }
+
+    function drawBeachUmbrella(
+      cCtx: CanvasRenderingContext2D,
+      ux: number,
+      uy: number,
+      primaryCol: string,
+      secondaryCol: string,
+      px = 3
+    ) {
+      const outline = GRAPHICS_CONFIG.palette.outline;
+      fillPxRect(cCtx, ux - 18, uy + 6, 36, 18, outline, px);
+      fillPxRect(cCtx, ux - 16, uy + 8, 32, 14, primaryCol, px);
+      fillPxRect(cCtx, ux - 16, uy + 13, 32, 4, '#ffffff', px);
+
+      cCtx.fillStyle = 'rgba(180, 83, 9, 0.25)';
+      cCtx.fillRect(ux - 22, uy - 12, 44, 24);
+
+      fillPxRect(cCtx, ux - 22, uy - 22, 44, 28, outline, px);
+      fillPxRect(cCtx, ux - 19, uy - 19, 38, 22, primaryCol, px);
+      fillPxRect(cCtx, ux - 7, uy - 19, 14, 22, secondaryCol, px);
+      fillPxRect(cCtx, ux - 3, uy - 11, 6, 6, '#fde047', px);
+    }
+
+    function drawParkFountain(
+      cCtx: CanvasRenderingContext2D,
+      fx: number,
+      fy: number,
+      r: number,
+      px = 3
+    ) {
+      const outline = GRAPHICS_CONFIG.palette.outline;
+      fillPxRect(cCtx, fx - r - 4, fy - r - 4, (r + 4) * 2, (r + 4) * 2, outline, px);
+      fillPxRect(cCtx, fx - r, fy - r, r * 2, r * 2, '#cbd5e1', px);
+      fillPxRect(cCtx, fx - r + 6, fy - r + 6, (r - 6) * 2, (r - 6) * 2, '#0284c7', px);
+      fillPxRect(cCtx, fx - r + 10, fy - r + 10, (r - 10) * 2, (r - 10) * 2, '#38bdf8', px);
+      fillPxRect(cCtx, fx - 12, fy - 12, 24, 24, outline, px);
+      fillPxRect(cCtx, fx - 9, fy - 9, 18, 18, '#e2e8f0', px);
+      fillPxRect(cCtx, fx - 5, fy - 5, 10, 10, '#bae6fd', px);
+    }
+
+    function drawStreetCar(
+      cCtx: CanvasRenderingContext2D,
+      cx: number,
+      cy: number,
+      dirX: number,
+      bodyCol: string,
+      px = 3,
+      isPolice = false,
+      tick = 0
+    ) {
+      const outline = GRAPHICS_CONFIG.palette.outline;
+      cCtx.save();
+      const beamX = cx + dirX * 28;
+      const grad = cCtx.createLinearGradient(beamX, cy, beamX + dirX * 95, cy);
+      grad.addColorStop(0, 'rgba(254, 240, 138, 0.42)');
+      grad.addColorStop(1, 'rgba(254, 240, 138, 0)');
+      cCtx.fillStyle = grad;
+      cCtx.beginPath();
+      cCtx.moveTo(beamX, cy - 12);
+      cCtx.lineTo(beamX + dirX * 95, cy - 34);
+      cCtx.lineTo(beamX + dirX * 95, cy + 34);
+      cCtx.lineTo(beamX, cy + 12);
+      cCtx.closePath();
+      cCtx.fill();
+      cCtx.restore();
+
+      fillPxRect(cCtx, cx - 22, cy - 17, 12, 34, outline, px);
+      fillPxRect(cCtx, cx + 10, cy - 17, 12, 34, outline, px);
+      fillPxRect(cCtx, cx - 28, cy - 14, 56, 28, outline, px);
+      fillPxRect(cCtx, cx - 25, cy - 11, 50, 22, bodyCol, px);
+      fillPxRect(cCtx, cx - 14, cy - 9, 28, 18, '#0f172a', px);
+      fillPxRect(cCtx, cx - 8, cy - 8, 16, 16, '#e2e8f0', px);
+      if (isPolice) {
+        const flashRed = Math.floor(tick * 0.25) % 2 === 0;
+        fillPxRect(cCtx, cx - 4, cy - 7, 8, 7, flashRed ? '#ef4444' : '#3b82f6', px);
+        fillPxRect(cCtx, cx - 4, cy, 8, 7, flashRed ? '#3b82f6' : '#ef4444', px);
+      }
+      const frontX = dirX > 0 ? cx + 22 : cx - 26;
+      const rearX = dirX > 0 ? cx - 26 : cx + 22;
+      fillPxRect(cCtx, frontX, cy - 9, 4, 5, '#fef08a', px);
+      fillPxRect(cCtx, frontX, cy + 4, 4, 5, '#fef08a', px);
+      fillPxRect(cCtx, rearX, cy - 9, 4, 5, '#f43f5e', px);
+      fillPxRect(cCtx, rearX, cy + 4, 4, 5, '#f43f5e', px);
+    }
 
     function rebuildStaticPitchCache() {
       if (!pitchCacheCtx) return;
@@ -102,64 +558,734 @@ export default function App() {
       const c = PITCH.cornerChamfer;
       const boxTop = (h - PITCH.boxHeight) / 2;
       const px = GRAPHICS_CONFIG.pixelPipeline.pixelSize;
+      const outline = GRAPHICS_CONFIG.palette.outline;
 
       pitchCacheCtx.clearRect(0, 0, pitchCacheCanvas.width, pitchCacheCanvas.height);
       pitchCacheCtx.save();
-      pitchCacheCtx.translate(CACHE_PAD, CACHE_PAD);
+      pitchCacheCtx.translate(CACHE_PAD_X, CACHE_PAD_Y);
 
-      // 1. Sunny Pastel Coastal Park Apron & Perimeter Track
-      pitchCacheCtx.fillStyle = GRAPHICS_CONFIG.palette.apron.base;
-      pitchCacheCtx.fillRect(-CACHE_PAD, -CACHE_PAD, w + CACHE_PAD * 2, h + CACHE_PAD * 2);
+      if (selectedPitchTheme === 'COSMIC_SPACE') {
+        // === 1. COSMIC SPACE ORBITAL ARENA BACKGROUND ===
+        pitchCacheCtx.fillStyle = '#060818';
+        pitchCacheCtx.fillRect(-CACHE_PAD_X, -CACHE_PAD_Y, w + CACHE_PAD_X * 2, h + CACHE_PAD_Y * 2);
 
-      // Subtle checkerboard pixel clusters on outer meadow
-      pitchCacheCtx.fillStyle = GRAPHICS_CONFIG.palette.apron.dither;
-      for (let mx = -320; mx < w + 320; mx += 120) {
-        for (let my = -280; my < h + 280; my += 120) {
-          if (mx > -60 && mx < w + 60 && my > -60 && my < h + 60) continue;
-          fillPxRect(pitchCacheCtx, mx, my, px * 4, px * 2, GRAPHICS_CONFIG.palette.apron.dither, px);
-          fillPxRect(pitchCacheCtx, mx + px * 2, my - px * 2, px * 2, px * 2, GRAPHICS_CONFIG.palette.apron.dither, px);
+        const bandW = 160;
+        pitchCacheCtx.fillStyle = '#0a0e29';
+        for (let bx = -CACHE_PAD_X; bx < w + CACHE_PAD_X; bx += bandW * 2) {
+          pitchCacheCtx.fillRect(bx, -CACHE_PAD_Y, bandW, h + CACHE_PAD_Y * 2);
+        }
+
+        const nebulas = [
+          { x: 180, y: -115, r: 340, c1: 'rgba(139, 92, 246, 0.36)', c2: 'rgba(217, 70, 239, 0.16)' },
+          { x: w - 180, y: h + 115, r: 360, c1: 'rgba(56, 189, 248, 0.32)', c2: 'rgba(99, 102, 241, 0.15)' },
+          { x: -135, y: h * 0.5, r: 310, c1: 'rgba(236, 72, 153, 0.28)', c2: 'rgba(124, 58, 237, 0.12)' },
+          { x: w + 135, y: h * 0.35, r: 330, c1: 'rgba(45, 212, 191, 0.28)', c2: 'rgba(56, 189, 248, 0.12)' },
+        ];
+        for (const neb of nebulas) {
+          const nGrad = pitchCacheCtx.createRadialGradient(neb.x, neb.y, 20, neb.x, neb.y, neb.r);
+          nGrad.addColorStop(0, neb.c1);
+          nGrad.addColorStop(0.55, neb.c2);
+          nGrad.addColorStop(1, 'rgba(6, 8, 24, 0)');
+          pitchCacheCtx.fillStyle = nGrad;
+          pitchCacheCtx.beginPath();
+          pitchCacheCtx.arc(neb.x, neb.y, neb.r, 0, Math.PI * 2);
+          pitchCacheCtx.fill();
+        }
+
+        const starColors = ['#ffffff', '#e0f2fe', '#fef08a', '#f5d0fe', '#bae6fd', '#c4b5fd'];
+        for (let i = 0; i < 240; i++) {
+          const sx = -CACHE_PAD_X + 20 + ((i * 193) % (w + CACHE_PAD_X * 2 - 40));
+          const sy = -CACHE_PAD_Y + 20 + ((i * 271) % (h + CACHE_PAD_Y * 2 - 40));
+          if (sx > -30 && sx < w + 30 && sy > -30 && sy < h + 30) continue;
+          const col = starColors[i % starColors.length];
+          const sz = i % 7 === 0 ? px * 2 : px;
+          fillPxRect(pitchCacheCtx, sx, sy, sz, sz, col, px);
+          if (i % 13 === 0) {
+            fillPxRect(pitchCacheCtx, sx - px, sy, px * 3, px, col, px);
+            fillPxRect(pitchCacheCtx, sx, sy - px, px, px * 3, col, px);
+          }
+        }
+
+        drawRingedPlanet(pitchCacheCtx, 235, -108, 46, px);
+        drawRingedPlanet(pitchCacheCtx, w + 125, h * 0.24, 52, px);
+        drawRingedPlanet(pitchCacheCtx, -230, -140, 68, px);
+
+        for (const mPos of [
+          { x: w - 245, y: -104, r: 34 },
+          { x: -118, y: h * 0.76, r: 38 },
+        ]) {
+          fillPxRect(pitchCacheCtx, mPos.x - mPos.r - 3, mPos.y - mPos.r - 3, (mPos.r + 3) * 2, (mPos.r + 3) * 2, outline, px);
+          fillPxRect(pitchCacheCtx, mPos.x - mPos.r, mPos.y - mPos.r, mPos.r * 2, mPos.r * 2, '#94a3b8', px);
+          fillPxRect(pitchCacheCtx, mPos.x - mPos.r + 6, mPos.y - mPos.r + 6, mPos.r * 1.5, mPos.r * 1.5, '#cbd5e1', px);
+          fillPxRect(pitchCacheCtx, mPos.x - 12, mPos.y - 10, 12, 12, '#64748b', px);
+          fillPxRect(pitchCacheCtx, mPos.x + 8, mPos.y + 6, 9, 9, '#64748b', px);
+        }
+
+        // Left & Right Orbital Solar Array Wings & Docking Pods
+        for (const sideX of [-130, w + 48]) {
+          fillPxRect(pitchCacheCtx, sideX - 3, h * 0.16 - 3, 88, 126, outline, px);
+          fillPxRect(pitchCacheCtx, sideX, h * 0.16, 82, 120, '#1e3a8a', px);
+          pitchCacheCtx.strokeStyle = '#38bdf8';
+          pitchCacheCtx.lineWidth = 2;
+          for (let sy = h * 0.16 + 20; sy < h * 0.16 + 115; sy += 24) {
+            pitchCacheCtx.beginPath();
+            pitchCacheCtx.moveTo(sideX + 4, sy);
+            pitchCacheCtx.lineTo(sideX + 78, sy);
+            pitchCacheCtx.stroke();
+          }
+          pitchCacheCtx.beginPath();
+          pitchCacheCtx.moveTo(sideX + 41, h * 0.16 + 4);
+          pitchCacheCtx.lineTo(sideX + 41, h * 0.16 + 116);
+          pitchCacheCtx.stroke();
+        }
+
+        // Orbital Space Station Metallic Deck Collar with Cyan Conduit Strips
+        const stationPad = 42;
+        fillPxRect(pitchCacheCtx, -stationPad - 4, -stationPad - 4, w + (stationPad + 4) * 2, h + (stationPad + 4) * 2, outline, px);
+        fillPxRect(pitchCacheCtx, -stationPad, -stationPad, w + stationPad * 2, h + stationPad * 2, '#1e1b4b', px);
+        fillPxRect(pitchCacheCtx, -stationPad + 8, -stationPad + 8, w + (stationPad - 8) * 2, h + (stationPad - 8) * 2, '#312e81', px);
+        for (let hx = 60; hx < w - 60; hx += 120) {
+          fillPxRect(pitchCacheCtx, hx, -stationPad + 6, 36, 10, '#38bdf8', px);
+          fillPxRect(pitchCacheCtx, hx, h + stationPad - 16, 36, 10, '#38bdf8', px);
+        }
+        pitchCacheCtx.strokeStyle = 'rgba(56, 189, 248, 0.85)';
+        pitchCacheCtx.lineWidth = 3;
+        pitchCacheCtx.strokeRect(-stationPad + 18, -stationPad + 18, w + (stationPad - 18) * 2, h + (stationPad - 18) * 2);
+
+        drawCornerFloodlightTower(pitchCacheCtx, -112, -98, 1, 1, px);
+        drawCornerFloodlightTower(pitchCacheCtx, w + 112, -98, -1, 1, px);
+        drawCornerFloodlightTower(pitchCacheCtx, -112, h + 98, 1, -1, px);
+        drawCornerFloodlightTower(pitchCacheCtx, w + 112, h + 98, -1, -1, px);
+      } else if (selectedPitchTheme === 'URBAN_CONCRETE') {
+        // === 2. URBAN STREET CONCRETE: DOWNTOWN METRO BLOCK PARTY & ASPHALT AVENUE ===
+        pitchCacheCtx.fillStyle = '#1e293b';
+        pitchCacheCtx.fillRect(-CACHE_PAD_X, -CACHE_PAD_Y, w + CACHE_PAD_X * 2, h + CACHE_PAD_Y * 2);
+
+        pitchCacheCtx.fillStyle = '#334155';
+        for (let bx = -CACHE_PAD_X; bx < w + CACHE_PAD_X; bx += 180) {
+          pitchCacheCtx.fillRect(bx, -CACHE_PAD_Y, 90, h + CACHE_PAD_Y * 2);
+        }
+
+        for (const roadY of [-132, h + 64]) {
+          fillPxRect(pitchCacheCtx, -CACHE_PAD_X, roadY - 4, w + CACHE_PAD_X * 2, 76, outline, px);
+          fillPxRect(pitchCacheCtx, -CACHE_PAD_X, roadY, w + CACHE_PAD_X * 2, 68, '#0f172a', px);
+          for (let rx = -CACHE_PAD_X + 20; rx < w + CACHE_PAD_X; rx += 64) {
+            fillPxRect(pitchCacheCtx, rx, roadY + 31, 34, 6, '#facc15', px);
+          }
+          for (const cwX of [140, w * 0.5 - 36, w - 210]) {
+            for (let stripe = 0; stripe < 5; stripe++) {
+              fillPxRect(pitchCacheCtx, cwX, roadY + 6 + stripe * 12, 54, 7, '#f8fafc', px);
+            }
+          }
+        }
+
+        for (const sideX of [-126, w + 46]) {
+          fillPxRect(pitchCacheCtx, sideX - 3, h * 0.24 - 3, 86, h * 0.52 + 6, outline, px);
+          fillPxRect(pitchCacheCtx, sideX, h * 0.24, 80, h * 0.52, '#475569', px);
+          fillPxRect(pitchCacheCtx, sideX + 8, h * 0.36, 64, h * 0.28, '#f97316', px);
+          pitchCacheCtx.strokeStyle = '#f8fafc';
+          pitchCacheCtx.lineWidth = 2.5;
+          pitchCacheCtx.strokeRect(sideX + 8, h * 0.36, 64, h * 0.28);
+          pitchCacheCtx.beginPath();
+          pitchCacheCtx.arc(sideX + 40, h * 0.5, 22, 0, Math.PI * 2);
+          pitchCacheCtx.stroke();
+          fillPxRect(pitchCacheCtx, sideX + 24, h * 0.25, 32, 6, '#f8fafc', px);
+          fillPxRect(pitchCacheCtx, sideX + 34, h * 0.25 + 6, 12, 8, '#ef4444', px);
+          // Street-Art Cargo Containers & DJ Boombox Stacks
+          fillPxRect(pitchCacheCtx, sideX + 4, 112, 72, 46, outline, px);
+          fillPxRect(pitchCacheCtx, sideX + 7, 115, 66, 40, sideX < 0 ? '#38bdf8' : '#f43f5e', px);
+          fillPxRect(pitchCacheCtx, sideX + 18, 124, 44, 12, '#fde047', px);
+          fillPxRect(pitchCacheCtx, sideX + 4, h - 158, 72, 46, outline, px);
+          fillPxRect(pitchCacheCtx, sideX + 7, h - 155, 66, 40, sideX < 0 ? '#a855f7' : '#facc15', px);
+          fillPxRect(pitchCacheCtx, sideX + 16, h - 144, 16, 16, '#0f172a', px);
+          fillPxRect(pitchCacheCtx, sideX + 48, h - 144, 16, 16, '#0f172a', px);
+        }
+
+        const curbPad = 42;
+        fillPxRect(pitchCacheCtx, -curbPad - 4, -curbPad - 4, w + (curbPad + 4) * 2, h + (curbPad + 4) * 2, outline, px);
+        fillPxRect(pitchCacheCtx, -curbPad, -curbPad, w + curbPad * 2, h + curbPad * 2, '#334155', px);
+        for (let hx = -curbPad; hx < w + curbPad; hx += 48) {
+          fillPxRect(pitchCacheCtx, hx, -curbPad, 24, 10, '#facc15', px);
+          fillPxRect(pitchCacheCtx, hx, h + curbPad - 10, 24, 10, '#facc15', px);
+        }
+
+        drawCornerFloodlightTower(pitchCacheCtx, -108, -96, 1, 1, px);
+        drawCornerFloodlightTower(pitchCacheCtx, w + 108, -96, -1, 1, px);
+        drawCornerFloodlightTower(pitchCacheCtx, -108, h + 96, 1, -1, px);
+        drawCornerFloodlightTower(pitchCacheCtx, w + 108, h + 96, -1, -1, px);
+      } else if (selectedPitchTheme === 'RIO_CLAY') {
+        // === 3. RIO CLAY: COPACABANA TROPICAL BEACHFRONT, OCEAN SURF & PALM BOARDWALK ===
+        pitchCacheCtx.fillStyle = '#0284c7';
+        pitchCacheCtx.fillRect(-CACHE_PAD_X, -CACHE_PAD_Y, w + CACHE_PAD_X * 2, h + CACHE_PAD_Y * 2);
+
+        fillPxRect(pitchCacheCtx, -245, -175, w + 490, h + 350, '#0ea5e9', px);
+        fillPxRect(pitchCacheCtx, -210, -148, w + 420, h + 296, '#38bdf8', px);
+        fillPxRect(pitchCacheCtx, -182, -132, w + 364, h + 264, '#e0f2fe', px);
+
+        fillPxRect(pitchCacheCtx, -168, -120, w + 336, h + 240, '#fcd34d', px);
+        fillPxRect(pitchCacheCtx, -148, -104, w + 296, h + 208, '#fde68a', px);
+
+        // Sideline Beach Volleyball Sand Courts & Nets on Left & Right
+        for (const vx of [-124, w + 54]) {
+          pitchCacheCtx.strokeStyle = '#f97316';
+          pitchCacheCtx.lineWidth = 2.5;
+          pitchCacheCtx.strokeRect(vx, h * 0.28, 70, h * 0.44);
+          fillPxRect(pitchCacheCtx, vx - 3, h * 0.5 - 3, 76, 6, '#ffffff', px);
+          fillPxRect(pitchCacheCtx, vx - 4, h * 0.5 - 6, 6, 12, outline, px);
+          fillPxRect(pitchCacheCtx, vx + 68, h * 0.5 - 6, 6, 12, outline, px);
+        }
+
+        // Iconic Copacabana Wave-Mosaic & Teak Boardwalk Collar
+        const walkPad = 42;
+        fillPxRect(pitchCacheCtx, -walkPad - 4, -walkPad - 4, w + (walkPad + 4) * 2, h + (walkPad + 4) * 2, outline, px);
+        fillPxRect(pitchCacheCtx, -walkPad, -walkPad, w + walkPad * 2, h + walkPad * 2, '#92400e', px);
+        fillPxRect(pitchCacheCtx, -walkPad + 8, -walkPad + 8, w + (walkPad - 8) * 2, h + (walkPad - 8) * 2, '#b45309', px);
+        for (let mx = -walkPad + 12; mx < w + walkPad - 20; mx += 36) {
+          fillPxRect(pitchCacheCtx, mx, -walkPad + 3, 18, 5, '#fef3c7', px);
+          fillPxRect(pitchCacheCtx, mx, h + walkPad - 8, 18, 5, '#fef3c7', px);
+        }
+
+        const umbrellas = [
+          { x: 170, y: -88, c1: '#f43f5e', c2: '#ffffff' },
+          { x: 460, y: -92, c1: '#0ea5e9', c2: '#fef08a' },
+          { x: w - 460, y: -92, c1: '#ec4899', c2: '#ffffff' },
+          { x: w - 170, y: -88, c1: '#10b981', c2: '#fef08a' },
+          { x: 170, y: h + 88, c1: '#8b5cf6', c2: '#ffffff' },
+          { x: 460, y: h + 92, c1: '#f97316', c2: '#fef08a' },
+          { x: w - 460, y: h + 92, c1: '#06b6d4', c2: '#ffffff' },
+          { x: w - 170, y: h + 88, c1: '#f43f5e', c2: '#fef08a' },
+          { x: -112, y: 170, c1: '#f43f5e', c2: '#ffffff' },
+          { x: -112, y: h - 170, c1: '#0ea5e9', c2: '#fef08a' },
+          { x: w + 112, y: 170, c1: '#10b981', c2: '#ffffff' },
+          { x: w + 112, y: h - 170, c1: '#ec4899', c2: '#fef08a' },
+        ];
+        for (const umb of umbrellas) {
+          drawBeachUmbrella(pitchCacheCtx, umb.x, umb.y, umb.c1, umb.c2, px);
+        }
+
+        const palmPositions = [
+          { x: 310, y: -86 },
+          { x: w - 310, y: -86 },
+          { x: 310, y: h + 92 },
+          { x: w - 310, y: h + 92 },
+          { x: -115, y: 92 },
+          { x: -115, y: h - 92 },
+          { x: w + 115, y: 92 },
+          { x: w + 115, y: h - 92 },
+        ];
+        for (const pm of palmPositions) {
+          drawPixelPalmTree(pitchCacheCtx, pm.x, pm.y, px);
+        }
+
+        drawCornerFloodlightTower(pitchCacheCtx, -108, -96, 1, 1, px);
+        drawCornerFloodlightTower(pitchCacheCtx, w + 108, -96, -1, 1, px);
+        drawCornerFloodlightTower(pitchCacheCtx, -108, h + 96, 1, -1, px);
+        drawCornerFloodlightTower(pitchCacheCtx, w + 108, h + 96, -1, -1, px);
+      } else if (selectedPitchTheme === 'TWILIGHT_SYNTH') {
+        // === 4. TWILIGHT SYNTH: CYBER-SYNTHWAVES, NEON LASER GRID & SKYLINE ROOFTOP ===
+        pitchCacheCtx.fillStyle = '#09051c';
+        pitchCacheCtx.fillRect(-CACHE_PAD_X, -CACHE_PAD_Y, w + CACHE_PAD_X * 2, h + CACHE_PAD_Y * 2);
+
+        // Giant Retro Outrun Segmented Sunset Glow at Top Horizon
+        const sunGrad = pitchCacheCtx.createRadialGradient(w * 0.5, -135, 10, w * 0.5, -135, 290);
+        sunGrad.addColorStop(0, 'rgba(244, 114, 182, 0.45)');
+        sunGrad.addColorStop(0.5, 'rgba(168, 85, 247, 0.22)');
+        sunGrad.addColorStop(1, 'rgba(9, 5, 28, 0)');
+        pitchCacheCtx.fillStyle = sunGrad;
+        pitchCacheCtx.beginPath();
+        pitchCacheCtx.arc(w * 0.5, -135, 290, 0, Math.PI * 2);
+        pitchCacheCtx.fill();
+
+        pitchCacheCtx.strokeStyle = 'rgba(232, 121, 249, 0.36)';
+        pitchCacheCtx.lineWidth = 2;
+        for (let gx = -CACHE_PAD_X; gx <= w + CACHE_PAD_X; gx += 72) {
+          pitchCacheCtx.beginPath();
+          pitchCacheCtx.moveTo(gx, -CACHE_PAD_Y);
+          pitchCacheCtx.lineTo(gx, h + CACHE_PAD_Y);
+          pitchCacheCtx.stroke();
+        }
+        pitchCacheCtx.strokeStyle = 'rgba(34, 211, 238, 0.34)';
+        for (let gy = -CACHE_PAD_Y; gy <= h + CACHE_PAD_Y; gy += 64) {
+          pitchCacheCtx.beginPath();
+          pitchCacheCtx.moveTo(-CACHE_PAD_X, gy);
+          pitchCacheCtx.lineTo(w + CACHE_PAD_X, gy);
+          pitchCacheCtx.stroke();
+        }
+
+        const buildings = [
+          { x: 85, y: -158, bw: 96, bh: 92, c: '#1e1b4b', win: '#fde047' },
+          { x: 195, y: -172, bw: 110, bh: 106, c: '#311042', win: '#22d3ee' },
+          { x: 320, y: -148, bw: 88, bh: 82, c: '#1e1b4b', win: '#f472b6' },
+          { x: w - 410, y: -152, bw: 92, bh: 86, c: '#311042', win: '#22d3ee' },
+          { x: w - 305, y: -174, bw: 108, bh: 108, c: '#1e1b4b', win: '#fde047' },
+          { x: w - 183, y: -156, bw: 96, bh: 90, c: '#311042', win: '#a7f3d0' },
+          { x: 95, y: h + 64, bw: 104, bh: 96, c: '#311042', win: '#22d3ee' },
+          { x: 215, y: h + 64, bw: 112, bh: 108, c: '#1e1b4b', win: '#f472b6' },
+          { x: w - 327, y: h + 64, bw: 112, bh: 108, c: '#1e1b4b', win: '#fde047' },
+          { x: w - 199, y: h + 64, bw: 104, bh: 96, c: '#311042', win: '#22d3ee' },
+          { x: -132, y: 95, bw: 84, bh: 150, c: '#1e1b4b', win: '#fde047' },
+          { x: -132, y: h - 245, bw: 84, bh: 150, c: '#311042', win: '#f472b6' },
+          { x: w + 48, y: 95, bw: 84, bh: 150, c: '#311042', win: '#22d3ee' },
+          { x: w + 48, y: h - 245, bw: 84, bh: 150, c: '#1e1b4b', win: '#fde047' },
+        ];
+        for (const b of buildings) {
+          fillPxRect(pitchCacheCtx, b.x - 4, b.y - 4, b.bw + 8, b.bh + 8, outline, px);
+          fillPxRect(pitchCacheCtx, b.x, b.y, b.bw, b.bh, b.c, px);
+          fillPxRect(pitchCacheCtx, b.x + 6, b.y + 4, b.bw - 12, 5, '#f472b6', px);
+          for (let wx = b.x + 12; wx < b.x + b.bw - 14; wx += 18) {
+            for (let wy = b.y + 14; wy < b.y + b.bh - 12; wy += 16) {
+              if ((wx + wy) % 5 !== 0) {
+                fillPxRect(pitchCacheCtx, wx, wy, 8, 8, b.win, px);
+              }
+            }
+          }
+        }
+
+        const neonPad = 42;
+        fillPxRect(pitchCacheCtx, -neonPad - 4, -neonPad - 4, w + (neonPad + 4) * 2, h + (neonPad + 4) * 2, '#f472b6', px);
+        fillPxRect(pitchCacheCtx, -neonPad, -neonPad, w + neonPad * 2, h + neonPad * 2, '#1e1b4b', px);
+        pitchCacheCtx.strokeStyle = '#22d3ee';
+        pitchCacheCtx.lineWidth = 3;
+        pitchCacheCtx.strokeRect(-neonPad + 12, -neonPad + 12, w + (neonPad - 12) * 2, h + (neonPad - 12) * 2);
+
+        drawCornerFloodlightTower(pitchCacheCtx, -108, -96, 1, 1, px);
+        drawCornerFloodlightTower(pitchCacheCtx, w + 108, -96, -1, 1, px);
+        drawCornerFloodlightTower(pitchCacheCtx, -108, h + 96, 1, -1, px);
+        drawCornerFloodlightTower(pitchCacheCtx, w + 108, h + 96, -1, -1, px);
+      } else if (selectedPitchTheme === 'ARCTIC_ICE') {
+        // === 5. ARCTIC ICE: GLACIER FROST FJORD, SNOW PINES & ALPINE SKI LODGES ===
+        pitchCacheCtx.fillStyle = '#0f172a';
+        pitchCacheCtx.fillRect(-CACHE_PAD_X, -CACHE_PAD_Y, w + CACHE_PAD_X * 2, h + CACHE_PAD_Y * 2);
+
+        // Frozen Glacial Fjord Ring & Snow-Blanketed Shore
+        fillPxRect(pitchCacheCtx, -230, -165, w + 460, h + 330, '#1e3a8a', px);
+        fillPxRect(pitchCacheCtx, -195, -142, w + 390, h + 284, '#38bdf8', px);
+        fillPxRect(pitchCacheCtx, -172, -124, w + 344, h + 248, '#e2e8f0', px);
+        fillPxRect(pitchCacheCtx, -150, -108, w + 300, h + 216, '#f8fafc', px);
+
+        // Cozy Alpine Timber Ski Lodges with Warm Lit Windows & Chimneys
+        for (const lodge of [
+          { x: 140, y: -118 },
+          { x: w - 236, y: -118 },
+          { x: 140, y: h + 64 },
+          { x: w - 236, y: h + 64 },
+        ]) {
+          // Chimney
+          fillPxRect(pitchCacheCtx, lodge.x + 70, lodge.y - 12, 16, 20, outline, px);
+          fillPxRect(pitchCacheCtx, lodge.x + 73, lodge.y - 9, 10, 14, '#64748b', px);
+          // Cabin body & snow-covered pitched roof
+          fillPxRect(pitchCacheCtx, lodge.x - 4, lodge.y - 4, 104, 58, outline, px);
+          fillPxRect(pitchCacheCtx, lodge.x, lodge.y, 96, 50, '#78350f', px);
+          fillPxRect(pitchCacheCtx, lodge.x - 6, lodge.y - 6, 108, 18, outline, px);
+          fillPxRect(pitchCacheCtx, lodge.x - 3, lodge.y - 3, 102, 12, '#ffffff', px);
+          // Glowing golden cabin windows
+          fillPxRect(pitchCacheCtx, lodge.x + 14, lodge.y + 18, 20, 18, outline, px);
+          fillPxRect(pitchCacheCtx, lodge.x + 17, lodge.y + 21, 14, 12, '#fde047', px);
+          fillPxRect(pitchCacheCtx, lodge.x + 60, lodge.y + 18, 20, 18, outline, px);
+          fillPxRect(pitchCacheCtx, lodge.x + 63, lodge.y + 21, 14, 12, '#fde047', px);
+        }
+
+        // Crystalline Ice-Block Collar Around the Glacial Rink
+        const icePad = 42;
+        fillPxRect(pitchCacheCtx, -icePad - 4, -icePad - 4, w + (icePad + 4) * 2, h + (icePad + 4) * 2, outline, px);
+        fillPxRect(pitchCacheCtx, -icePad, -icePad, w + icePad * 2, h + icePad * 2, '#0284c7', px);
+        fillPxRect(pitchCacheCtx, -icePad + 8, -icePad + 8, w + (icePad - 8) * 2, h + (icePad - 8) * 2, '#7dd3fc', px);
+        for (let ix = -icePad + 16; ix < w + icePad - 24; ix += 52) {
+          fillPxRect(pitchCacheCtx, ix, -icePad + 4, 24, 6, '#ecfeff', px);
+          fillPxRect(pitchCacheCtx, ix, h + icePad - 10, 24, 6, '#ecfeff', px);
+        }
+
+        // Snow-Capped 16-Bit Pine Trees Around the Fjord
+        const pineCoords = [
+          { x: 310, y: -88 },
+          { x: 430, y: -94 },
+          { x: w - 430, y: -94 },
+          { x: w - 310, y: -88 },
+          { x: 310, y: h + 92 },
+          { x: 430, y: h + 96 },
+          { x: w - 430, y: h + 96 },
+          { x: w - 310, y: h + 92 },
+          { x: -102, y: 110 },
+          { x: -112, y: 240 },
+          { x: -112, y: h - 240 },
+          { x: -102, y: h - 110 },
+          { x: w + 102, y: 110 },
+          { x: w + 112, y: 240 },
+          { x: w + 112, y: h - 240 },
+          { x: w + 102, y: h - 110 },
+        ];
+        for (const pt of pineCoords) {
+          drawSnowPineTree(pitchCacheCtx, pt.x, pt.y, px);
+        }
+
+        drawCornerFloodlightTower(pitchCacheCtx, -108, -96, 1, 1, px);
+        drawCornerFloodlightTower(pitchCacheCtx, w + 108, -96, -1, 1, px);
+        drawCornerFloodlightTower(pitchCacheCtx, -108, h + 96, 1, -1, px);
+        drawCornerFloodlightTower(pitchCacheCtx, w + 108, h + 96, -1, -1, px);
+      } else if (selectedPitchTheme === 'VOLCANO_FORGE') {
+        // === 6. VOLCANO FORGE: MAGMA CALDERA CITADEL, LAVA RIVERS & DRAGON BRAZIERS ===
+        // Outer Molten Magma Sea
+        pitchCacheCtx.fillStyle = '#7c2d12';
+        pitchCacheCtx.fillRect(-CACHE_PAD_X, -CACHE_PAD_Y, w + CACHE_PAD_X * 2, h + CACHE_PAD_Y * 2);
+
+        // Bright Glowing Lava River Veins & Magma Channels
+        fillPxRect(pitchCacheCtx, -240, -170, w + 480, h + 340, '#c2410c', px);
+        fillPxRect(pitchCacheCtx, -205, -145, w + 410, h + 290, '#ea580c', px);
+        fillPxRect(pitchCacheCtx, -180, -126, w + 360, h + 252, '#f97316', px);
+        fillPxRect(pitchCacheCtx, -162, -112, w + 324, h + 224, '#facc15', px);
+
+        // Jagged Dark Basalt Citadel Island Shelf
+        fillPxRect(pitchCacheCtx, -148, -102, w + 296, h + 204, outline, px);
+        fillPxRect(pitchCacheCtx, -142, -96, w + 284, h + 192, '#18181b', px);
+        fillPxRect(pitchCacheCtx, -126, -84, w + 252, h + 168, '#27272a', px);
+
+        // Left & Right Obsidian Stone Bridges Spanning the Lava Moat
+        for (const bx of [-142, w + 42]) {
+          fillPxRect(pitchCacheCtx, bx, h * 0.34, 100, h * 0.32, outline, px);
+          fillPxRect(pitchCacheCtx, bx + 4, h * 0.34 + 4, 92, h * 0.32 - 8, '#3f3f46', px);
+          fillPxRect(pitchCacheCtx, bx + 12, h * 0.34 + 14, 76, 8, '#f97316', px);
+          fillPxRect(pitchCacheCtx, bx + 12, h * 0.66 - 22, 76, 8, '#f97316', px);
+        }
+
+        // Fortress Basalt Collar with Carved Molten Gold Runes
+        const forgePad = 42;
+        fillPxRect(pitchCacheCtx, -forgePad - 4, -forgePad - 4, w + (forgePad + 4) * 2, h + (forgePad + 4) * 2, outline, px);
+        fillPxRect(pitchCacheCtx, -forgePad, -forgePad, w + forgePad * 2, h + forgePad * 2, '#450a0a', px);
+        fillPxRect(pitchCacheCtx, -forgePad + 8, -forgePad + 8, w + (forgePad - 8) * 2, h + (forgePad - 8) * 2, '#27272a', px);
+        for (let rx = 70; rx < w - 70; rx += 90) {
+          fillPxRect(pitchCacheCtx, rx, -forgePad + 12, 28, 6, '#f97316', px);
+          fillPxRect(pitchCacheCtx, rx + 8, -forgePad + 14, 12, 3, '#fde047', px);
+          fillPxRect(pitchCacheCtx, rx, h + forgePad - 18, 28, 6, '#f97316', px);
+          fillPxRect(pitchCacheCtx, rx + 8, h + forgePad - 16, 12, 3, '#fde047', px);
+        }
+
+        // 8 Ancient Obsidian Fire Brazier Pedestals Around the Perimeter
+        for (const bz of [
+          { x: 170, y: -76 },
+          { x: w - 170, y: -76 },
+          { x: 170, y: h + 76 },
+          { x: w - 170, y: h + 76 },
+          { x: -96, y: 155 },
+          { x: -96, y: h - 155 },
+          { x: w + 96, y: 155 },
+          { x: w + 96, y: h - 155 },
+        ]) {
+          fillPxRect(pitchCacheCtx, bz.x - 18, bz.y - 18, 36, 36, outline, px);
+          fillPxRect(pitchCacheCtx, bz.x - 14, bz.y - 14, 28, 28, '#3f3f46', px);
+          fillPxRect(pitchCacheCtx, bz.x - 10, bz.y - 10, 20, 20, '#ea580c', px);
+          fillPxRect(pitchCacheCtx, bz.x - 6, bz.y - 6, 12, 12, '#fde047', px);
+        }
+
+        drawCornerFloodlightTower(pitchCacheCtx, -108, -96, 1, 1, px);
+        drawCornerFloodlightTower(pitchCacheCtx, w + 108, -96, -1, 1, px);
+        drawCornerFloodlightTower(pitchCacheCtx, -108, h + 96, 1, -1, px);
+        drawCornerFloodlightTower(pitchCacheCtx, w + 108, h + 96, -1, -1, px);
+      } else if (selectedPitchTheme === 'TURF_AUTUMN') {
+        // === 7. AUTUMN HARVEST TURF: GOLDEN MAPLE PARK, COBBLESTONE PROMENADE & HARVEST FESTIVAL ===
+        pitchCacheCtx.fillStyle = GRAPHICS_CONFIG.palette.apron.base;
+        pitchCacheCtx.fillRect(-CACHE_PAD_X, -CACHE_PAD_Y, w + CACHE_PAD_X * 2, h + CACHE_PAD_Y * 2);
+
+        const bandW = 136;
+        pitchCacheCtx.fillStyle = GRAPHICS_CONFIG.palette.apron.dither;
+        for (let bx = -CACHE_PAD_X; bx < w + CACHE_PAD_X; bx += bandW * 2) {
+          pitchCacheCtx.fillRect(bx, -CACHE_PAD_Y, bandW, h + CACHE_PAD_Y * 2);
+        }
+
+        // Warm Sandstone Autumn Park Promenade Path
+        fillPxRect(pitchCacheCtx, -CACHE_PAD_X, h * 0.5 - 54, w + CACHE_PAD_X * 2, 108, outline, px);
+        fillPxRect(pitchCacheCtx, -CACHE_PAD_X, h * 0.5 - 48, w + CACHE_PAD_X * 2, 96, '#fed7aa', px);
+
+        // Harvest Festival Timber Market Stalls & Pumpkin Patches on Left & Right Concourse
+        for (const sx of [-114, w + 70]) {
+          for (const sy of [h * 0.22 - 28, h * 0.78 - 28]) {
+            fillPxRect(pitchCacheCtx, sx - 4, sy - 4, 52, 56, outline, px);
+            fillPxRect(pitchCacheCtx, sx, sy, 44, 48, '#78350f', px);
+            // Striped Orange & Cream Harvest Awning
+            for (let st = 0; st < 4; st++) {
+              fillPxRect(pitchCacheCtx, sx + 2 + st * 10, sy + 2, 10, 14, st % 2 === 0 ? '#ea580c' : '#fef3c7', px);
+            }
+            // Golden Hay Bales & 16-Bit Harvest Pumpkins
+            fillPxRect(pitchCacheCtx, sx + 6, sy + 24, 14, 14, '#f97316', px);
+            fillPxRect(pitchCacheCtx, sx + 11, sy + 21, 4, 4, '#15803d', px);
+            fillPxRect(pitchCacheCtx, sx + 24, sy + 26, 14, 12, '#facc15', px);
+          }
+        }
+
+        // Warm Golden-Ochre Brick Running Track Collar
+        const trackPad = 44;
+        fillPxRect(pitchCacheCtx, -trackPad - 4, -trackPad - 4, w + (trackPad + 4) * 2, h + (trackPad + 4) * 2, outline, px);
+        fillPxRect(pitchCacheCtx, -trackPad, -trackPad, w + trackPad * 2, h + trackPad * 2, '#9a3412', px);
+        fillPxRect(pitchCacheCtx, -trackPad + 8, -trackPad + 8, w + (trackPad - 8) * 2, h + (trackPad - 8) * 2, '#d97706', px);
+        pitchCacheCtx.strokeStyle = 'rgba(254, 249, 195, 0.85)';
+        pitchCacheCtx.lineWidth = 2.5;
+        pitchCacheCtx.strokeRect(-trackPad + 18, -trackPad + 18, w + (trackPad - 18) * 2, h + (trackPad - 18) * 2);
+
+        // Timber Park Grandstands with Warm Amber Trim
+        for (const by of [-102, h + 50]) {
+          fillPxRect(pitchCacheCtx, 110, by - 4, w - 220, 52, outline, px);
+          fillPxRect(pitchCacheCtx, 114, by, w - 228, 44, '#78350f', px);
+          fillPxRect(pitchCacheCtx, 120, by + 8, w - 240, 11, '#92400e', px);
+          fillPxRect(pitchCacheCtx, 120, by + 26, w - 240, 11, '#92400e', px);
+          fillPxRect(pitchCacheCtx, 120, by + 2, (w - 240) * 0.48, 4, '#f59e0b', px);
+          fillPxRect(pitchCacheCtx, w * 0.52, by + 2, (w - 240) * 0.48, 4, '#ea580c', px);
+        }
+
+        drawCornerFloodlightTower(pitchCacheCtx, -108, -96, 1, 1, px);
+        drawCornerFloodlightTower(pitchCacheCtx, w + 108, -96, -1, 1, px);
+        drawCornerFloodlightTower(pitchCacheCtx, -108, h + 96, 1, -1, px);
+        drawCornerFloodlightTower(pitchCacheCtx, w + 108, h + 96, -1, -1, px);
+
+        // 16 Crimson, Amber & Gold Autumn Maple & Ginkgo Trees
+        const maplePositions = [
+          { x: -102, y: 88, s: 2, v: 0 },
+          { x: -205, y: 185, s: 2, v: 1 },
+          { x: -102, y: h - 88, s: 2, v: 2 },
+          { x: -205, y: h - 185, s: 2, v: 0 },
+          { x: w + 102, y: 88, s: 2, v: 1 },
+          { x: w + 205, y: 185, s: 2, v: 2 },
+          { x: w + 102, y: h - 88, s: 2, v: 0 },
+          { x: w + 205, y: h - 185, s: 2, v: 1 },
+          { x: 180, y: -136, s: 2, v: 0 },
+          { x: 430, y: -140, s: 2, v: 2 },
+          { x: w - 430, y: -140, s: 2, v: 1 },
+          { x: w - 180, y: -136, s: 2, v: 0 },
+          { x: 180, y: h + 136, s: 2, v: 1 },
+          { x: 430, y: h + 140, s: 2, v: 0 },
+          { x: w - 430, y: h + 140, s: 2, v: 2 },
+          { x: w - 180, y: h + 136, s: 2, v: 1 },
+        ];
+        for (const mp of maplePositions) {
+          drawAutumnMapleTree(pitchCacheCtx, mp.x, mp.y, mp.s, mp.v, px);
+        }
+      } else if (selectedPitchTheme === 'TURF_SAKURA') {
+        // === 8. SAKURA BLOSSOM TURF: KYOTO IMPERIAL GARDEN, KOI PONDS & VERMILION TORII GATES ===
+        pitchCacheCtx.fillStyle = GRAPHICS_CONFIG.palette.apron.base;
+        pitchCacheCtx.fillRect(-CACHE_PAD_X, -CACHE_PAD_Y, w + CACHE_PAD_X * 2, h + CACHE_PAD_Y * 2);
+
+        const bandW = 136;
+        pitchCacheCtx.fillStyle = GRAPHICS_CONFIG.palette.apron.dither;
+        for (let bx = -CACHE_PAD_X; bx < w + CACHE_PAD_X; bx += bandW * 2) {
+          pitchCacheCtx.fillRect(bx, -CACHE_PAD_Y, bandW, h + CACHE_PAD_Y * 2);
+        }
+
+        // White Pebble Zen Garden Walkways & Vermilion Wooden Bridges
+        fillPxRect(pitchCacheCtx, -CACHE_PAD_X, h * 0.5 - 52, w + CACHE_PAD_X * 2, 104, outline, px);
+        fillPxRect(pitchCacheCtx, -CACHE_PAD_X, h * 0.5 - 46, w + CACHE_PAD_X * 2, 92, '#fdf2f8', px);
+
+        // Left & Right Imperial Turquoise Koi Ponds with Stone Borders & Green Lotus Pads
+        for (const kx of [-124, w + 56]) {
+          for (const ky of [h * 0.2 - 36, h * 0.8 - 36]) {
+            fillPxRect(pitchCacheCtx, kx - 4, ky - 4, 76, 76, outline, px);
+            fillPxRect(pitchCacheCtx, kx, ky, 68, 68, '#94a3b8', px);
+            fillPxRect(pitchCacheCtx, kx + 6, ky + 6, 56, 56, '#0284c7', px);
+            fillPxRect(pitchCacheCtx, kx + 12, ky + 12, 44, 44, '#38bdf8', px);
+            // Lotus lily pads with pink lotus flower
+            fillPxRect(pitchCacheCtx, kx + 14, ky + 16, 12, 12, '#16a34a', px);
+            fillPxRect(pitchCacheCtx, kx + 17, ky + 19, 6, 6, '#f472b6', px);
+            fillPxRect(pitchCacheCtx, kx + 38, ky + 38, 12, 12, '#16a34a', px);
+          }
+        }
+
+        // Traditional Vermilion Torii Gates on Left & Right Concourses
+        for (const gx of [-102, w + 74]) {
+          const gy = h * 0.5 - 32;
+          fillPxRect(pitchCacheCtx, gx - 4, gy - 4, 36, 68, outline, px);
+          fillPxRect(pitchCacheCtx, gx, gy, 8, 60, '#dc2626', px);
+          fillPxRect(pitchCacheCtx, gx + 20, gy, 8, 60, '#dc2626', px);
+          fillPxRect(pitchCacheCtx, gx - 8, gy - 6, 44, 10, outline, px);
+          fillPxRect(pitchCacheCtx, gx - 6, gy - 4, 40, 6, '#ef4444', px);
+          fillPxRect(pitchCacheCtx, gx - 4, gy + 46, 36, 8, '#ef4444', px);
+        }
+
+        // Rose-Quartz Blossom Perimeter Track
+        const trackPad = 44;
+        fillPxRect(pitchCacheCtx, -trackPad - 4, -trackPad - 4, w + (trackPad + 4) * 2, h + (trackPad + 4) * 2, outline, px);
+        fillPxRect(pitchCacheCtx, -trackPad, -trackPad, w + trackPad * 2, h + trackPad * 2, '#be185d', px);
+        fillPxRect(pitchCacheCtx, -trackPad + 8, -trackPad + 8, w + (trackPad - 8) * 2, h + (trackPad - 8) * 2, '#f472b6', px);
+        pitchCacheCtx.strokeStyle = 'rgba(255, 241, 242, 0.9)';
+        pitchCacheCtx.lineWidth = 2.5;
+        pitchCacheCtx.strokeRect(-trackPad + 18, -trackPad + 18, w + (trackPad - 18) * 2, h + (trackPad - 18) * 2);
+
+        for (const by of [-102, h + 50]) {
+          fillPxRect(pitchCacheCtx, 110, by - 4, w - 220, 52, outline, px);
+          fillPxRect(pitchCacheCtx, 114, by, w - 228, 44, '#831843', px);
+          fillPxRect(pitchCacheCtx, 120, by + 8, w - 240, 11, '#9d174d', px);
+          fillPxRect(pitchCacheCtx, 120, by + 26, w - 240, 11, '#9d174d', px);
+          fillPxRect(pitchCacheCtx, 120, by + 2, (w - 240) * 0.48, 4, '#f472b6', px);
+          fillPxRect(pitchCacheCtx, w * 0.52, by + 2, (w - 240) * 0.48, 4, '#fbcfe8', px);
+        }
+
+        drawCornerFloodlightTower(pitchCacheCtx, -108, -96, 1, 1, px);
+        drawCornerFloodlightTower(pitchCacheCtx, w + 108, -96, -1, 1, px);
+        drawCornerFloodlightTower(pitchCacheCtx, -108, h + 96, 1, -1, px);
+        drawCornerFloodlightTower(pitchCacheCtx, w + 108, h + 96, -1, -1, px);
+
+        // 16 Lush Pink Cherry Blossom Sakura Trees
+        const sakuraPositions = [
+          { x: -102, y: 88, s: 2, v: 0 },
+          { x: -205, y: 185, s: 2, v: 1 },
+          { x: -102, y: h - 88, s: 2, v: 1 },
+          { x: -205, y: h - 185, s: 2, v: 0 },
+          { x: w + 102, y: 88, s: 2, v: 1 },
+          { x: w + 205, y: 185, s: 2, v: 0 },
+          { x: w + 102, y: h - 88, s: 2, v: 0 },
+          { x: w + 205, y: h - 185, s: 2, v: 1 },
+          { x: 180, y: -136, s: 2, v: 0 },
+          { x: 430, y: -140, s: 2, v: 1 },
+          { x: w - 430, y: -140, s: 2, v: 0 },
+          { x: w - 180, y: -136, s: 2, v: 1 },
+          { x: 180, y: h + 136, s: 2, v: 1 },
+          { x: 430, y: h + 140, s: 2, v: 0 },
+          { x: w - 430, y: h + 140, s: 2, v: 1 },
+          { x: w - 180, y: h + 136, s: 2, v: 0 },
+        ];
+        for (const sk of sakuraPositions) {
+          drawSakuraBlossomTree(pitchCacheCtx, sk.x, sk.y, sk.s, sk.v, px);
+        }
+      } else if (selectedPitchTheme === 'TURF_CHAMPIONS') {
+        // === 9. CHAMPIONS CATHEDRAL: FLOODLIT EUROPEAN TROPHY ARENA, GOLD BANNERS & CUP PLINTHS ===
+        pitchCacheCtx.fillStyle = GRAPHICS_CONFIG.palette.apron.base;
+        pitchCacheCtx.fillRect(-CACHE_PAD_X, -CACHE_PAD_Y, w + CACHE_PAD_X * 2, h + CACHE_PAD_Y * 2);
+
+        const bandW = 128;
+        pitchCacheCtx.fillStyle = GRAPHICS_CONFIG.palette.apron.dither;
+        for (let bx = -CACHE_PAD_X; bx < w + CACHE_PAD_X; bx += bandW * 2) {
+          pitchCacheCtx.fillRect(bx, -CACHE_PAD_Y, bandW, h + CACHE_PAD_Y * 2);
+        }
+
+        // Royal Navy & Gold VIP Red-Carpet Tunnel Approaches
+        fillPxRect(pitchCacheCtx, -CACHE_PAD_X, h * 0.5 - 56, w + CACHE_PAD_X * 2, 112, outline, px);
+        fillPxRect(pitchCacheCtx, -CACHE_PAD_X, h * 0.5 - 50, w + CACHE_PAD_X * 2, 100, '#1e1b4b', px);
+        fillPxRect(pitchCacheCtx, -CACHE_PAD_X, h * 0.5 - 24, w + CACHE_PAD_X * 2, 48, '#b91c1c', px);
+        fillPxRect(pitchCacheCtx, -CACHE_PAD_X, h * 0.5 - 28, w + CACHE_PAD_X * 2, 4, '#fde047', px);
+        fillPxRect(pitchCacheCtx, -CACHE_PAD_X, h * 0.5 + 24, w + CACHE_PAD_X * 2, 4, '#fde047', px);
+
+        // Twin Gleaming 16-Bit Golden Championship Trophy Plinths on Left & Right Concourses
+        for (const tx of [-98, w + 98]) {
+          for (const ty of [h * 0.24, h * 0.76]) {
+            fillPxRect(pitchCacheCtx, tx - 26, ty - 26, 52, 52, outline, px);
+            fillPxRect(pitchCacheCtx, tx - 22, ty - 22, 44, 44, '#1e293b', px);
+            fillPxRect(pitchCacheCtx, tx - 16, ty - 16, 32, 32, '#b45309', px);
+            // Golden Cup Pedestal
+            fillPxRect(pitchCacheCtx, tx - 10, ty - 10, 20, 20, '#facc15', px);
+            fillPxRect(pitchCacheCtx, tx - 6, ty - 6, 12, 12, '#fef08a', px);
+            fillPxRect(pitchCacheCtx, tx - 3, ty - 3, 6, 6, '#ffffff', px);
+          }
+        }
+
+        // Royal Cobalt & Gold Star-Trimmed Stadium Collar
+        const trackPad = 44;
+        fillPxRect(pitchCacheCtx, -trackPad - 4, -trackPad - 4, w + (trackPad + 4) * 2, h + (trackPad + 4) * 2, outline, px);
+        fillPxRect(pitchCacheCtx, -trackPad, -trackPad, w + trackPad * 2, h + trackPad * 2, '#1e3a8a', px);
+        fillPxRect(pitchCacheCtx, -trackPad + 8, -trackPad + 8, w + (trackPad - 8) * 2, h + (trackPad - 8) * 2, '#2563eb', px);
+        pitchCacheCtx.strokeStyle = '#fde047';
+        pitchCacheCtx.lineWidth = 3;
+        pitchCacheCtx.strokeRect(-trackPad + 16, -trackPad + 16, w + (trackPad - 16) * 2, h + (trackPad - 16) * 2);
+
+        // Wrap-Around Double-Decker Champions Grandstands (Top, Bottom, Left & Right Ultras Terraces)
+        for (const by of [-106, h + 52]) {
+          fillPxRect(pitchCacheCtx, 90, by - 4, w - 180, 56, outline, px);
+          fillPxRect(pitchCacheCtx, 94, by, w - 188, 48, '#0f172a', px);
+          fillPxRect(pitchCacheCtx, 100, by + 8, w - 200, 12, '#1e3a8a', px);
+          fillPxRect(pitchCacheCtx, 100, by + 26, w - 200, 12, '#1e3a8a', px);
+          fillPxRect(pitchCacheCtx, 100, by + 2, w - 200, 4, '#fde047', px);
+        }
+
+        drawCornerFloodlightTower(pitchCacheCtx, -108, -96, 1, 1, px);
+        drawCornerFloodlightTower(pitchCacheCtx, w + 108, -96, -1, 1, px);
+        drawCornerFloodlightTower(pitchCacheCtx, -108, h + 96, 1, -1, px);
+        drawCornerFloodlightTower(pitchCacheCtx, w + 108, h + 96, -1, -1, px);
+      } else {
+        // === 10. CLASSIC SUNLIT TURF: ROYAL BOTANICAL PARK, ORNAMENTAL FOUNTAINS & OLYMPIC ARENA ===
+        pitchCacheCtx.fillStyle = GRAPHICS_CONFIG.palette.apron.base;
+        pitchCacheCtx.fillRect(-CACHE_PAD_X, -CACHE_PAD_Y, w + CACHE_PAD_X * 2, h + CACHE_PAD_Y * 2);
+
+        const bandW = 136;
+        pitchCacheCtx.fillStyle = GRAPHICS_CONFIG.palette.apron.dither;
+        for (let bx = -CACHE_PAD_X; bx < w + CACHE_PAD_X; bx += bandW * 2) {
+          pitchCacheCtx.fillRect(bx, -CACHE_PAD_Y, bandW, h + CACHE_PAD_Y * 2);
+        }
+
+        fillPxRect(pitchCacheCtx, -CACHE_PAD_X, h * 0.5 - 52, w + CACHE_PAD_X * 2, 104, outline, px);
+        fillPxRect(pitchCacheCtx, -CACHE_PAD_X, h * 0.5 - 46, w + CACHE_PAD_X * 2, 92, '#e2e8f0', px);
+
+        drawParkFountain(pitchCacheCtx, -98, h * 0.24, 34, px);
+        drawParkFountain(pitchCacheCtx, -98, h * 0.76, 34, px);
+        drawParkFountain(pitchCacheCtx, w + 98, h * 0.24, 34, px);
+        drawParkFountain(pitchCacheCtx, w + 98, h * 0.76, 34, px);
+
+        const trackPad = 44;
+        fillPxRect(pitchCacheCtx, -trackPad - 4, -trackPad - 4, w + (trackPad + 4) * 2, h + (trackPad + 4) * 2, outline, px);
+        fillPxRect(pitchCacheCtx, -trackPad, -trackPad, w + trackPad * 2, h + trackPad * 2, '#ea580c', px);
+        fillPxRect(pitchCacheCtx, -trackPad + 8, -trackPad + 8, w + (trackPad - 8) * 2, h + (trackPad - 8) * 2, '#f97316', px);
+        pitchCacheCtx.strokeStyle = 'rgba(255, 247, 237, 0.85)';
+        pitchCacheCtx.lineWidth = 2.5;
+        pitchCacheCtx.strokeRect(-trackPad + 16, -trackPad + 16, w + (trackPad - 16) * 2, h + (trackPad - 16) * 2);
+        pitchCacheCtx.strokeRect(-trackPad + 26, -trackPad + 26, w + (trackPad - 26) * 2, h + (trackPad - 26) * 2);
+
+        for (const by of [-102, h + 50]) {
+          fillPxRect(pitchCacheCtx, 110, by - 4, w - 220, 52, outline, px);
+          fillPxRect(pitchCacheCtx, 114, by, w - 228, 44, GRAPHICS_CONFIG.crowd.bleacherBase, px);
+          fillPxRect(pitchCacheCtx, 120, by + 8, w - 240, 11, GRAPHICS_CONFIG.crowd.bleacherStep, px);
+          fillPxRect(pitchCacheCtx, 120, by + 26, w - 240, 11, GRAPHICS_CONFIG.crowd.bleacherStep, px);
+          fillPxRect(pitchCacheCtx, 120, by + 2, (w - 240) * 0.48, 4, '#38bdf8', px);
+          fillPxRect(pitchCacheCtx, w * 0.52, by + 2, (w - 240) * 0.48, 4, '#fb7185', px);
+        }
+
+        drawCornerFloodlightTower(pitchCacheCtx, -108, -96, 1, 1, px);
+        drawCornerFloodlightTower(pitchCacheCtx, w + 108, -96, -1, 1, px);
+        drawCornerFloodlightTower(pitchCacheCtx, -108, h + 96, 1, -1, px);
+        drawCornerFloodlightTower(pitchCacheCtx, w + 108, h + 96, -1, -1, px);
+
+        const flowerPalette = GRAPHICS_CONFIG.palette.apron.flowerColors;
+        for (let i = 0; i < 68; i++) {
+          const side = i % 4;
+          let fx = 0;
+          let fy = 0;
+          if (side === 0) {
+            fx = -340 + ((i * 47) % 210);
+            fy = -220 + ((i * 173) % (h + 440));
+          } else if (side === 1) {
+            fx = w + 130 + ((i * 53) % 210);
+            fy = -220 + ((i * 191) % (h + 440));
+          } else if (side === 2) {
+            fx = -80 + ((i * 167) % (w + 160));
+            fy = -240 + ((i * 31) % 115);
+          } else {
+            fx = -80 + ((i * 181) % (w + 160));
+            fy = h + 120 + ((i * 37) % 115);
+          }
+          const col = flowerPalette[i % flowerPalette.length];
+          fillPxRect(pitchCacheCtx, fx, fy + px, px * 2, px * 2, '#34a86c', px);
+          fillPxRect(pitchCacheCtx, fx - px, fy, px * 3, px * 2, col, px);
+          fillPxRect(pitchCacheCtx, fx, fy - px, px * 2, px * 3, col, px);
+          fillPxRect(pitchCacheCtx, fx, fy, px, px, '#fef08a', px);
+        }
+
+        const treePositions = [
+          { x: -102, y: 88, s: 2, v: 0 },
+          { x: -205, y: 185, s: 2, v: 1 },
+          { x: -102, y: h - 88, s: 2, v: 1 },
+          { x: -205, y: h - 185, s: 2, v: 0 },
+          { x: w + 102, y: 88, s: 2, v: 1 },
+          { x: w + 205, y: 185, s: 2, v: 0 },
+          { x: w + 102, y: h - 88, s: 2, v: 0 },
+          { x: w + 205, y: h - 185, s: 2, v: 1 },
+          { x: 180, y: -136, s: 2, v: 0 },
+          { x: 430, y: -140, s: 2, v: 1 },
+          { x: w - 430, y: -140, s: 2, v: 0 },
+          { x: w - 180, y: -136, s: 2, v: 1 },
+          { x: 180, y: h + 136, s: 2, v: 1 },
+          { x: 430, y: h + 140, s: 2, v: 0 },
+          { x: w - 430, y: h + 140, s: 2, v: 1 },
+          { x: w - 180, y: h + 136, s: 2, v: 0 },
+        ];
+        for (const tr of treePositions) {
+          drawPixelTree(pitchCacheCtx, tr.x, tr.y, tr.s, tr.v, px);
         }
       }
 
-      // Soft pastel running track around cage
-      fillPxRect(pitchCacheCtx, -48, -48, w + 96, h + 96, GRAPHICS_CONFIG.palette.apron.outerBorder, px);
-      fillPxRect(pitchCacheCtx, -40, -40, w + 80, h + 80, GRAPHICS_CONFIG.palette.apron.innerPath, px);
-
-      // 2. Static Pastel Meadow Flowers on Outer Apron
-      const flowerPalette = GRAPHICS_CONFIG.palette.apron.flowerColors;
-      for (let i = 0; i < 48; i++) {
-        const side = i % 4;
-        let fx = 0;
-        let fy = 0;
-        if (side === 0) {
-          fx = -220 + ((i * 37) % 130);
-          fy = -100 + ((i * 173) % (h + 200));
-        } else if (side === 1) {
-          fx = w + 90 + ((i * 43) % 130);
-          fy = -100 + ((i * 191) % (h + 200));
-        } else if (side === 2) {
-          fx = (i * 167) % w;
-          fy = -210 + ((i * 29) % 60);
-        } else {
-          fx = (i * 181) % w;
-          fy = h + 135 + ((i * 31) % 65);
-        }
-        const col = flowerPalette[i % flowerPalette.length];
-        fillPxRect(pitchCacheCtx, fx, fy + px, px * 2, px * 2, '#34a86c', px);
-        fillPxRect(pitchCacheCtx, fx - px, fy, px * 3, px * 2, col, px);
-        fillPxRect(pitchCacheCtx, fx, fy - px, px * 2, px * 3, col, px);
-        fillPxRect(pitchCacheCtx, fx, fy, px, px, '#fef08a', px);
-      }
-
-      // 3. Bright Pastel Stadium Bleachers Along Touchlines
-      for (const by of [-126, h + 40]) {
-        fillPxRect(pitchCacheCtx, 68, by - 4, w - 136, 68, GRAPHICS_CONFIG.palette.outline, px);
-        fillPxRect(pitchCacheCtx, 72, by, w - 144, 60, GRAPHICS_CONFIG.crowd.bleacherBase, px);
-        fillPxRect(pitchCacheCtx, 76, by + 10, w - 152, 14, GRAPHICS_CONFIG.crowd.bleacherStep, px);
-        fillPxRect(pitchCacheCtx, 76, by + 34, w - 152, 14, GRAPHICS_CONFIG.crowd.bleacherStep, px);
-      }
-
-      // 4. Clipped Chamfered Pitch Turf & Chalk Markings
+      // 4. Clipped Chamfered Pitch Turf, Bespoke Mowing Patterns, Center Circle Emblems & Chalk Markings
       pitchCacheCtx.save();
       pitchCacheCtx.beginPath();
       pitchCacheCtx.moveTo(c, 0);
@@ -183,7 +1309,6 @@ export default function App() {
           : GRAPHICS_CONFIG.pitch.grassDark;
         pitchCacheCtx.fillRect(sx, 0, stripeW + 1, h);
 
-        // 16-bit pixel dithered cross-hatch along each stripe seam
         pitchCacheCtx.fillStyle = isLight
           ? GRAPHICS_CONFIG.pitch.ditherDark
           : GRAPHICS_CONFIG.pitch.ditherLight;
@@ -193,7 +1318,182 @@ export default function App() {
         }
       }
 
-      // Hand-crafted pixel grass tufts scattered across the turf
+      // Theme-Specific Bespoke Turf Pattern Overlay & Center Circle Art
+      if (selectedPitchTheme === 'CLASSIC_TURF') {
+        // Wembley Checkerboard Cross-Mowing Horizontal Bands + Royal Crown Center Emblem
+        pitchCacheCtx.fillStyle = 'rgba(255, 255, 255, 0.08)';
+        const rowH = h / 8;
+        for (let r = 0; r < 8; r += 2) {
+          pitchCacheCtx.fillRect(0, r * rowH, w, rowH);
+        }
+        // Subtle Royal Laurel Ring inside Center Circle
+        pitchCacheCtx.strokeStyle = 'rgba(255, 255, 255, 0.35)';
+        pitchCacheCtx.lineWidth = 4;
+        pitchCacheCtx.beginPath();
+        pitchCacheCtx.arc(w * 0.5, h * 0.5, 62, 0, Math.PI * 2);
+        pitchCacheCtx.stroke();
+      } else if (selectedPitchTheme === 'TURF_AUTUMN') {
+        // Diagonal Argyle Harvest Lawn Mowing + Golden Maple Diamond Center Emblem
+        pitchCacheCtx.strokeStyle = 'rgba(254, 240, 138, 0.24)';
+        pitchCacheCtx.lineWidth = 4;
+        for (let d = -h; d < w + h; d += 150) {
+          pitchCacheCtx.beginPath();
+          pitchCacheCtx.moveTo(d, 0);
+          pitchCacheCtx.lineTo(d + h, h);
+          pitchCacheCtx.stroke();
+          pitchCacheCtx.beginPath();
+          pitchCacheCtx.moveTo(d + h, 0);
+          pitchCacheCtx.lineTo(d, h);
+          pitchCacheCtx.stroke();
+        }
+        pitchCacheCtx.strokeStyle = 'rgba(254, 249, 195, 0.55)';
+        pitchCacheCtx.lineWidth = 5;
+        pitchCacheCtx.beginPath();
+        pitchCacheCtx.moveTo(w * 0.5, h * 0.5 - 72);
+        pitchCacheCtx.lineTo(w * 0.5 + 72, h * 0.5);
+        pitchCacheCtx.lineTo(w * 0.5, h * 0.5 + 72);
+        pitchCacheCtx.lineTo(w * 0.5 - 72, h * 0.5);
+        pitchCacheCtx.closePath();
+        pitchCacheCtx.stroke();
+      } else if (selectedPitchTheme === 'TURF_SAKURA') {
+        // Concentric Zen Garden Radial Mowing Circles + 5-Petal Pink Sakura Blossom Center Crest
+        pitchCacheCtx.strokeStyle = 'rgba(255, 255, 255, 0.22)';
+        pitchCacheCtx.lineWidth = 6;
+        for (const rad of [95, 220, 345, 470]) {
+          pitchCacheCtx.beginPath();
+          pitchCacheCtx.arc(w * 0.5, h * 0.5, rad, 0, Math.PI * 2);
+          pitchCacheCtx.stroke();
+        }
+        // 5-Petal Sakura Blossom Emblem inside Center Circle
+        for (let p = 0; p < 5; p++) {
+          const ang = (p * Math.PI * 2) / 5 - Math.PI / 2;
+          const pxCenter = w * 0.5 + Math.cos(ang) * 44;
+          const pyCenter = h * 0.5 + Math.sin(ang) * 44;
+          fillPxRect(pitchCacheCtx, pxCenter - 14, pyCenter - 14, 28, 28, 'rgba(251, 207, 232, 0.52)', px);
+        }
+      } else if (selectedPitchTheme === 'TURF_CHAMPIONS') {
+        // Championship V-Chevron Mowing Bands + 8-Point Golden Starball Center Crest
+        pitchCacheCtx.strokeStyle = 'rgba(255, 255, 255, 0.16)';
+        pitchCacheCtx.lineWidth = 14;
+        for (let cx = 120; cx < w; cx += 180) {
+          pitchCacheCtx.beginPath();
+          pitchCacheCtx.moveTo(cx - 60, 0);
+          pitchCacheCtx.lineTo(cx, h * 0.5);
+          pitchCacheCtx.lineTo(cx - 60, h);
+          pitchCacheCtx.stroke();
+        }
+        // 8-Point Champions Starball Ring in Center Circle
+        pitchCacheCtx.strokeStyle = 'rgba(254, 240, 138, 0.55)';
+        pitchCacheCtx.lineWidth = 4;
+        pitchCacheCtx.beginPath();
+        pitchCacheCtx.arc(w * 0.5, h * 0.5, 68, 0, Math.PI * 2);
+        pitchCacheCtx.stroke();
+        for (let s = 0; s < 8; s++) {
+          const ang = (s * Math.PI) / 4;
+          fillPxRect(
+            pitchCacheCtx,
+            w * 0.5 + Math.cos(ang) * 68 - 6,
+            h * 0.5 + Math.sin(ang) * 68 - 6,
+            12,
+            12,
+            'rgba(254, 240, 138, 0.65)',
+            px
+          );
+        }
+      } else if (selectedPitchTheme === 'COSMIC_SPACE') {
+        // Glowing Constellation Grid Nodes & Orbital Center Ring
+        pitchCacheCtx.strokeStyle = 'rgba(56, 189, 248, 0.16)';
+        pitchCacheCtx.lineWidth = 2;
+        for (let gy = stripeW; gy < h; gy += stripeW) {
+          pitchCacheCtx.beginPath();
+          pitchCacheCtx.moveTo(0, gy);
+          pitchCacheCtx.lineTo(w, gy);
+          pitchCacheCtx.stroke();
+        }
+        pitchCacheCtx.strokeStyle = 'rgba(192, 132, 252, 0.35)';
+        pitchCacheCtx.lineWidth = 4;
+        pitchCacheCtx.beginPath();
+        pitchCacheCtx.ellipse(w * 0.5, h * 0.5, 92, 38, -0.35, 0, Math.PI * 2);
+        pitchCacheCtx.stroke();
+      } else if (selectedPitchTheme === 'URBAN_CONCRETE') {
+        // Street Asphalt Expansion Joints & Stencil Center Star
+        pitchCacheCtx.strokeStyle = 'rgba(51, 65, 85, 0.32)';
+        pitchCacheCtx.lineWidth = 2;
+        for (let gy = 140; gy < h; gy += 140) {
+          pitchCacheCtx.beginPath();
+          pitchCacheCtx.moveTo(0, gy);
+          pitchCacheCtx.lineTo(w, gy);
+          pitchCacheCtx.stroke();
+        }
+        fillPxRect(pitchCacheCtx, w * 0.5 - 38, h * 0.5 - 38, 76, 76, 'rgba(250, 204, 21, 0.22)', px);
+      } else if (selectedPitchTheme === 'RIO_CLAY') {
+        // Diamond-Cut Clay Grooming Lines & Sunburst Center Ring
+        pitchCacheCtx.strokeStyle = 'rgba(254, 243, 199, 0.18)';
+        pitchCacheCtx.lineWidth = 3;
+        for (let d = -h; d < w + h; d += 120) {
+          pitchCacheCtx.beginPath();
+          pitchCacheCtx.moveTo(d, 0);
+          pitchCacheCtx.lineTo(d + h, h);
+          pitchCacheCtx.stroke();
+        }
+        pitchCacheCtx.strokeStyle = 'rgba(254, 240, 138, 0.42)';
+        pitchCacheCtx.lineWidth = 5;
+        pitchCacheCtx.beginPath();
+        pitchCacheCtx.arc(w * 0.5, h * 0.5, 58, 0, Math.PI * 2);
+        pitchCacheCtx.stroke();
+      } else if (selectedPitchTheme === 'TWILIGHT_SYNTH') {
+        // Neon Cyber-Circuit Grid Traces & Outrun Center Sun
+        pitchCacheCtx.strokeStyle = 'rgba(244, 114, 182, 0.22)';
+        pitchCacheCtx.lineWidth = 2;
+        for (let gy = 110; gy < h; gy += 110) {
+          pitchCacheCtx.beginPath();
+          pitchCacheCtx.moveTo(0, gy);
+          pitchCacheCtx.lineTo(w, gy);
+          pitchCacheCtx.stroke();
+        }
+        fillPxRect(pitchCacheCtx, w * 0.5 - 46, h * 0.5 - 46, 92, 92, 'rgba(244, 114, 182, 0.22)', px);
+        fillPxRect(pitchCacheCtx, w * 0.5 - 30, h * 0.5 - 30, 60, 60, 'rgba(34, 211, 238, 0.24)', px);
+      } else if (selectedPitchTheme === 'ARCTIC_ICE') {
+        // Crystalline Diagonal Ice Sheen Streaks & Snowflake Center Crystal
+        pitchCacheCtx.fillStyle = 'rgba(255, 255, 255, 0.26)';
+        for (let d = -h; d < w; d += 220) {
+          pitchCacheCtx.beginPath();
+          pitchCacheCtx.moveTo(d, 0);
+          pitchCacheCtx.lineTo(d + 55, 0);
+          pitchCacheCtx.lineTo(d + h + 55, h);
+          pitchCacheCtx.lineTo(d + h, h);
+          pitchCacheCtx.closePath();
+          pitchCacheCtx.fill();
+        }
+        // 8-Point Snowflake Center Emblem
+        pitchCacheCtx.strokeStyle = 'rgba(255, 255, 255, 0.72)';
+        pitchCacheCtx.lineWidth = 4;
+        for (let a = 0; a < 4; a++) {
+          const ang = (a * Math.PI) / 4;
+          pitchCacheCtx.beginPath();
+          pitchCacheCtx.moveTo(w * 0.5 - Math.cos(ang) * 68, h * 0.5 - Math.sin(ang) * 68);
+          pitchCacheCtx.lineTo(w * 0.5 + Math.cos(ang) * 68, h * 0.5 + Math.sin(ang) * 68);
+          pitchCacheCtx.stroke();
+        }
+      } else if (selectedPitchTheme === 'VOLCANO_FORGE') {
+        // Obsidian Basalt Geometric Tiles & Molten Ember Center Ring
+        pitchCacheCtx.strokeStyle = 'rgba(249, 115, 22, 0.22)';
+        pitchCacheCtx.lineWidth = 2;
+        for (let gy = 140; gy < h; gy += 140) {
+          pitchCacheCtx.beginPath();
+          pitchCacheCtx.moveTo(0, gy);
+          pitchCacheCtx.lineTo(w, gy);
+          pitchCacheCtx.stroke();
+        }
+        pitchCacheCtx.strokeStyle = 'rgba(239, 68, 68, 0.45)';
+        pitchCacheCtx.lineWidth = 6;
+        pitchCacheCtx.beginPath();
+        pitchCacheCtx.arc(w * 0.5, h * 0.5, 68, 0, Math.PI * 2);
+        pitchCacheCtx.stroke();
+        fillPxRect(pitchCacheCtx, w * 0.5 - 26, h * 0.5 - 26, 52, 52, 'rgba(249, 115, 22, 0.28)', px);
+      }
+
+      // Hand-crafted pixel grass/surface tufts scattered across the turf
       for (let i = 0; i < 64; i++) {
         const tx = snapPx(95 + ((i * 197) % (w - 190)), px);
         const ty = snapPx(75 + ((i * 313) % (h - 150)), px);
@@ -208,10 +1508,8 @@ export default function App() {
       const lineCol = GRAPHICS_CONFIG.pitch.chalkLine;
       const lineW = px * 2;
 
-      // Halfway line
       fillPxRect(pitchCacheCtx, w / 2 - lineW * 0.5, 0, lineW, h, lineCol, px);
 
-      // Pixel-stepped Center Circle
       const circleR = 152;
       for (let i = 0; i < 76; i++) {
         const a = (i * Math.PI * 2) / 76;
@@ -225,10 +1523,8 @@ export default function App() {
           px
         );
       }
-      // Center kickoff pixel diamond
       fillPxRect(pitchCacheCtx, w / 2 - 8, h / 2 - 8, 16, 16, lineCol, px);
 
-      // Left & Right Penalty Boxes
       fillPxRect(pitchCacheCtx, 0, boxTop, PITCH.boxWidth, lineW, lineCol, px);
       fillPxRect(pitchCacheCtx, 0, boxTop + PITCH.boxHeight - lineW, PITCH.boxWidth, lineW, lineCol, px);
       fillPxRect(pitchCacheCtx, PITCH.boxWidth - lineW, boxTop, lineW, PITCH.boxHeight, lineCol, px);
@@ -237,7 +1533,6 @@ export default function App() {
       fillPxRect(pitchCacheCtx, w - PITCH.boxWidth, boxTop + PITCH.boxHeight - lineW, PITCH.boxWidth, lineW, lineCol, px);
       fillPxRect(pitchCacheCtx, w - PITCH.boxWidth, boxTop, lineW, PITCH.boxHeight, lineCol, px);
 
-      // Penalty box D-arcs (stepped pixel arcs)
       for (let i = -14; i <= 14; i++) {
         const aLeft = (i / 14) * Math.PI * 0.38;
         fillPxRect(
@@ -480,7 +1775,6 @@ export default function App() {
 
     let currentGameMode: GameMode = 'CASUAL';
     let userKitChoice: KitChoice = 'HOME';
-    let selectedPitchTheme: PitchThemeId = 'CLASSIC_TURF';
     let tournamentRound = 0; // 0 = Quarter-Final (Game 1), 1 = Semi-Final (Game 2), 2 = Grand Final (Game 3)
 
     // User Profile State (Name + Preset Icon or Camera Photo + Ranked Progression & Setup Flag)
@@ -892,7 +2186,7 @@ export default function App() {
         mmYouAvatar.innerHTML = getProfileAvatarInnerHtml(userProfile, youIsHome);
       }
       if (mmYouTitle) {
-        mmYouTitle.innerText = `${userProfile.name} (${youIsHome ? 'Home Kit' : 'Away Kit'})`;
+        mmYouTitle.innerText = userProfile.name;
       }
 
       // Sync Profile Overview Modal elements
@@ -1013,32 +2307,22 @@ export default function App() {
           : 'flex items-center space-x-1.5 sm:space-x-2 bg-sky-500 text-white px-2 py-0.5 sm:px-3 sm:py-1 rounded-lg sm:rounded-xl border-2 border-slate-900 shadow-xs transition-colors';
       }
 
-      // 4. Update Tournament Knockout Bracket UI
-      const bracketWrap = document.getElementById('tournamentBracketWrap');
+      // 4. Update Tournament HUD Badge & Ensure Bracket Initialized
       const hudTourneyBadge = document.getElementById('hudTourneyBadge');
       if (currentGameMode === 'TOURNAMENT') {
-        if (bracketWrap) {
-          bracketWrap.classList.remove('hidden');
-          bracketWrap.className = 'mt-3 grid grid-cols-3 gap-2';
+        if (!tournamentBracket.initialized) {
+          initTournamentBracket();
         }
         if (hudTourneyBadge) {
           hudTourneyBadge.classList.remove('hidden');
+          hudTourneyBadge.classList.add('inline-flex');
           hudTourneyBadge.innerText = `CUP ${tournamentRound + 1}/${TOTAL_TOURNAMENT_GAMES} · ${TOURNAMENT_ROUNDS[tournamentRound].toUpperCase()} · ${rankInfo.name.toUpperCase()}`;
         }
-        for (let r = 0; r < TOTAL_TOURNAMENT_GAMES; r++) {
-          const stepEl = document.getElementById(`tourneyStep${r}`);
-          if (!stepEl) continue;
-          if (r < tournamentRound) {
-            stepEl.className = 'min-w-0 py-2 px-2 rounded-xl bg-emerald-400 border-2 border-slate-900 text-slate-900 font-black text-[10px] sm:text-xs flex items-center justify-center text-center truncate';
-          } else if (r === tournamentRound) {
-            stepEl.className = 'min-w-0 py-2 px-2 rounded-xl bg-amber-300 border-2 border-slate-900 text-slate-900 font-black text-[10px] sm:text-xs shadow-[0_2px_0_#0f172a] flex items-center justify-center text-center truncate';
-          } else {
-            stepEl.className = 'min-w-0 py-2 px-2 rounded-xl bg-white border border-slate-300 text-slate-500 font-bold text-[10px] sm:text-xs flex items-center justify-center text-center truncate';
-          }
-        }
       } else {
-        if (bracketWrap) bracketWrap.classList.add('hidden');
-        if (hudTourneyBadge) hudTourneyBadge.classList.add('hidden');
+        if (hudTourneyBadge) {
+          hudTourneyBadge.classList.add('hidden');
+          hudTourneyBadge.classList.remove('inline-flex');
+        }
       }
     }
 
@@ -1105,7 +2389,8 @@ export default function App() {
       if (startBtnEl) {
         startBtnEl.classList.remove('hidden');
         startBtnEl.removeAttribute('disabled');
-        startBtnEl.className = 'indie-cta-btn w-full min-h-[52px] py-3.5 sm:py-4 px-6 rounded-2xl bg-sky-500 hover:bg-sky-400 text-white font-black text-sm sm:text-lg tracking-wide cursor-pointer flex items-center justify-center space-x-3';
+        startBtnEl.className =
+          'indie-cta-btn w-full sm:w-auto sm:min-w-[240px] sm:max-w-[320px] min-h-[46px] sm:min-h-[50px] py-3 sm:py-3.5 px-7 rounded-2xl bg-sky-500 hover:bg-sky-400 text-white font-black text-sm sm:text-base tracking-wide cursor-pointer flex items-center justify-center space-x-2.5 mx-auto';
       }
       if (startBtnTextEl) {
         startBtnTextEl.innerText =
@@ -1258,10 +2543,10 @@ export default function App() {
         const homeColors = ['#38bdf8', '#60a5fa', '#fde047', '#a7f3d0', '#fef08a'];
         const awayColors = ['#fb7185', '#fda4af', '#f472b6', '#fcd34d', '#ffffff'];
         for (let row = 0; row < 2; row++) {
-          const topY = -82 - row * 28;
-          const botY = PITCH.height + 54 + row * 28;
-          for (let x = 110; x <= PITCH.width - 110; x += 48) {
-            if (row === 0 && x > PITCH.width * 0.23 && x < PITCH.width * 0.77) continue;
+          const topY = -68 - row * 20;
+          const botY = PITCH.height + 68 + row * 20;
+          for (let x = 135; x <= PITCH.width - 135; x += 48) {
+            if (row === 0 && x > PITCH.width * 0.21 && x < PITCH.width * 0.79) continue;
             const isHomeSide = x < PITCH.width * 0.5;
             const palette = isHomeSide ? homeColors : awayColors;
             crowdFans.push({
@@ -1277,6 +2562,30 @@ export default function App() {
               color: palette[Math.floor(Math.random() * palette.length)],
               phase: Math.random() * Math.PI * 2,
               isHome: isHomeSide,
+            });
+          }
+        }
+        // Left & Right End-Zone Supporter Terrace Crowd
+        const goalTopY = (PITCH.height - PITCH.goalWidth) * 0.5;
+        const goalBotY = (PITCH.height + PITCH.goalWidth) * 0.5;
+        for (let col = 0; col < 2; col++) {
+          const leftX = -82 - col * 20;
+          const rightX = PITCH.width + 82 + col * 20;
+          for (let y = 100; y <= PITCH.height - 100; y += 46) {
+            if (y > goalTopY - 85 && y < goalBotY + 85) continue;
+            crowdFans.push({
+              x: leftX + (Math.random() - 0.5) * 6,
+              baseY: y,
+              color: homeColors[Math.floor(Math.random() * homeColors.length)],
+              phase: Math.random() * Math.PI * 2,
+              isHome: true,
+            });
+            crowdFans.push({
+              x: rightX + (Math.random() - 0.5) * 6,
+              baseY: y,
+              color: awayColors[Math.floor(Math.random() * awayColors.length)],
+              phase: Math.random() * Math.PI * 2,
+              isHome: false,
             });
           }
         }
@@ -1518,19 +2827,20 @@ export default function App() {
       const isMobileOrTablet = isMobileOrTabletViewport();
 
       if (isMobileOrTablet) {
-        // Mobile & Tablet Landscape-Locked Arena Framing: fits entire 2720x1580 horizontal stadium pitch cleanly inside display
-        const isCompactPhoneLandscape = h <= 550;
-        canvasOffsetY = isCompactPhoneLandscape ? 14 : 18;
-        const padX = isCompactPhoneLandscape ? 32 : 52;
-        const padY = isCompactPhoneLandscape ? 54 : 84;
-        const scaleX = Math.max(240, w - padX) / (PITCH.width + 72);
-        const scaleY = Math.max(180, h - padY) / (PITCH.height + 72);
-        viewScale = Math.min(scaleX, scaleY);
+        // Mobile & Tablet Landscape Arena Framing: adds a comfortable zoom on compact phone landscape so action feels close and dynamic
+        const isCompactPhoneLandscape = h <= 550 && w > h;
+        canvasOffsetY = isCompactPhoneLandscape ? 10 : 14;
+        const padX = isCompactPhoneLandscape ? 24 : 48;
+        const padY = isCompactPhoneLandscape ? 42 : 76;
+        const scaleX = Math.max(240, w - padX) / (PITCH.width + 64);
+        const scaleY = Math.max(180, h - padY) / (PITCH.height + 64);
+        const fitScale = Math.min(scaleX, scaleY);
+        viewScale = isCompactPhoneLandscape ? fitScale * 1.24 : fitScale * 1.06;
       } else {
-        // Normal PC widescreen viewing mode
-        canvasOffsetY = 20;
-        const padX = 76;
-        const padY = 132;
+        // Normal PC widescreen viewing mode: balanced framing so stadium bleachers, floodlights, trees & cosmic space art are visible around the cage
+        canvasOffsetY = 8;
+        const padX = 185;
+        const padY = 175;
         const scaleX = (w - padX) / PITCH.width;
         const scaleY = (h - padY) / PITCH.height;
         viewScale = Math.max(0.18, Math.min(scaleX, scaleY));
@@ -1690,7 +3000,7 @@ export default function App() {
 
     function spawnFloatingText(x: number, y: number, text: string, color = '#ffffff') {
       if (floatingTexts.length > 24) floatingTexts.shift();
-      floatingTexts.push({ x, y, text, color, vy: -1.25, alpha: 1.0, scale: 1.15 });
+      floatingTexts.push({ x, y, text, color, vy: -1.35, alpha: 1.0, scale: 1.42 });
     }
 
     function spawnRipple(x: number, y: number, color = '#ffffff', maxR = 48) {
@@ -2565,27 +3875,30 @@ export default function App() {
         return;
       }
 
+      const howToPlayWrap = document.getElementById('howToPlayWrap');
       if (state === 'PAUSED' || state === 'MATCH_OVER') {
         if (overlay) {
           overlay.className =
-            'absolute inset-0 bg-slate-900/55 flex items-center justify-center z-30 p-3 sm:p-6 transition-opacity duration-150 overflow-y-auto';
+            'absolute inset-0 bg-slate-900/55 flex items-center justify-center z-30 p-2.5 sm:p-5 transition-opacity duration-150 overflow-y-auto';
         }
         modalCard.className =
           state === 'MATCH_OVER'
-            ? 'glass-modal rounded-[28px] max-w-xl w-full max-h-[94dvh] overflow-y-auto p-4 sm:p-6 text-center relative transition-all duration-200 my-auto'
-            : 'glass-modal rounded-[28px] max-w-lg w-full max-h-[92dvh] overflow-y-auto p-5 sm:p-7 text-center relative transition-all duration-200 my-auto';
+            ? 'glass-modal rounded-[26px] max-w-xl w-full max-h-[95dvh] overflow-y-auto p-3.5 sm:p-5 text-center relative transition-all duration-200 my-auto'
+            : 'glass-modal rounded-[26px] max-w-lg w-full max-h-[94dvh] overflow-y-auto p-4 sm:p-6 text-center relative transition-all duration-200 my-auto';
         if (topBar) {
           topBar.className =
-            'flex flex-col sm:flex-row items-center justify-center gap-2 sm:gap-3 pb-3 mb-3 border-b-2 border-slate-200';
+            'flex flex-col sm:flex-row items-center justify-center gap-2 sm:gap-3 pb-2.5 mb-2.5 border-b-2 border-slate-200';
         }
         if (mainGrid) {
           mainGrid.className =
-            state === 'MATCH_OVER' ? 'hidden' : 'flex flex-col gap-4 text-left mb-4';
+            state === 'MATCH_OVER' ? 'hidden' : 'flex flex-col gap-3 text-left mb-3';
         }
         if (leftCol) leftCol.classList.add('hidden');
-        if (bottomBar) bottomBar.className = 'flex flex-col space-y-2 sm:space-y-2.5';
+        if (bottomBar) bottomBar.className = 'flex flex-col items-center space-y-2';
         if (profileBar) profileBar.classList.add('hidden');
         if (editProfileBtn) editProfileBtn.classList.add('hidden');
+        if (howToPlayWrap) howToPlayWrap.classList.add('hidden');
+        if (howToPlayPanel) howToPlayPanel.classList.add('hidden');
         if (mainMenuBtn) {
           mainMenuBtn.classList.toggle('hidden', state !== 'MATCH_OVER');
         }
@@ -2596,28 +3909,29 @@ export default function App() {
         // Polished, responsive Home Menu layout over the live stadium pitch (zero squishing across screen sizes)
         if (overlay) {
           overlay.className =
-            'absolute inset-0 bg-slate-950/25 flex items-center justify-center z-30 p-3 sm:p-5 lg:p-8 transition-opacity duration-150 overflow-y-auto';
+            'absolute inset-0 bg-slate-950/25 flex items-center justify-center z-30 p-2.5 sm:p-5 lg:p-8 transition-opacity duration-150 overflow-y-auto';
         }
         modalCard.className =
-          'w-full max-w-2xl lg:max-w-5xl flex flex-col gap-3 sm:gap-4 text-center relative transition-all duration-200 my-auto';
+          'w-full max-w-xl sm:max-w-2xl lg:max-w-4xl flex flex-col gap-2.5 sm:gap-3.5 text-center relative transition-all duration-200 my-auto mx-auto';
         if (topBar) {
           topBar.className =
-            'glass-modal rounded-3xl px-4 py-3 sm:px-6 sm:py-3.5 flex flex-col sm:flex-row items-center justify-center sm:justify-between gap-2.5 sm:gap-3';
+            'glass-modal rounded-3xl px-4 py-2.5 sm:px-6 sm:py-3.5 flex flex-col sm:flex-row items-center justify-center sm:justify-between gap-2 sm:gap-3';
         }
         if (mainGrid) {
-          mainGrid.className = 'grid grid-cols-1 sm:grid-cols-12 gap-3.5 sm:gap-4 items-stretch text-left';
+          mainGrid.className = 'grid grid-cols-1 sm:grid-cols-12 gap-3 sm:gap-4 items-stretch text-left';
         }
         if (leftCol) {
           leftCol.className =
-            'sm:col-span-7 glass-modal rounded-3xl p-4 sm:p-6 flex flex-col justify-between gap-4';
+            'sm:col-span-7 glass-modal rounded-3xl p-4 sm:p-5 flex flex-col justify-between gap-3.5';
         }
         if (bottomBar) {
-          bottomBar.className = 'glass-modal rounded-3xl p-4 sm:p-5 flex flex-col space-y-2.5 sm:space-y-3';
+          bottomBar.className = 'glass-modal rounded-3xl p-3.5 sm:p-4 flex flex-col items-center space-y-2';
         }
         const postMatchRankCard = document.getElementById('postMatchRankCard');
         if (postMatchRankCard) postMatchRankCard.classList.add('hidden');
         if (profileBar) profileBar.classList.remove('hidden');
         if (editProfileBtn) editProfileBtn.classList.remove('hidden');
+        if (howToPlayWrap) howToPlayWrap.classList.remove('hidden');
         if (mainMenuBtn) mainMenuBtn.classList.add('hidden');
         if (startBtnEl) startBtnEl.classList.remove('hidden');
       }
@@ -3333,6 +4647,17 @@ export default function App() {
       }
     }
 
+    let activeGoalCelebration: GoalCelebrationSpec = {
+      headline: 'GOOOAAAL!',
+      subheadline: 'CLINICAL FINISH',
+      kickerBadge: '⚽ GOAL SCORED',
+      primaryColor: '#fde047',
+      secondaryColor: '#38bdf8',
+      glowColor: '#f59e0b',
+      pitchCallouts: [],
+      ledMessage: 'GOOOAAAL!',
+    };
+
     function handleGoalScored(scoringTeam: 'YOU' | 'AI') {
       if (gameState === 'GOAL_CELEBRATION') return;
       gameState = 'GOAL_CELEBRATION';
@@ -3361,46 +4686,63 @@ export default function App() {
         }
       });
 
+      const prevScoreYou = scoreYou;
+      const prevScoreAi = scoreAi;
+
       if (scoringTeam === 'YOU') {
         scoreYou++;
         const syEl = document.getElementById('scoreYou');
         if (syEl) syEl.innerText = String(scoreYou);
-        if (isRonaldoLongShot) {
-          goalBannerText = 'RONALDO GOAL!';
-          goalBannerSub = 'LONG-RANGE SCREAMER FROM FAR OUTSIDE THE BOX!';
-          spawnFloatingText(ball.x - 60, ball.y - 36, 'RONALDO GOAL!', '#facc15');
-          setLedBanner(`⚡ RONALDO GOAL! LONG-RANGE SCREAMER VS ${currentOpponent.tag.toUpperCase()} (${scoreYou} - ${scoreAi}) ⚡`, 240);
-        } else {
-          goalBannerText = 'GOAL · YOU SCORE!';
-          goalBannerSub = ball.isPerfectStrike
-            ? 'SWEET-SPOT PERFECT STRIKE FINISH!'
-            : flowCombo >= PASSES_FOR_FLOW_BOOST
-              ? `SUPER FLOW x${flowCombo} TEAMWORK FINISH!`
-              : ball.isOneTouch
-                ? 'INSTANT ONE-TOUCH VOLLEY FINISH!'
-                : `CLINICAL CAGE FINISH VS ${currentOpponent.tag.toUpperCase()}!`;
-          setLedBanner(`GOOOAAAL! YOU LEAD ${currentOpponent.tag.toUpperCase()} ${scoreYou} - ${scoreAi}`, 220);
-        }
+      } else {
+        scoreAi++;
+        const saEl = document.getElementById('scoreAi');
+        if (saEl) saEl.innerText = String(scoreAi);
+      }
+
+      const celebrationSpec = buildGoalCelebrationMessage({
+        scoringTeam,
+        scoreYou,
+        scoreAi,
+        prevScoreYou,
+        prevScoreAi,
+        isLongRange: isRonaldoLongShot,
+        isPerfectStrike: Boolean(ball.isPerfectStrike),
+        isOneTouch: Boolean(ball.isOneTouch),
+        wasWallBounce: Boolean(ball.wasWallBounce),
+        spinMagnitude: Math.abs(ball.spin),
+        flowCombo,
+        isGoldenGoal,
+        matchTimeRemaining: matchTime,
+        opponentTag: currentOpponent.tag,
+      });
+
+      activeGoalCelebration = celebrationSpec;
+      goalBannerText = celebrationSpec.headline;
+      goalBannerSub = celebrationSpec.subheadline;
+      setLedBanner(celebrationSpec.ledMessage, 240);
+
+      // Spawn expressive unboxed 3D arcade callouts directly over the pitch
+      const calloutBaseX = scoringTeam === 'YOU' ? Math.min(PITCH.width - 140, ball.x - 70) : Math.max(140, ball.x + 70);
+      celebrationSpec.pitchCallouts.forEach((callout, idx) => {
+        spawnFloatingText(
+          calloutBaseX + (idx % 2 === 0 ? -18 : 18),
+          ball.y - 36 - idx * 32,
+          callout.text,
+          callout.color
+        );
+      });
+
+      if (scoringTeam === 'YOU') {
         const oppPlayer = players.find((p) => p.team === 'AI');
-        if (oppPlayer && Math.random() < 0.65) {
+        if (oppPlayer && Math.random() < 0.72) {
           const chat = isRonaldoLongShot
             ? 'What a screamer!!'
             : ['Nice shot!', 'What a finish!', 'Unlucky!', 'GG!'][Math.floor(Math.random() * 4)];
           spawnFloatingText(oppPlayer.x, oppPlayer.y - 28, `${currentOpponent.tag}: "${chat}"`, '#fda4af');
         }
-      } else {
-        scoreAi++;
-        const saEl = document.getElementById('scoreAi');
-        if (saEl) saEl.innerText = String(scoreAi);
-        goalBannerText = isRonaldoLongShot ? 'RONALDO GOAL!' : `${currentOpponent.tag.toUpperCase()} SCORES!`;
-        goalBannerSub = isRonaldoLongShot
-          ? `${currentOpponent.tag.toUpperCase()} LONG-RANGE SCREAMER!`
-          : `${currentOpponent.rank.toUpperCase()} RIVAL FINISH`;
-        setLedBanner(`${currentOpponent.tag.toUpperCase()} GOAL • SCORE ${scoreYou} - ${scoreAi}`, 180);
-        if (ball.lastTouchPlayer && ball.lastTouchPlayer.team === 'AI') {
-          const chat = ["Let's gooo!", 'Calculated!', 'GG!', 'Nice pass!'][Math.floor(Math.random() * 4)];
-          spawnFloatingText(ball.lastTouchPlayer.x, ball.lastTouchPlayer.y - 30, `${currentOpponent.tag}: "${chat}"`, '#fef08a');
-        }
+      } else if (ball.lastTouchPlayer && ball.lastTouchPlayer.team === 'AI') {
+        const chat = ["Let's gooo!", 'Calculated!', 'GG!', 'Nice pass!'][Math.floor(Math.random() * 4)];
+        spawnFloatingText(ball.lastTouchPlayer.x, ball.lastTouchPlayer.y - 30, `${currentOpponent.tag}: "${chat}"`, '#fef08a');
       }
       sound.playGoal();
     }
@@ -3710,26 +5052,382 @@ export default function App() {
       const superFlowActive = flowCombo >= PASSES_FOR_FLOW_BOOST;
       const px = GRAPHICS_CONFIG.pixelPipeline.pixelSize;
 
-      // 1. Blit pre-rendered static 16-bit pixel stadium apron, meadow flowers, bleachers, turf & chalk lines in a single call
-      ctx.drawImage(pitchCacheCanvas, -CACHE_PAD, -CACHE_PAD);
+      // 1. Blit pre-rendered static 16-bit pixel stadium complex, trees, concourse, floodlight towers, bleachers, turf & chalk lines in a single call
+      ctx.drawImage(pitchCacheCanvas, -CACHE_PAD_X, -CACHE_PAD_Y);
 
-      // 2. Fast Bouncing 16-Bit Crowd Sprites Along Bleachers
-      ctx.save();
-      const bounceAmp = 2.4 + crowdExcitement * 7.8 + (superFlowActive ? 3.5 : 0);
-      const bounceFreq = 0.08 + crowdExcitement * 0.14;
-      for (let i = 0; i < crowdFans.length; i++) {
-        const fan = crowdFans[i];
-        const hop = Math.round(Math.abs(Math.sin(matchTick * bounceFreq + fan.phase)) * bounceAmp);
-        const fx = Math.round(fan.x);
-        const fy = Math.round(fan.baseY - hop);
-        ctx.fillStyle = GRAPHICS_CONFIG.palette.outline;
-        ctx.fillRect(fx - 7, fy - 7, 14, 14);
-        ctx.fillStyle = fan.color;
-        ctx.fillRect(fx - 5, fy - 5, 10, 10);
+      if (selectedPitchTheme === 'COSMIC_SPACE') {
+        // 2A. Live Twinkling 4-Point Stars, Streaking Shooting Comets, Drifting Asteroids & Cruising 16-Bit Alien UFOs
+        ctx.save();
+        const twinklePalette = ['#ffffff', '#fef08a', '#38bdf8', '#e879f9', '#a7f3d0'];
+        for (let i = 0; i < 42; i++) {
+          const side = i % 4;
+          let sx = 0;
+          let sy = 0;
+          if (side === 0) {
+            sx = 60 + ((i * 239) % (w - 120));
+            sy = -68 - ((i * 53) % 130);
+          } else if (side === 1) {
+            sx = 60 + ((i * 251) % (w - 120));
+            sy = h + 68 + ((i * 59) % 130);
+          } else if (side === 2) {
+            sx = -68 - ((i * 47) % 140);
+            sy = 60 + ((i * 199) % (h - 120));
+          } else {
+            sx = w + 68 + ((i * 61) % 140);
+            sy = 60 + ((i * 211) % (h - 120));
+          }
+          const pulse = 0.5 + 0.5 * Math.sin(matchTick * 0.11 + i * 1.73);
+          ctx.globalAlpha = 0.35 + pulse * 0.65;
+          const col = twinklePalette[i % twinklePalette.length];
+          ctx.fillStyle = col;
+          if (pulse > 0.72) {
+            ctx.fillRect(Math.round(sx - 6), Math.round(sy - 1), 12, 3);
+            ctx.fillRect(Math.round(sx - 1), Math.round(sy - 6), 3, 12);
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(Math.round(sx - 2), Math.round(sy - 2), 4, 4);
+          } else {
+            ctx.fillRect(Math.round(sx - 2), Math.round(sy - 2), 4, 4);
+          }
+        }
+        ctx.globalAlpha = 1;
+
+        // Streaking Shooting Comets across top & bottom space
+        for (let cIdx = 0; cIdx < 2; cIdx++) {
+          const cometProg = ((matchTick * 6.5 + cIdx * 700) % (w + 600)) - 300;
+          const cometY = cIdx === 0 ? -128 : h + 128;
+          const dir = cIdx === 0 ? 1 : -1;
+          const cx = cIdx === 0 ? cometProg : w - cometProg;
+          ctx.fillStyle = 'rgba(56, 189, 248, 0.35)';
+          ctx.fillRect(Math.round(cx - dir * 48), cometY - 2, 48, 4);
+          ctx.fillStyle = '#fde047';
+          ctx.fillRect(Math.round(cx - 4), cometY - 4, 8, 8);
+        }
+
+        // Drifting 16-bit Pixel Asteroids
+        for (let a = 0; a < 6; a++) {
+          const ax = a < 3 ? -96 + Math.sin(matchTick * 0.02 + a) * 14 : w + 96 + Math.cos(matchTick * 0.02 + a) * 14;
+          const ay = 140 + (a % 3) * 290 + Math.cos(matchTick * 0.03 + a * 2) * 18;
+          fillPxRect(ctx, ax - 11, ay - 11, 22, 22, GRAPHICS_CONFIG.palette.outline, px);
+          fillPxRect(ctx, ax - 8, ay - 8, 16, 16, '#64748b', px);
+          fillPxRect(ctx, ax - 5, ay - 5, 8, 8, '#94a3b8', px);
+        }
+
+        const ufo1X = w * 0.5 + Math.cos(matchTick * 0.012) * (w * 0.36);
+        const ufo1Y = -102 + Math.sin(matchTick * 0.045) * 16;
+        drawPixelUfo(ctx, ufo1X, ufo1Y, matchTick, px);
+
+        const ufo2X = w * 0.5 - Math.cos(matchTick * 0.01 + 1.8) * (w * 0.34);
+        const ufo2Y = h + 96 + Math.cos(matchTick * 0.04) * 14;
+        drawPixelUfo(ctx, ufo2X, ufo2Y, matchTick + 25, px);
+        ctx.restore();
+      } else if (selectedPitchTheme === 'URBAN_CONCRETE') {
+        // 2B. Live Cruising 16-Bit Cars, Police Cruiser with Flashing Sirens, Bouncing Streetballs & Boombox Beats
+        ctx.save();
+        const car1X = ((matchTick * 3.2) % (w + 560)) - 280;
+        drawStreetCar(ctx, car1X, -112, 1, '#facc15', px, false, matchTick);
+        const car2X = w + 280 - (((matchTick * 2.9 + 420) % (w + 560)));
+        drawStreetCar(ctx, car2X, -82, -1, '#1e293b', px, true, matchTick);
+
+        const car3X = w + 280 - (((matchTick * 3.0 + 180) % (w + 560)));
+        drawStreetCar(ctx, car3X, h + 84, -1, '#f43f5e', px, false, matchTick);
+        const car4X = ((matchTick * 2.5 + 640) % (w + 560)) - 280;
+        drawStreetCar(ctx, car4X, h + 114, 1, '#38bdf8', px, false, matchTick);
+
+        // Animated Bouncing Basketballs on Left & Right Streetball Half-Courts + Boombox Soundwaves
+        for (const sideX of [-86, w + 86]) {
+          const hop = Math.abs(Math.sin(matchTick * 0.14 + (sideX < 0 ? 0 : 1.4))) * 18;
+          const bx = sideX;
+          const by = h * 0.46 - hop;
+          fillPxRect(ctx, bx - 5, h * 0.46 + 4, 10, 4, 'rgba(15, 23, 42, 0.35)', px);
+          fillPxRect(ctx, bx - 7, by - 7, 14, 14, GRAPHICS_CONFIG.palette.outline, px);
+          fillPxRect(ctx, bx - 5, by - 5, 10, 10, '#f97316', px);
+          // Pulsing Boombox Equalizer Bars
+          const beatH = 6 + Math.round(Math.abs(Math.sin(matchTick * 0.22)) * 12);
+          fillPxRect(ctx, sideX - 14, h - 172 - beatH, 6, beatH, '#22d3ee', px);
+          fillPxRect(ctx, sideX - 4, h - 176 - beatH, 6, beatH + 4, '#f472b6', px);
+          fillPxRect(ctx, sideX + 6, h - 170 - beatH, 6, beatH, '#fde047', px);
+        }
+        ctx.restore();
+      } else if (selectedPitchTheme === 'RIO_CLAY') {
+        // 2C. Animated Ocean Waves, Cruising 16-Bit Sailboats, Flickering Tiki Torches & Gliding Seagulls
+        ctx.save();
         ctx.fillStyle = '#ffffff';
-        ctx.fillRect(fx - 4, fy - 4, 4, 3);
+        for (let i = 0; i < 24; i++) {
+          const wx = -140 + ((i * 179 + Math.floor(matchTick * 0.8)) % (w + 280));
+          const wyTop = -138 + Math.sin(matchTick * 0.06 + i) * 8;
+          const wyBot = h + 134 + Math.cos(matchTick * 0.06 + i) * 8;
+          ctx.globalAlpha = 0.45 + 0.35 * Math.sin(matchTick * 0.08 + i);
+          ctx.fillRect(Math.round(wx), Math.round(wyTop), 18, 4);
+          ctx.fillRect(Math.round(wx), Math.round(wyBot), 18, 4);
+        }
+        ctx.globalAlpha = 1;
+
+        // Cruising 16-Bit Tropical Sailboats in Top & Bottom Ocean
+        for (let b = 0; b < 2; b++) {
+          const dir = b === 0 ? 1 : -1;
+          const bx = b === 0
+            ? ((matchTick * 1.1 + 220) % (w + 360)) - 180
+            : w + 180 - ((matchTick * 1.0 + 540) % (w + 360));
+          const by = b === 0 ? -152 + Math.sin(matchTick * 0.05) * 4 : h + 150 + Math.cos(matchTick * 0.05) * 4;
+          // White water wake
+          fillPxRect(ctx, bx - dir * 28, by + 4, 18, 4, '#e0f2fe', px);
+          // Hull & Sail
+          fillPxRect(ctx, bx - 18, by, 36, 10, GRAPHICS_CONFIG.palette.outline, px);
+          fillPxRect(ctx, bx - 15, by + 2, 30, 6, b === 0 ? '#f43f5e' : '#facc15', px);
+          fillPxRect(ctx, bx - 8, by - 20, 16, 20, GRAPHICS_CONFIG.palette.outline, px);
+          fillPxRect(ctx, bx - 5, by - 17, 12, 16, '#ffffff', px);
+        }
+
+        // Gliding pixel seagulls
+        for (let g = 0; g < 4; g++) {
+          const gx = ((matchTick * (1.6 + g * 0.25) + g * 520) % (w + 360)) - 180;
+          const gy = (g % 2 === 0 ? -98 : h + 98) + Math.sin(matchTick * 0.05 + g * 2) * 14;
+          const wingY = Math.sin(matchTick * 0.18 + g) > 0 ? -4 : 3;
+          ctx.fillStyle = '#ffffff';
+          ctx.fillRect(Math.round(gx - 8), Math.round(gy + wingY), 7, 3);
+          ctx.fillRect(Math.round(gx + 1), Math.round(gy + wingY), 7, 3);
+          ctx.fillStyle = '#0f172a';
+          ctx.fillRect(Math.round(gx - 2), Math.round(gy), 5, 4);
+        }
+        ctx.restore();
+      } else if (selectedPitchTheme === 'TWILIGHT_SYNTH') {
+        // 2D. Sweeping Cyber-Synth Neon Searchlights & Cruising Hover-Spinners with Plasma Thruster Trails
+        ctx.save();
+        for (const sl of [
+          { x: 260, y: -110, sign: 1, col: 'rgba(244, 114, 182, 0.24)' },
+          { x: w - 260, y: -110, sign: -1, col: 'rgba(34, 211, 238, 0.24)' },
+          { x: 260, y: h + 110, sign: 1, col: 'rgba(34, 211, 238, 0.24)' },
+          { x: w - 260, y: h + 110, sign: -1, col: 'rgba(244, 114, 182, 0.24)' },
+        ]) {
+          const swing = Math.sin(matchTick * 0.025 * sl.sign + (sl.y < 0 ? 0 : 1.5)) * 180;
+          ctx.fillStyle = sl.col;
+          ctx.beginPath();
+          ctx.moveTo(sl.x - 10, sl.y);
+          ctx.lineTo(sl.x + 10, sl.y);
+          ctx.lineTo(sl.x + swing + 75, sl.y < 0 ? 110 : h - 110);
+          ctx.lineTo(sl.x + swing - 75, sl.y < 0 ? 110 : h - 110);
+          ctx.closePath();
+          ctx.fill();
+        }
+
+        // Flying 16-Bit Cyber Hover-Spinners with Neon Thruster Trails
+        for (let s = 0; s < 2; s++) {
+          const dir = s === 0 ? 1 : -1;
+          const hx = s === 0
+            ? ((matchTick * 4.2 + 120) % (w + 480)) - 240
+            : w + 240 - ((matchTick * 3.8 + 380) % (w + 480));
+          const hy = s === 0 ? -96 + Math.sin(matchTick * 0.08) * 6 : h + 96 + Math.cos(matchTick * 0.08) * 6;
+          fillPxRect(ctx, hx - dir * 38, hy - 3, 28, 6, s === 0 ? '#22d3ee' : '#f472b6', px);
+          fillPxRect(ctx, hx - 18, hy - 9, 36, 18, GRAPHICS_CONFIG.palette.outline, px);
+          fillPxRect(ctx, hx - 15, hy - 6, 30, 12, '#312e81', px);
+          fillPxRect(ctx, hx - 6, hy - 4, 14, 8, '#67e8f9', px);
+        }
+        ctx.restore();
+      } else if (selectedPitchTheme === 'ARCTIC_ICE') {
+        // 2E. Shimmering Aurora Borealis Ribbons, Falling Pixel Snowflakes, Waddling Penguins & Cabin Smoke
+        ctx.save();
+        // Aurora Borealis Shimmering Curtains at Top & Bottom Horizon
+        for (let a = 0; a < 10; a++) {
+          const ax = 80 + a * ((w - 160) / 10) + Math.sin(matchTick * 0.03 + a) * 24;
+          const waveY = Math.sin(matchTick * 0.05 + a * 0.8) * 12;
+          ctx.fillStyle = a % 2 === 0 ? 'rgba(45, 212, 191, 0.24)' : 'rgba(168, 85, 247, 0.22)';
+          ctx.fillRect(Math.round(ax), Math.round(-155 + waveY), 95, 28);
+          ctx.fillRect(Math.round(ax), Math.round(h + 125 - waveY), 95, 28);
+        }
+
+        // Waddling 16-Bit Pixel Penguins along Top & Bottom Snowbanks
+        for (let p = 0; p < 4; p++) {
+          const pxBase = p % 2 === 0 ? 540 : w - 540;
+          const pyBase = p < 2 ? -76 : h + 76;
+          const waddleX = pxBase + Math.sin(matchTick * 0.03 + p * 1.7) * 38;
+          const hopY = Math.abs(Math.sin(matchTick * 0.16 + p)) * 4;
+          fillPxRect(ctx, waddleX - 8, pyBase - 10 - hopY, 16, 20, '#0f172a', px);
+          fillPxRect(ctx, waddleX - 5, pyBase - 4 - hopY, 10, 12, '#ffffff', px);
+          fillPxRect(ctx, waddleX - 3, pyBase - 7 - hopY, 6, 4, '#f97316', px);
+        }
+
+        // Falling & Swirling 16-Bit Pixel Snowflakes Around the Perimeter
+        ctx.fillStyle = '#ffffff';
+        for (let s = 0; s < 36; s++) {
+          const sx = -120 + ((s * 173 + Math.floor(matchTick * 0.6 + Math.sin(matchTick * 0.04 + s) * 14)) % (w + 240));
+          const sy = -140 + ((s * 97 + Math.floor(matchTick * 1.1)) % (h + 280));
+          if (sx > -20 && sx < w + 20 && sy > -20 && sy < h + 20) continue;
+          ctx.globalAlpha = 0.55 + 0.4 * Math.sin(matchTick * 0.07 + s);
+          ctx.fillRect(Math.round(sx), Math.round(sy), 5, 5);
+        }
+        ctx.globalAlpha = 1;
+        ctx.restore();
+      } else if (selectedPitchTheme === 'VOLCANO_FORGE') {
+        // 2F. Roaring 16-Bit Fire Brazier Flames, Bursting Lava Bubbles & Rising Volcanic Ember Sparks
+        ctx.save();
+        for (const bz of [
+          { x: 170, y: -76 },
+          { x: w - 170, y: -76 },
+          { x: 170, y: h + 76 },
+          { x: w - 170, y: h + 76 },
+          { x: -96, y: 155 },
+          { x: -96, y: h - 155 },
+          { x: w + 96, y: 155 },
+          { x: w + 96, y: h - 155 },
+        ]) {
+          const flicker = Math.round(Math.sin(matchTick * 0.24 + bz.x) * 6);
+          fillPxRect(ctx, bz.x - 10, bz.y - 22 - Math.abs(flicker), 20, 18 + Math.abs(flicker), '#ef4444', px);
+          fillPxRect(ctx, bz.x - 7, bz.y - 18 - Math.abs(flicker), 14, 14, '#f97316', px);
+          fillPxRect(ctx, bz.x - 4, bz.y - 12 - Math.abs(flicker) * 0.5, 8, 8, '#fde047', px);
+        }
+
+        // Rising Glowing Volcanic Ember Sparks & Lava Bubbles
+        for (let e = 0; e < 36; e++) {
+          const ex = -125 + ((e * 181 + Math.floor(Math.sin(matchTick * 0.05 + e) * 16)) % (w + 250));
+          const ey = h + 145 - ((e * 103 + Math.floor(matchTick * 1.4)) % (h + 290));
+          if (ex > -24 && ex < w + 24 && ey > -24 && ey < h + 24) continue;
+          ctx.fillStyle = e % 2 === 0 ? '#fde047' : '#f97316';
+          ctx.fillRect(Math.round(ex), Math.round(ey), 5, 5);
+        }
+        ctx.restore();
+      } else if (selectedPitchTheme === 'TURF_AUTUMN') {
+        // 2G. Bouncing Crowd + Live Drifting Golden/Crimson Autumn Maple Leaves
+        ctx.save();
+        const bounceAmp = 2.4 + crowdExcitement * 7.8 + (superFlowActive ? 3.5 : 0);
+        const bounceFreq = 0.08 + crowdExcitement * 0.14;
+        for (let i = 0; i < crowdFans.length; i++) {
+          const fan = crowdFans[i];
+          const hop = Math.round(Math.abs(Math.sin(matchTick * bounceFreq + fan.phase)) * bounceAmp);
+          const fx = Math.round(fan.x);
+          const fy = Math.round(fan.baseY - hop);
+          ctx.fillStyle = GRAPHICS_CONFIG.palette.outline;
+          ctx.fillRect(fx - 7, fy - 7, 14, 14);
+          ctx.fillStyle = fan.color;
+          ctx.fillRect(fx - 5, fy - 5, 10, 10);
+          ctx.fillStyle = '#ffffff';
+          ctx.fillRect(fx - 4, fy - 4, 4, 3);
+        }
+
+        // Drifting 16-Bit Crimson, Orange & Gold Autumn Maple Leaves
+        const leafColors = ['#ea580c', '#dc2626', '#facc15', '#f97316'];
+        for (let l = 0; l < 32; l++) {
+          const lx = -125 + ((l * 179 + Math.floor(matchTick * 0.85 + Math.sin(matchTick * 0.05 + l) * 18)) % (w + 250));
+          const ly = -140 + ((l * 107 + Math.floor(matchTick * 0.95)) % (h + 280));
+          if (lx > -18 && lx < w + 18 && ly > -18 && ly < h + 18) continue;
+          ctx.fillStyle = leafColors[l % leafColors.length];
+          ctx.fillRect(Math.round(lx), Math.round(ly), 6, 6);
+        }
+        ctx.restore();
+      } else if (selectedPitchTheme === 'TURF_SAKURA') {
+        // 2H. Bouncing Crowd, Swimming Koi Fish in Imperial Ponds & Swirling Pink Sakura Petals
+        ctx.save();
+        const bounceAmp = 2.4 + crowdExcitement * 7.8 + (superFlowActive ? 3.5 : 0);
+        const bounceFreq = 0.08 + crowdExcitement * 0.14;
+        for (let i = 0; i < crowdFans.length; i++) {
+          const fan = crowdFans[i];
+          const hop = Math.round(Math.abs(Math.sin(matchTick * bounceFreq + fan.phase)) * bounceAmp);
+          const fx = Math.round(fan.x);
+          const fy = Math.round(fan.baseY - hop);
+          ctx.fillStyle = GRAPHICS_CONFIG.palette.outline;
+          ctx.fillRect(fx - 7, fy - 7, 14, 14);
+          ctx.fillStyle = fan.color;
+          ctx.fillRect(fx - 5, fy - 5, 10, 10);
+          ctx.fillStyle = '#ffffff';
+          ctx.fillRect(fx - 4, fy - 4, 4, 3);
+        }
+
+        // Swimming Orange & White Pixel Koi Fish inside the 4 Imperial Koi Ponds
+        for (const pond of [
+          { x: -90, y: h * 0.2 },
+          { x: -90, y: h * 0.8 },
+          { x: w + 90, y: h * 0.2 },
+          { x: w + 90, y: h * 0.8 },
+        ]) {
+          const koiAng = matchTick * 0.045 + pond.y * 0.01;
+          const kx = pond.x + Math.cos(koiAng) * 14;
+          const ky = pond.y + Math.sin(koiAng) * 14;
+          fillPxRect(ctx, kx - 5, ky - 3, 10, 6, '#f97316', px);
+          fillPxRect(ctx, kx + 2, ky - 2, 4, 4, '#ffffff', px);
+        }
+
+        // Swirling Pink Sakura Cherry Blossom Petals
+        const petalColors = ['#fbcfe8', '#f472b6', '#ffe4e6'];
+        for (let p = 0; p < 36; p++) {
+          const pxPos = -130 + ((p * 167 + Math.floor(matchTick * 1.05 + Math.sin(matchTick * 0.06 + p) * 16)) % (w + 260));
+          const pyPos = -140 + ((p * 97 + Math.floor(matchTick * 0.9)) % (h + 280));
+          if (pxPos > -18 && pxPos < w + 18 && pyPos > -18 && pyPos < h + 18) continue;
+          ctx.fillStyle = petalColors[p % petalColors.length];
+          ctx.fillRect(Math.round(pxPos), Math.round(pyPos), 5, 5);
+        }
+        ctx.restore();
+      } else if (selectedPitchTheme === 'TURF_CHAMPIONS') {
+        // 2I. Bouncing Ultras Crowd, Gleaming Trophy Sparkles & Paparazzi Camera Flashes
+        ctx.save();
+        const bounceAmp = 2.8 + crowdExcitement * 8.2 + (superFlowActive ? 3.8 : 0);
+        const bounceFreq = 0.09 + crowdExcitement * 0.14;
+        for (let i = 0; i < crowdFans.length; i++) {
+          const fan = crowdFans[i];
+          const hop = Math.round(Math.abs(Math.sin(matchTick * bounceFreq + fan.phase)) * bounceAmp);
+          const fx = Math.round(fan.x);
+          const fy = Math.round(fan.baseY - hop);
+          ctx.fillStyle = GRAPHICS_CONFIG.palette.outline;
+          ctx.fillRect(fx - 7, fy - 7, 14, 14);
+          ctx.fillStyle = fan.color;
+          ctx.fillRect(fx - 5, fy - 5, 10, 10);
+          ctx.fillStyle = '#ffffff';
+          ctx.fillRect(fx - 4, fy - 4, 4, 3);
+
+          // Periodic Paparazzi Camera Flash Bulbs in the Grandstands
+          if ((i * 19 + Math.floor(matchTick * 0.25)) % 47 === 0) {
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.92)';
+            ctx.fillRect(fx - 10, fy - 10, 20, 20);
+          }
+        }
+
+        // Golden Star Sparkles on the 4 Sideline Championship Trophy Plinths
+        for (const tp of [
+          { x: -98, y: h * 0.24 },
+          { x: -98, y: h * 0.76 },
+          { x: w + 98, y: h * 0.24 },
+          { x: w + 98, y: h * 0.76 },
+        ]) {
+          const gleamR = 10 + Math.sin(matchTick * 0.14 + tp.y) * 5;
+          ctx.strokeStyle = 'rgba(254, 240, 138, 0.85)';
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.arc(tp.x, tp.y, gleamR, 0, Math.PI * 2);
+          ctx.stroke();
+        }
+        ctx.restore();
+      } else {
+        // 2J. Fast Bouncing 16-Bit Crowd Sprites & Sparkling Fountain Water Jets in Royal Botanical Park
+        ctx.save();
+        const bounceAmp = 2.4 + crowdExcitement * 7.8 + (superFlowActive ? 3.5 : 0);
+        const bounceFreq = 0.08 + crowdExcitement * 0.14;
+        for (let i = 0; i < crowdFans.length; i++) {
+          const fan = crowdFans[i];
+          const hop = Math.round(Math.abs(Math.sin(matchTick * bounceFreq + fan.phase)) * bounceAmp);
+          const fx = Math.round(fan.x);
+          const fy = Math.round(fan.baseY - hop);
+          ctx.fillStyle = GRAPHICS_CONFIG.palette.outline;
+          ctx.fillRect(fx - 7, fy - 7, 14, 14);
+          ctx.fillStyle = fan.color;
+          ctx.fillRect(fx - 5, fy - 5, 10, 10);
+          ctx.fillStyle = '#ffffff';
+          ctx.fillRect(fx - 4, fy - 4, 4, 3);
+        }
+
+        // Animated Sparkling Water Fountain Spray Ripples in the 4 Corner Fountains
+        for (const ftn of [
+          { x: -98, y: h * 0.24 },
+          { x: -98, y: h * 0.76 },
+          { x: w + 98, y: h * 0.24 },
+          { x: w + 98, y: h * 0.76 },
+        ]) {
+          const sprayR = 8 + ((matchTick * 0.45) % 18);
+          ctx.strokeStyle = 'rgba(224, 242, 254, 0.75)';
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.arc(ftn.x, ftn.y, sprayR, 0, Math.PI * 2);
+          ctx.stroke();
+        }
+        ctx.restore();
       }
-      ctx.restore();
 
       // 3. Top Interactive Stadium LED Perimeter Board (16-Bit Pixel Frame)
       ctx.save();
@@ -4089,19 +5787,31 @@ export default function App() {
         ctx.restore();
       }
 
-      // 7. Arcade Floating Callouts with Clean Pill Backing Plates
+      // 7. Expressive Unboxed 3D Outlined Arcade Floating Callouts (No Blocked-Out Black Background!)
       for (const ft of floatingTexts) {
         ctx.save();
-        ctx.globalAlpha = Math.max(0, ft.alpha);
-        ctx.font = '800 13.5px "Plus Jakarta Sans", sans-serif';
+        ctx.globalAlpha = Math.max(0, Math.min(1, ft.alpha * 1.15));
+        ctx.translate(ft.x, ft.y);
+        const popScale = Math.max(1.0, ft.scale || 1.0);
+        ctx.scale(popScale, popScale);
+        ctx.font = '900 15.5px "Plus Jakarta Sans", sans-serif';
         ctx.textAlign = 'center';
-        const textW = ctx.measureText(ft.text).width + 16;
-        ctx.fillStyle = 'rgba(15, 23, 42, 0.88)';
-        ctx.beginPath();
-        ctx.roundRect(ft.x - textW / 2, ft.y - 13, textW, 21, 7);
-        ctx.fill();
+        ctx.textBaseline = 'middle';
+        ctx.lineJoin = 'round';
+        ctx.miterLimit = 2;
+
+        // 3D Extruded Block Shadow
+        ctx.fillStyle = '#0f172a';
+        ctx.fillText(ft.text, 2.5, 3.2);
+
+        // Crisp Neo-Brutalist Ink Stroke Outline
+        ctx.strokeStyle = '#0f172a';
+        ctx.lineWidth = 5.5;
+        ctx.strokeText(ft.text, 0, 0);
+
+        // Vibrant Fill
         ctx.fillStyle = ft.color;
-        ctx.fillText(ft.text, ft.x, ft.y + 1);
+        ctx.fillText(ft.text, 0, 0);
         ctx.restore();
       }
 
@@ -4143,22 +5853,28 @@ export default function App() {
         targetCamY = PITCH.height * 0.5 + Math.cos(matchTick * 0.006) * 45;
         targetZoom = 1.0;
       } else {
-        const focusX = ball.x * 0.65 + (controlledPlayer ? controlledPlayer.x * 0.35 : PITCH.width * 0.175);
-        const focusY = ball.y * 0.65 + (controlledPlayer ? controlledPlayer.y * 0.35 : PITCH.height * 0.175);
+        const focusX = ball.x * 0.62 + (controlledPlayer ? controlledPlayer.x * 0.38 : PITCH.width * 0.19);
+        const focusY = ball.y * 0.62 + (controlledPlayer ? controlledPlayer.y * 0.38 : PITCH.height * 0.19);
         const isPortrait = canvas ? canvas.width < canvas.height : false;
         const isMobOrTab = isMobileOrTabletViewport();
-        const panFactorX = isPortrait ? 0.12 : isMobOrTab ? 0.10 : 0.14;
-        const panFactorY = isPortrait ? 0.10 : isMobOrTab ? 0.10 : 0.12;
+        const isCompactPhoneLandscape = Boolean(canvas && canvas.height <= 550 && canvas.width > canvas.height);
+
+        // Enhanced camera tracking & slight zoom on phone landscape so gameplay feels close, smooth, and responsive
+        const panFactorX = isCompactPhoneLandscape ? 0.38 : isPortrait ? 0.24 : isMobOrTab ? 0.22 : 0.14;
+        const panFactorY = isCompactPhoneLandscape ? 0.36 : isPortrait ? 0.22 : isMobOrTab ? 0.20 : 0.12;
         const rawCamX = PITCH.width * 0.5 + (focusX - PITCH.width * 0.5) * panFactorX;
         const rawCamY = PITCH.height * 0.5 + (focusY - PITCH.height * 0.5) * panFactorY;
-        const clampMarginX = isPortrait ? 0.38 : isMobOrTab ? 0.38 : 0.22;
-        const clampMarginY = isPortrait ? 0.38 : isMobOrTab ? 0.38 : 0.28;
+        const clampMarginX = isCompactPhoneLandscape ? 0.26 : isPortrait ? 0.34 : isMobOrTab ? 0.34 : 0.22;
+        const clampMarginY = isCompactPhoneLandscape ? 0.28 : isPortrait ? 0.34 : isMobOrTab ? 0.34 : 0.28;
         targetCamX = Math.max(PITCH.width * clampMarginX, Math.min(PITCH.width * (1 - clampMarginX), rawCamX));
         targetCamY = Math.max(PITCH.height * clampMarginY, Math.min(PITCH.height * (1 - clampMarginY), rawCamY));
+        const baseGameplayZoom = isCompactPhoneLandscape ? 1.06 : 1.0;
         if (gameState === 'GOAL_CELEBRATION') {
-          targetZoom = 1.06;
+          targetZoom = baseGameplayZoom + 0.06;
         } else if (kickChargeState.power > 0.25) {
-          targetZoom = 1.0 + kickChargeState.power * 0.025;
+          targetZoom = baseGameplayZoom + kickChargeState.power * 0.025;
+        } else {
+          targetZoom = baseGameplayZoom;
         }
       }
 
@@ -4204,7 +5920,8 @@ export default function App() {
       for (let i = floatingTexts.length - 1; i >= 0; i--) {
         const ft = floatingTexts[i];
         ft.y += ft.vy * dtScale;
-        ft.alpha -= 0.024 * dtScale;
+        ft.scale = Math.max(1.0, (ft.scale || 1.0) - 0.032 * dtScale);
+        ft.alpha -= 0.022 * dtScale;
         if (ft.alpha <= 0.02) floatingTexts.splice(i, 1);
       }
       for (let i = wallGlows.length - 1; i >= 0; i--) {
@@ -4283,7 +6000,6 @@ export default function App() {
         const postMatchRankCard = document.getElementById('postMatchRankCard');
         const playlistWrap = document.getElementById('playlistSelectorWrap');
         const kitWrap = document.getElementById('kitSelectorWrap');
-        const pitchWrap = document.getElementById('pitchSelectorWrap');
 
         if (titleEl) {
           titleEl.innerHTML = `<span>REMATCH</span><span class="font-mono-num text-xl sm:text-3xl md:text-4xl font-black text-amber-400 drop-shadow-[0_2px_0_#0f172a]">0.2</span>`;
@@ -4302,7 +6018,6 @@ export default function App() {
         }
         if (playlistWrap) playlistWrap.classList.remove('hidden');
         if (kitWrap) kitWrap.classList.remove('hidden');
-        if (pitchWrap) pitchWrap.classList.remove('hidden');
         if (resumeBtn) resumeBtn.classList.add('hidden');
         if (forfeitBtn) forfeitBtn.classList.add('hidden');
         if (rematchSameBtn) rematchSameBtn.classList.add('hidden');
@@ -4378,7 +6093,6 @@ export default function App() {
       const rematchSameText = document.getElementById('rematchSameText');
       const playlistWrap = document.getElementById('playlistSelectorWrap');
       const kitWrap = document.getElementById('kitSelectorWrap');
-      const pitchWrap = document.getElementById('pitchSelectorWrap');
 
       const youWon = scoreYou > scoreAi;
       const possPct = Math.round((possessionFramesYou / Math.max(1, possessionFramesTotal)) * 100);
@@ -4541,7 +6255,6 @@ export default function App() {
       }
       if (playlistWrap) playlistWrap.classList.add('hidden');
       if (kitWrap) kitWrap.classList.add('hidden');
-      if (pitchWrap) pitchWrap.classList.add('hidden');
 
       setMatchmakingIdleUI();
       if (startBtnText) startBtnText.innerText = nextBtnLabel;
@@ -4572,9 +6285,17 @@ export default function App() {
     }
 
     function pickRandomPitchArena() {
-      const randomTheme = PITCH_THEMES[Math.floor(Math.random() * PITCH_THEMES.length)];
-      selectedPitchTheme = randomTheme.id;
+      if (preferredArenaMode !== 'RANDOM') {
+        selectedPitchTheme = preferredArenaMode;
+      } else {
+        // Pick a random stadium theme different from the previous one so each match feels fresh
+        const candidates = PITCH_THEMES.filter((t) => t.id !== selectedPitchTheme);
+        const pool = candidates.length > 0 ? candidates : PITCH_THEMES;
+        const randomTheme = pool[Math.floor(Math.random() * pool.length)];
+        selectedPitchTheme = randomTheme.id;
+      }
       applyPitchTheme(selectedPitchTheme);
+      sound.setPitchTheme(selectedPitchTheme);
       rebuildStaticPitchCache();
     }
 
@@ -4610,7 +6331,7 @@ export default function App() {
       setElText('brkScoreQf4', tournamentRound >= 1 ? '3-1' : 'QF 4');
 
       // Semi-Finals
-      setElText('brkYouNameSf', tournamentRound >= 1 ? `${userProfile.name} (${rankInfo.name})` : 'Winner QF 1');
+      setElText('brkYouNameSf', tournamentRound >= 1 ? `${userProfile.name}` : 'Winner QF 1');
       setElText('brkOppNameSf', tournamentRound >= 1 ? tournamentBracket.sfOpponent.tag : 'Winner QF 2');
       setElText('brkScoreSf1', tournamentRound === 1 ? 'NOW' : tournamentRound > 1 ? tournamentBracket.scores.sfYou || 'W' : 'SF 1');
 
@@ -4619,7 +6340,7 @@ export default function App() {
       setElText('brkScoreSf2', tournamentRound >= 2 ? '2-1' : 'SF 2');
 
       // Grand Final
-      setElText('brkYouNameGf', tournamentRound >= 2 ? `${userProfile.name} (${rankInfo.name})` : 'Winner SF 1');
+      setElText('brkYouNameGf', tournamentRound >= 2 ? `${userProfile.name}` : 'Winner SF 1');
       setElText('brkOppNameGf', tournamentRound >= 2 ? tournamentBracket.gfOpponent.tag : 'Winner SF 2');
       setElText('brkScoreGf', tournamentRound === 2 ? 'FINAL' : 'CUP');
 
@@ -4630,22 +6351,22 @@ export default function App() {
       if (qfCard) {
         qfCard.className =
           tournamentRound === 0
-            ? 'p-2 rounded-xl bg-amber-200 border-2 border-slate-900 shadow-[0_2px_0_#0f172a] text-left transition-all'
-            : 'p-2 rounded-xl bg-emerald-100 border-2 border-emerald-700 text-left opacity-90';
+            ? 'p-2 rounded-xl bg-amber-300 border-2 border-slate-900 shadow-[0_3px_0_#0f172a] text-left transition-all'
+            : 'p-2 rounded-xl bg-emerald-200 border-2 border-slate-900 shadow-[0_2px_0_#0f172a] text-left';
       }
       if (sfCard) {
         sfCard.className =
           tournamentRound === 1
-            ? 'p-2.5 rounded-xl bg-amber-200 border-2 border-slate-900 shadow-[0_2px_0_#0f172a] text-left transition-all'
+            ? 'p-2.5 rounded-xl bg-amber-300 border-2 border-slate-900 shadow-[0_3px_0_#0f172a] text-left transition-all'
             : tournamentRound > 1
-              ? 'p-2.5 rounded-xl bg-emerald-100 border-2 border-emerald-700 text-left opacity-90'
-              : 'p-2.5 rounded-xl bg-white border border-slate-300 text-left opacity-75';
+              ? 'p-2.5 rounded-xl bg-emerald-200 border-2 border-slate-900 shadow-[0_2px_0_#0f172a] text-left'
+              : 'p-2.5 rounded-xl bg-white border-2 border-slate-900 shadow-[0_2px_0_#0f172a] text-left';
       }
       if (gfCard) {
         gfCard.className =
           tournamentRound === 2
-            ? 'p-3 rounded-2xl bg-gradient-to-br from-amber-300 via-yellow-200 to-amber-200 border-2 border-slate-900 shadow-[0_3px_0_#0f172a] text-left transition-all'
-            : 'p-3 rounded-2xl bg-white border-2 border-dashed border-amber-400 text-left opacity-80';
+            ? 'p-3 rounded-2xl bg-gradient-to-br from-amber-300 via-yellow-200 to-amber-300 border-2 border-slate-900 shadow-[0_4px_0_#0f172a] text-left transition-all'
+            : 'p-3 rounded-2xl bg-amber-50 border-2 border-slate-900 shadow-[0_3px_0_#0f172a] text-left';
       }
     }
 
@@ -4778,6 +6499,7 @@ export default function App() {
       kickChargeState.power = 0;
 
       applyPitchTheme(selectedPitchTheme);
+      sound.setPitchTheme(selectedPitchTheme);
       rebuildStaticPitchCache();
 
       sound.unlock();
@@ -4786,6 +6508,7 @@ export default function App() {
         isPlaying: gameState === 'PLAYING' || gameState === 'GOAL_CELEBRATION',
         isSuperFlow: flowCombo >= PASSES_FOR_FLOW_BOOST,
         flowCombo,
+        pitchTheme: selectedPitchTheme,
       }));
       sound.playWhistle();
       scoreYou = 0;
@@ -4875,7 +6598,8 @@ export default function App() {
       // No Skip Queue UI: button displays locked searching state
       if (startBtn) {
         startBtn.setAttribute('disabled', 'true');
-        startBtn.className = 'indie-cta-btn w-full min-h-[52px] py-3.5 sm:py-4 px-6 rounded-2xl bg-slate-800 text-slate-200 font-black text-sm sm:text-lg tracking-wide cursor-wait flex items-center justify-center space-x-3 opacity-90';
+        startBtn.className =
+          'indie-cta-btn w-full sm:w-auto sm:min-w-[250px] sm:max-w-[340px] min-h-[46px] sm:min-h-[50px] py-3 sm:py-3.5 px-7 rounded-2xl bg-slate-800 text-slate-200 font-black text-sm sm:text-base tracking-wide cursor-wait flex items-center justify-center space-x-2.5 opacity-90 mx-auto';
       }
       if (startBtnText) startBtnText.innerText = 'SEARCHING FOR OPPONENT...';
       if (startIcon) startIcon.className = 'fa-solid fa-circle-notch fa-spin text-sm text-sky-300';
@@ -4955,7 +6679,10 @@ export default function App() {
           if (vsBadge) vsBadge.className = 'w-9 h-9 sm:w-10 sm:h-10 rounded-2xl bg-emerald-400 text-slate-900 text-xs font-black flex items-center justify-center shadow-[0_3px_0_#0f172a] border-2 border-slate-900 absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-10 scale-110 transition-all';
           if (progressBar) progressBar.style.width = '100%';
 
-          if (startBtn) startBtn.className = 'indie-cta-btn w-full min-h-[52px] py-3.5 sm:py-4 px-6 rounded-2xl bg-emerald-400 text-slate-900 font-black text-sm sm:text-lg tracking-wide flex items-center justify-center space-x-3';
+          if (startBtn) {
+            startBtn.className =
+              'indie-cta-btn w-full sm:w-auto sm:min-w-[250px] sm:max-w-[340px] min-h-[46px] sm:min-h-[50px] py-3 sm:py-3.5 px-7 rounded-2xl bg-emerald-400 text-slate-900 font-black text-sm sm:text-base tracking-wide flex items-center justify-center space-x-2.5 mx-auto';
+          }
           if (startBtnText) startBtnText.innerText = 'LOADING INTO ARENA...';
           if (startIcon) startIcon.className = 'fa-solid fa-bolt text-sm';
 
@@ -6022,27 +7749,120 @@ export default function App() {
       }
 
       if (gameState === 'GOAL_CELEBRATION') {
+        // Expressive Unboxed 3D Arcade Goal Splash (Zero Black Box Background!)
         ctx.save();
-        ctx.fillStyle = 'rgba(15, 23, 42, 0.94)';
-        const bw = Math.min(540, canvas.width * 0.9);
-        const bh = 96;
-        const bx = (canvas.width - bw) / 2;
-        const by = canvas.height * 0.16;
-        ctx.beginPath();
-        ctx.roundRect(bx, by, bw, bh, 24);
-        ctx.fill();
-        ctx.strokeStyle = goalScorerTeam === 'YOU' ? '#facc15' : '#fb7185';
-        ctx.lineWidth = 3.5;
-        ctx.stroke();
+        const elapsed = Math.max(0, 115 - goalBannerTimer);
+        const popSpring =
+          elapsed < 10
+            ? 0.45 + (elapsed / 10) * 0.78
+            : elapsed < 20
+              ? 1.23 - ((elapsed - 10) / 10) * 0.23
+              : 1.0 + Math.sin((elapsed - 20) * 0.16) * 0.032;
+        const fadeOut = goalBannerTimer < 16 ? Math.max(0, goalBannerTimer / 16) : 1.0;
+        const tilt = Math.sin(elapsed * 0.11) * 0.032;
 
-        ctx.fillStyle = '#ffffff';
-        ctx.font = '800 26px "Plus Jakarta Sans", sans-serif';
+        const centerX = canvas.width * 0.5;
+        const isCompact = canvas.height <= 460;
+        const centerY = isCompact ? canvas.height * 0.27 : canvas.height * 0.23;
+
+        ctx.globalAlpha = fadeOut;
+        ctx.translate(centerX, centerY);
+        ctx.scale(popSpring, popSpring);
+        ctx.rotate(tilt);
+
+        // 1. Dynamic Radial Starburst Speed-Rays & Floating 16-Bit Pixel Stars Behind the Text
+        const rayCount = 12;
+        for (let r = 0; r < rayCount; r++) {
+          const ang = (Math.PI * 2 * r) / rayCount + elapsed * 0.022;
+          const innerR = isCompact ? 26 : 36;
+          const outerR = (isCompact ? 115 : 155) + (r % 2 === 0 ? 28 : -12);
+          ctx.save();
+          ctx.rotate(ang);
+          ctx.fillStyle = r % 2 === 0 ? 'rgba(253, 224, 71, 0.34)' : 'rgba(56, 189, 248, 0.28)';
+          ctx.beginPath();
+          ctx.moveTo(innerR, -4);
+          ctx.lineTo(outerR, -12);
+          ctx.lineTo(outerR, 12);
+          ctx.lineTo(innerR, 4);
+          ctx.closePath();
+          ctx.fill();
+          ctx.restore();
+        }
+
+        // Orbiting 16-Bit Pixel Sparkle Stars
+        const starColors = ['#fde047', '#38bdf8', '#ffffff', '#34d399', '#f472b6'];
+        for (let s = 0; s < 8; s++) {
+          const sAng = (Math.PI * 2 * s) / 8 - elapsed * 0.03;
+          const sDistX = (isCompact ? 145 : 210) + Math.sin(elapsed * 0.15 + s) * 18;
+          const sDistY = (isCompact ? 42 : 58) + Math.cos(elapsed * 0.15 + s) * 10;
+          const sx = Math.cos(sAng) * sDistX;
+          const sy = Math.sin(sAng) * sDistY;
+          ctx.fillStyle = '#0f172a';
+          ctx.fillRect(Math.round(sx - 6), Math.round(sy - 6), 12, 12);
+          ctx.fillStyle = starColors[s % starColors.length];
+          ctx.fillRect(Math.round(sx - 4), Math.round(sy - 4), 8, 8);
+        }
+
+        // 2. Top Kicker Ribbon Badge (Neo-Brutalist Bright Yellow/Sky Tag)
+        const kickerText = activeGoalCelebration.kickerBadge || (goalScorerTeam === 'YOU' ? '⚽ GOAL SCORED' : '⚠️ RIVAL GOAL');
+        ctx.font = isCompact ? '900 10.5px "Plus Jakarta Sans", sans-serif' : '900 12.5px "Plus Jakarta Sans", sans-serif';
         ctx.textAlign = 'center';
-        ctx.fillText(goalBannerText, canvas.width / 2, by + 44);
-
+        ctx.textBaseline = 'middle';
+        const kw = ctx.measureText(kickerText).width + 26;
+        const kh = isCompact ? 22 : 26;
+        const ky = isCompact ? -36 : -48;
+        ctx.fillStyle = '#0f172a';
+        ctx.beginPath();
+        ctx.roundRect(-kw / 2 + 3, ky - kh / 2 + 3, kw, kh, 999);
+        ctx.fill();
         ctx.fillStyle = goalScorerTeam === 'YOU' ? '#fde047' : '#fda4af';
-        ctx.font = '700 12px "JetBrains Mono", monospace';
-        ctx.fillText(goalBannerSub, canvas.width / 2, by + 72);
+        ctx.strokeStyle = '#0f172a';
+        ctx.lineWidth = 2.5;
+        ctx.beginPath();
+        ctx.roundRect(-kw / 2, ky - kh / 2, kw, kh, 999);
+        ctx.fill();
+        ctx.stroke();
+        ctx.fillStyle = '#0f172a';
+        ctx.fillText(kickerText, 0, ky + 0.5);
+
+        // 3. Giant 3D Extruded Arcade Headline (No Black Box Behind It!)
+        const headlineFontPx = isCompact ? 32 : Math.min(52, Math.max(34, Math.floor(canvas.width * 0.044)));
+        ctx.font = `900 ${headlineFontPx}px "Plus Jakarta Sans", sans-serif`;
+        ctx.lineJoin = 'round';
+        ctx.miterLimit = 2;
+
+        // Deep 3D Extruded Block Shadow Layer
+        ctx.fillStyle = '#0f172a';
+        ctx.strokeStyle = '#0f172a';
+        ctx.lineWidth = isCompact ? 9 : 12;
+        ctx.strokeText(goalBannerText, 4, 6);
+        ctx.fillText(goalBannerText, 4, 6);
+
+        // Crisp Main Outline Stroke
+        ctx.strokeStyle = '#0f172a';
+        ctx.lineWidth = isCompact ? 9 : 12;
+        ctx.strokeText(goalBannerText, 0, 0);
+
+        // Vibrant Vertical Gradient Fill inside Letters
+        const textGrad = ctx.createLinearGradient(0, -headlineFontPx * 0.55, 0, headlineFontPx * 0.55);
+        textGrad.addColorStop(0, '#ffffff');
+        textGrad.addColorStop(0.35, activeGoalCelebration.primaryColor || '#fde047');
+        textGrad.addColorStop(1, activeGoalCelebration.secondaryColor || '#f59e0b');
+        ctx.fillStyle = textGrad;
+        ctx.fillText(goalBannerText, 0, 0);
+
+        // 4. Unboxed 3D Outlined Subheadline (Goal Style + Match Score Situation)
+        const subY = isCompact ? 28 : 40;
+        const subFontPx = isCompact ? 11.5 : 14.5;
+        ctx.font = `900 ${subFontPx}px "JetBrains Mono", monospace`;
+        ctx.fillStyle = '#0f172a';
+        ctx.strokeStyle = '#0f172a';
+        ctx.lineWidth = isCompact ? 5 : 6.5;
+        ctx.strokeText(goalBannerSub, 2, subY + 2.5);
+        ctx.strokeText(goalBannerSub, 0, subY);
+        ctx.fillStyle = goalScorerTeam === 'YOU' ? '#fef08a' : '#fecdd3';
+        ctx.fillText(goalBannerSub, 0, subY);
+
         ctx.restore();
       }
     }
@@ -6058,11 +7878,27 @@ export default function App() {
 
     // Support ?autostart=1 query parameter to skip straight into active gameplay, or ?testRankedWin=1 to verify Ranked Win Progress Bar UI
     const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('pitch') === 'SPACE' || urlParams.get('pitch') === 'COSMIC_SPACE') {
+      preferredArenaMode = 'COSMIC_SPACE';
+      selectedPitchTheme = 'COSMIC_SPACE';
+      applyPitchTheme('COSMIC_SPACE');
+      rebuildStaticPitchCache();
+    }
     if (urlParams.get('autostart') === '1') {
       const splashEl = document.getElementById('splashScreen');
       if (splashEl) splashEl.classList.add('hidden');
       pickRandomOpponent(false);
       launchMatchNow();
+    } else if (urlParams.get('testGoal') === '1') {
+      const splashEl = document.getElementById('splashScreen');
+      if (splashEl) splashEl.classList.add('hidden');
+      pickRandomOpponent(false);
+      launchMatchNow();
+      ball.kickOriginX = PITCH.width * 0.42;
+      ball.kickOriginY = PITCH.height * 0.5;
+      ball.x = PITCH.width - 10;
+      ball.y = PITCH.height * 0.5;
+      handleGoalScored('YOU');
     } else if (urlParams.get('testRankedWin') === '1') {
       const splashEl = document.getElementById('splashScreen');
       if (splashEl) splashEl.classList.add('hidden');
@@ -6072,6 +7908,53 @@ export default function App() {
       scoreAi = 0;
       endMatch('MERCY RULE +3 VICTORY');
     }
+
+    // Expose deterministic test helper for browser verification
+    (window as unknown as Record<string, unknown>).__REMATCH_TEST__ = {
+      setPitchTheme(themeId: PitchThemeId) {
+        preferredArenaMode = themeId;
+        selectedPitchTheme = themeId;
+        applyPitchTheme(themeId);
+        sound.setPitchTheme(themeId);
+        rebuildStaticPitchCache();
+      },
+      getActiveMusicProfile() {
+        return getStadiumMusicProfile(selectedPitchTheme);
+      },
+      triggerGoal(opts?: {
+        scoringTeam?: 'YOU' | 'AI';
+        scoreYou?: number;
+        scoreAi?: number;
+        kickOriginX?: number;
+        isPerfectStrike?: boolean;
+        isOneTouch?: boolean;
+        wasWallBounce?: boolean;
+        spin?: number;
+        flowCombo?: number;
+      }) {
+        if (typeof opts?.scoreYou === 'number') scoreYou = opts.scoreYou;
+        if (typeof opts?.scoreAi === 'number') scoreAi = opts.scoreAi;
+        if (typeof opts?.flowCombo === 'number') flowCombo = opts.flowCombo;
+        ball.kickOriginX = opts?.kickOriginX ?? PITCH.width * 0.42;
+        ball.kickOriginY = PITCH.height * 0.5;
+        ball.isPerfectStrike = Boolean(opts?.isPerfectStrike);
+        ball.isOneTouch = Boolean(opts?.isOneTouch);
+        ball.wasWallBounce = Boolean(opts?.wasWallBounce);
+        ball.spin = opts?.spin ?? 0;
+        ball.x = (opts?.scoringTeam ?? 'YOU') === 'YOU' ? PITCH.width - 8 : 8;
+        ball.y = PITCH.height * 0.5;
+        handleGoalScored(opts?.scoringTeam ?? 'YOU');
+      },
+      openTournamentBracketPreview() {
+        const splashEl = document.getElementById('splashScreen');
+        if (splashEl) splashEl.classList.add('hidden');
+        currentGameMode = 'TOURNAMENT';
+        tournamentRound = 0;
+        initTournamentBracket();
+        pickRandomOpponent(false);
+        populatePreMatchVsOverlay();
+      },
+    };
 
     rafId = requestAnimationFrame(renderLoop);
 
@@ -6171,13 +8054,13 @@ export default function App() {
         </div>
       </div>
 
-      {/* Top Perimeter Indie Sports HUD (Responsive for iPhone Portrait/Landscape, Tablet & Desktop) */}
+      {/* Top Perimeter Indie Sports HUD (Responsive for iPhone Landscape, Tablet & Desktop) */}
       <div
         id="hud"
         className="hud-safe-top hidden absolute top-0 left-0 w-full px-2.5 py-1.5 sm:px-5 md:px-7 md:py-2.5 flex justify-between items-center gap-2 sm:gap-3 pointer-events-none z-20"
       >
-        {/* Left: Tactile Flow Combo Meter + Live Action Hint */}
-        <div className="flex items-center space-x-1.5 sm:space-x-2.5 shrink-0">
+        {/* Left: Tactile Flow Combo Meter */}
+        <div className="flex items-center space-x-1.5 sm:space-x-2.5 shrink-0 z-10">
           <div
             id="flowBadge"
             className="glass-pill rounded-xl sm:rounded-2xl px-2.5 py-1 sm:px-3.5 sm:py-1.5 flex items-center space-x-1.5 sm:space-x-2 transition-colors duration-150"
@@ -6195,21 +8078,14 @@ export default function App() {
 
           <div
             id="hudTourneyBadge"
-            className="hidden md:inline-flex glass-pill rounded-2xl px-3 py-1.5 text-[10px] font-black uppercase tracking-wider text-amber-900 bg-amber-200/95 whitespace-nowrap"
+            className="hidden glass-pill rounded-2xl px-3 py-1.5 text-[10px] font-black uppercase tracking-wider text-amber-900 bg-amber-200/95 whitespace-nowrap"
           >
             CUP 1/3 · QUARTER-FINAL
           </div>
-
-          <div className="glass-pill rounded-2xl px-3.5 py-2 hidden xl:flex items-center space-x-2">
-            <span id="possessionDot" className="w-2.5 h-2.5 rounded-full bg-sky-500 transition-colors duration-150" />
-            <span id="possessionText" className="text-[11px] font-extrabold tracking-tight text-slate-700 whitespace-nowrap">
-              L-Click: Pass / Hold to Curve • R-Click: Send Run
-            </span>
-          </div>
         </div>
 
-        {/* Center: Indie Arcade Broadcast Scoreboard */}
-        <div className="glass-pill rounded-xl sm:rounded-2xl p-1 sm:p-1.5 flex items-center space-x-1.5 sm:space-x-2 shrink-0">
+        {/* Center: Indie Arcade Broadcast Scoreboard & Timer (Centered at the Top) */}
+        <div className="glass-pill rounded-xl sm:rounded-2xl p-1 sm:p-1.5 flex items-center space-x-1.5 sm:space-x-2 shrink-0 absolute left-1/2 -translate-x-1/2 z-10">
           {/* Player Team (YOU) Pill */}
           <div
             id="hudYouPill"
@@ -6308,25 +8184,29 @@ export default function App() {
           </div>
         </div>
 
-        {/* Right Thumb: Ergonomic Arcade Action Cluster with Subtle Transparency */}
-        <div className="flex items-end space-x-3.5 sm:space-x-5 pointer-events-auto touch-none">
+        {/* Right Thumb: Ergonomic Arcade Action Cluster with Subtle Transparency & Contained Labels */}
+        <div className="flex items-end space-x-3 sm:space-x-4 pointer-events-auto touch-none">
           <button
             id="mobileSwitchBtn"
             type="button"
             aria-label="Send Teammate Run or Switch Defender"
-            className="rounded-full bg-white/55 backdrop-blur-md border-2 border-slate-900/65 text-slate-900 font-black text-xs sm:text-sm flex flex-col items-center justify-center active:scale-90 transition-transform whitespace-nowrap shadow-[0_4px_0_rgba(15,23,42,0.5)] mb-0.5"
+            className="w-[74px] h-[74px] sm:w-[82px] sm:h-[82px] px-1.5 rounded-full bg-white/55 backdrop-blur-md border-2 border-slate-900/65 text-slate-900 font-black flex flex-col items-center justify-center active:scale-90 transition-transform shadow-[0_4px_0_rgba(15,23,42,0.5)] mb-0.5 overflow-hidden text-center"
           >
-            <i className="fa-solid fa-bolt text-base mb-0.5 text-amber-500" />
-            <span id="mobileSecondaryText">Send Run</span>
+            <i className="fa-solid fa-bolt text-xs sm:text-sm mb-0.5 text-amber-500 shrink-0" />
+            <span id="mobileSecondaryText" className="text-[10px] sm:text-[11px] leading-[1.08] font-black text-center max-w-full">
+              Send Run
+            </span>
           </button>
           <button
             id="mobileActionBtn"
             type="button"
             aria-label="Kick, Pass, or Hold for Finesse Shot"
-            className="rounded-full bg-sky-500/75 active:bg-amber-400/90 backdrop-blur-md border-[3px] border-slate-900/75 text-white active:text-slate-900 font-black text-sm sm:text-base shadow-[0_5px_0_rgba(15,23,42,0.65)] flex flex-col items-center justify-center active:translate-y-1 transition-all whitespace-nowrap mb-3"
+            className="w-[86px] h-[86px] sm:w-[96px] sm:h-[96px] px-1.5 rounded-full bg-sky-500/75 active:bg-amber-400/90 backdrop-blur-md border-[3px] border-slate-900/75 text-white active:text-slate-900 font-black shadow-[0_5px_0_rgba(15,23,42,0.65)] flex flex-col items-center justify-center active:translate-y-1 transition-all mb-2.5 overflow-hidden text-center"
           >
-            <PixelSoccerBallIcon className="w-7 h-7 sm:w-8 sm:h-8 mb-0.5 opacity-95" />
-            <span id="mobileActionText">Kick</span>
+            <PixelSoccerBallIcon className="w-6 h-6 sm:w-7 sm:h-7 mb-0.5 opacity-95 shrink-0" />
+            <span id="mobileActionText" className="text-xs sm:text-sm leading-none font-black text-center max-w-full">
+              Kick
+            </span>
           </button>
         </div>
       </div>
@@ -6396,102 +8276,154 @@ export default function App() {
             </div>
           </div>
 
-          {/* Tournament Knockout Bracket Visual (Shown before each Tournament Match) */}
+          {/* Tournament Knockout Bracket Tree Visual (Shown before each Tournament Match) */}
           <div
             id="vsTournamentBracketSection"
-            className="hidden mt-4 pt-3.5 border-t-2 border-slate-200 text-left"
+            className="hidden mt-3.5 pt-3 border-t-2 border-slate-200 text-left"
           >
-            <div className="flex items-center justify-between mb-2.5 px-1">
-              <span className="text-[11px] font-black uppercase tracking-wider text-slate-800 flex items-center space-x-1.5">
+            <div className="flex items-center justify-between mb-2 px-1">
+              <span className="text-[11px] font-black uppercase tracking-wider text-slate-900 flex items-center space-x-1.5">
                 <i className="fa-solid fa-trophy text-amber-500" />
-                <span>8-Club Knockout Cup Bracket</span>
+                <span>8-Club Knockout Cup Bracket Tree</span>
               </span>
-              <span className="text-[10px] font-extrabold uppercase tracking-wider text-sky-600">
-                Single Elimination
+              <span className="text-[10px] font-black uppercase tracking-wider text-slate-600">
+                QF ──► SF ──► Final
               </span>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5 sm:gap-3 items-center bg-slate-100 p-3 rounded-2xl border-2 border-slate-900">
-              {/* Column 1: Quarter-Finals */}
-              <div className="space-y-1.5 min-w-0">
-                <div className="text-[10px] font-black uppercase tracking-wider text-slate-500 px-1">
-                  Quarter-Finals
-                </div>
-                <div id="brkMatchCardQf1" className="p-2.5 rounded-xl bg-amber-200 border-2 border-slate-900 shadow-[0_2px_0_#0f172a] text-left">
-                  <div className="flex items-center justify-between gap-2 text-[11px] font-black text-slate-900">
-                    <span id="brkYouNameQf" className="truncate min-w-0">Player</span>
-                    <span id="brkScoreQf1" className="px-1.5 py-0.5 rounded bg-slate-900 text-amber-300 font-mono-num text-[9px] shrink-0">NOW</span>
+            {/* Connected Knockout Bracket Tree Diagram */}
+            <div className="p-2.5 sm:p-3.5 rounded-2xl bg-slate-100 border-2 border-slate-900 shadow-[0_4px_0_#0f172a] overflow-x-auto">
+              <div className="min-w-[540px] grid grid-cols-11 items-center gap-0">
+                {/* Column 1 (Cols 1-3): Quarter-Finals (4 Matchups in Upper & Lower Pairs) */}
+                <div className="col-span-3 flex flex-col justify-between space-y-2">
+                  <div className="text-[9px] font-black uppercase tracking-wider text-slate-500 px-1">
+                    Quarter-Finals
                   </div>
-                  <div className="flex items-center justify-between gap-2 text-[11px] font-bold text-slate-700 mt-0.5">
-                    <span id="brkOppNameQf" className="truncate min-w-0">Rival</span>
-                    <span className="text-[9px] font-extrabold text-slate-500 shrink-0">QF 1</span>
-                  </div>
-                </div>
-                <div className="p-2 rounded-xl bg-white border border-slate-300 text-left">
-                  <div className="flex items-center justify-between gap-2 text-[10px] font-extrabold text-slate-800">
-                    <span id="brkB1NameQf" className="truncate min-w-0">Rival B1</span>
-                    <span id="brkScoreQf2" className="font-mono-num text-[9px] text-slate-500 shrink-0">QF 2</span>
-                  </div>
-                  <div className="flex items-center justify-between gap-2 text-[10px] font-semibold text-slate-500 mt-0.5">
-                    <span id="brkB2NameQf" className="truncate min-w-0">Rival B2</span>
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-1.5">
-                  <div className="p-1.5 rounded-lg bg-white/80 border border-slate-300 text-[9px] min-w-0">
-                    <div id="brkC1NameQf" className="font-bold text-slate-700 truncate">Rival C1</div>
-                    <div id="brkC2NameQf" className="text-slate-400 truncate">Rival C2</div>
-                    <div id="brkScoreQf3" className="font-mono-num text-[8px] font-bold text-emerald-600 mt-0.5">QF 3</div>
-                  </div>
-                  <div className="p-1.5 rounded-lg bg-white/80 border border-slate-300 text-[9px] min-w-0">
-                    <div id="brkD1NameQf" className="font-bold text-slate-700 truncate">Rival D1</div>
-                    <div id="brkD2NameQf" className="text-slate-400 truncate">Rival D2</div>
-                    <div id="brkScoreQf4" className="font-mono-num text-[8px] font-bold text-emerald-600 mt-0.5">QF 4</div>
-                  </div>
-                </div>
-              </div>
+                  {/* Upper QF Pair */}
+                  <div className="space-y-1.5">
+                    <div
+                      id="brkMatchCardQf1"
+                      className="p-2 rounded-xl bg-amber-300 border-2 border-slate-900 shadow-[0_3px_0_#0f172a] text-left"
+                    >
+                      <div className="flex items-center justify-between gap-1.5 text-[10px] font-black text-slate-900">
+                        <span id="brkYouNameQf" className="truncate min-w-0">Player</span>
+                        <span id="brkScoreQf1" className="px-1.5 py-0.2 rounded bg-slate-900 text-amber-300 font-mono-num text-[8px] shrink-0">NOW</span>
+                      </div>
+                      <div className="flex items-center justify-between gap-1.5 text-[9.5px] font-bold text-slate-700 mt-0.5">
+                        <span id="brkOppNameQf" className="truncate min-w-0">Rival</span>
+                        <span className="text-[8px] font-black text-slate-600 shrink-0">QF 1</span>
+                      </div>
+                    </div>
 
-              {/* Column 2: Semi-Finals */}
-              <div className="space-y-2 min-w-0">
-                <div className="text-[10px] font-black uppercase tracking-wider text-slate-500 px-1">
-                  Semi-Finals
-                </div>
-                <div id="brkMatchCardSf1" className="p-2.5 rounded-xl bg-white border border-slate-300 text-left">
-                  <div className="flex items-center justify-between gap-2 text-xs font-black text-slate-900">
-                    <span id="brkYouNameSf" className="truncate min-w-0">Winner QF 1</span>
-                    <span id="brkScoreSf1" className="px-1.5 py-0.5 rounded bg-slate-800 text-white font-mono-num text-[9px] shrink-0">SF 1</span>
+                    <div className="p-1.5 rounded-xl bg-white border-2 border-slate-900 shadow-[0_2px_0_#0f172a] text-left">
+                      <div className="flex items-center justify-between gap-1.5 text-[9.5px] font-black text-slate-800">
+                        <span id="brkB1NameQf" className="truncate min-w-0">Rival B1</span>
+                        <span id="brkScoreQf2" className="font-mono-num text-[8px] font-black text-slate-500 shrink-0">QF 2</span>
+                      </div>
+                      <div className="flex items-center justify-between gap-1.5 text-[9px] font-semibold text-slate-500 mt-0.5">
+                        <span id="brkB2NameQf" className="truncate min-w-0">Rival B2</span>
+                      </div>
+                    </div>
                   </div>
-                  <div className="flex items-center justify-between gap-2 text-[11px] font-bold text-slate-600 mt-1">
-                    <span id="brkOppNameSf" className="truncate min-w-0">Winner QF 2</span>
-                    <span className="text-[9px] font-extrabold text-slate-400 shrink-0">UPPER</span>
-                  </div>
-                </div>
-                <div className="p-2.5 rounded-xl bg-white border border-slate-300 text-left">
-                  <div className="flex items-center justify-between gap-2 text-[11px] font-extrabold text-slate-800">
-                    <span id="brkGfOppNameSf" className="truncate min-w-0">Winner QF 4</span>
-                    <span id="brkScoreSf2" className="font-mono-num text-[9px] text-slate-500 shrink-0">SF 2</span>
-                  </div>
-                  <div className="flex items-center justify-between gap-2 text-[10px] font-semibold text-slate-500 mt-0.5">
-                    <span id="brkOtherSfName" className="truncate min-w-0">Winner QF 3</span>
-                    <span className="text-[9px] text-slate-400 shrink-0">LOWER</span>
-                  </div>
-                </div>
-              </div>
 
-              {/* Column 3: Grand Final */}
-              <div className="space-y-2 min-w-0">
-                <div className="text-[10px] font-black uppercase tracking-wider text-amber-600 px-1 flex items-center space-x-1">
-                  <i className="fa-solid fa-crown text-[10px]" />
-                  <span>Grand Final</span>
-                </div>
-                <div id="brkMatchCardGf" className="p-3 rounded-2xl bg-white border-2 border-dashed border-amber-400 text-left">
-                  <div className="flex items-center justify-between gap-2 text-xs font-black text-slate-900">
-                    <span id="brkYouNameGf" className="truncate min-w-0">Winner SF 1</span>
-                    <span id="brkScoreGf" className="px-2 py-0.5 rounded-full bg-amber-300 border border-slate-900 text-slate-900 font-mono-num text-[9px] font-black shrink-0">CUP</span>
+                  {/* Lower QF Pair */}
+                  <div className="space-y-1.5 pt-1">
+                    <div className="p-1.5 rounded-xl bg-white border-2 border-slate-900 shadow-[0_2px_0_#0f172a] text-left">
+                      <div className="flex items-center justify-between gap-1.5 text-[9.5px] font-black text-slate-800">
+                        <span id="brkC1NameQf" className="truncate min-w-0">Rival C1</span>
+                        <span id="brkScoreQf3" className="font-mono-num text-[8px] font-black text-emerald-700 shrink-0">QF 3</span>
+                      </div>
+                      <div className="flex items-center justify-between gap-1.5 text-[9px] font-semibold text-slate-500 mt-0.5">
+                        <span id="brkC2NameQf" className="truncate min-w-0">Rival C2</span>
+                      </div>
+                    </div>
+
+                    <div className="p-1.5 rounded-xl bg-white border-2 border-slate-900 shadow-[0_2px_0_#0f172a] text-left">
+                      <div className="flex items-center justify-between gap-1.5 text-[9.5px] font-black text-slate-800">
+                        <span id="brkD1NameQf" className="truncate min-w-0">Rival D1</span>
+                        <span id="brkScoreQf4" className="font-mono-num text-[8px] font-black text-emerald-700 shrink-0">QF 4</span>
+                      </div>
+                      <div className="flex items-center justify-between gap-1.5 text-[9px] font-semibold text-slate-500 mt-0.5">
+                        <span id="brkD2NameQf" className="truncate min-w-0">Rival D2</span>
+                      </div>
+                    </div>
                   </div>
-                  <div className="text-[10px] font-black text-amber-600 my-1">VS</div>
-                  <div className="flex items-center justify-between gap-2 text-xs font-black text-slate-800">
-                    <span id="brkOppNameGf" className="truncate min-w-0">Winner SF 2</span>
-                    <i className="fa-solid fa-trophy text-amber-500 text-sm shrink-0" />
+                </div>
+
+                {/* Connector Fork 1 (Col 4): Joins QF1+QF2 into SF1 and QF3+QF4 into SF2 */}
+                <div className="col-span-1 flex flex-col justify-around h-full py-6 px-0.5 select-none">
+                  <div className="flex items-center w-full my-auto">
+                    <div className="w-1/2 h-12 border-t-[2.5px] border-b-[2.5px] border-r-[2.5px] border-slate-900 rounded-r-lg" />
+                    <div className="w-1/2 h-[2.5px] bg-slate-900" />
+                  </div>
+                  <div className="flex items-center w-full my-auto pt-4">
+                    <div className="w-1/2 h-12 border-t-[2.5px] border-b-[2.5px] border-r-[2.5px] border-slate-900 rounded-r-lg" />
+                    <div className="w-1/2 h-[2.5px] bg-slate-900" />
+                  </div>
+                </div>
+
+                {/* Column 2 (Cols 5-7): Semi-Finals (Upper SF 1 & Lower SF 2) */}
+                <div className="col-span-3 flex flex-col justify-around space-y-4">
+                  <div className="text-[9px] font-black uppercase tracking-wider text-slate-500 px-1">
+                    Semi-Finals
+                  </div>
+                  <div
+                    id="brkMatchCardSf1"
+                    className="p-2.5 rounded-xl bg-white border-2 border-slate-900 shadow-[0_2px_0_#0f172a] text-left"
+                  >
+                    <div className="flex items-center justify-between gap-1.5 text-[10.5px] font-black text-slate-900">
+                      <span id="brkYouNameSf" className="truncate min-w-0">Winner QF 1</span>
+                      <span id="brkScoreSf1" className="px-1.5 py-0.2 rounded bg-slate-900 text-white font-mono-num text-[8px] shrink-0">SF 1</span>
+                    </div>
+                    <div className="flex items-center justify-between gap-1.5 text-[10px] font-bold text-slate-600 mt-1">
+                      <span id="brkOppNameSf" className="truncate min-w-0">Winner QF 2</span>
+                      <span className="text-[8px] font-black text-slate-400 shrink-0">UPPER</span>
+                    </div>
+                  </div>
+
+                  <div className="p-2.5 rounded-xl bg-white border-2 border-slate-900 shadow-[0_2px_0_#0f172a] text-left">
+                    <div className="flex items-center justify-between gap-1.5 text-[10.5px] font-black text-slate-800">
+                      <span id="brkGfOppNameSf" className="truncate min-w-0">Winner QF 4</span>
+                      <span id="brkScoreSf2" className="font-mono-num text-[8px] font-black text-slate-500 shrink-0">SF 2</span>
+                    </div>
+                    <div className="flex items-center justify-between gap-1.5 text-[10px] font-semibold text-slate-500 mt-1">
+                      <span id="brkOtherSfName" className="truncate min-w-0">Winner QF 3</span>
+                      <span className="text-[8px] font-black text-slate-400 shrink-0">LOWER</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Connector Fork 2 (Col 8): Joins SF1 + SF2 into GRAND FINAL */}
+                <div className="col-span-1 flex items-center justify-center h-full py-10 px-0.5 select-none">
+                  <div className="flex items-center w-full">
+                    <div className="w-1/2 h-24 border-t-[2.5px] border-b-[2.5px] border-r-[2.5px] border-slate-900 rounded-r-lg" />
+                    <div className="w-1/2 h-[2.5px] bg-slate-900" />
+                  </div>
+                </div>
+
+                {/* Column 3 (Cols 9-11): Grand Final Championship Node */}
+                <div className="col-span-3 flex flex-col justify-center">
+                  <div className="text-[9.5px] font-black uppercase tracking-wider text-amber-700 px-1 mb-1.5 flex items-center space-x-1">
+                    <i className="fa-solid fa-crown text-amber-500 text-[10px]" />
+                    <span>Grand Final</span>
+                  </div>
+                  <div
+                    id="brkMatchCardGf"
+                    className="p-3 rounded-2xl bg-amber-50 border-2 border-slate-900 shadow-[0_3px_0_#0f172a] text-left"
+                  >
+                    <div className="flex items-center justify-between gap-1.5 text-[11px] font-black text-slate-900">
+                      <span id="brkYouNameGf" className="truncate min-w-0">Winner SF 1</span>
+                      <span id="brkScoreGf" className="px-2 py-0.5 rounded-full bg-amber-300 border border-slate-900 text-slate-900 font-mono-num text-[8.5px] font-black shrink-0">CUP</span>
+                    </div>
+                    <div className="my-1.5 flex items-center gap-1.5">
+                      <div className="h-[1.5px] flex-1 bg-slate-300" />
+                      <span className="text-[9px] font-black text-amber-700">VS</span>
+                      <div className="h-[1.5px] flex-1 bg-slate-300" />
+                    </div>
+                    <div className="flex items-center justify-between gap-1.5 text-[11px] font-black text-slate-800">
+                      <span id="brkOppNameGf" className="truncate min-w-0">Winner SF 2</span>
+                      <i className="fa-solid fa-trophy text-amber-500 text-xs shrink-0" />
+                    </div>
                   </div>
                 </div>
               </div>
@@ -6750,48 +8682,29 @@ export default function App() {
                 </div>
                 <div className="grid grid-cols-3 gap-2 p-1.5 rounded-2xl bg-slate-100 border-2 border-slate-900">
                   <button
+                    id="modeBtnCasual"
                     type="button"
                     data-mode="CASUAL"
-                    className="mode-btn min-h-[42px] py-2.5 px-3 rounded-xl text-xs sm:text-sm font-black transition-colors cursor-pointer bg-amber-300 text-slate-900 border-2 border-slate-900 shadow-[0_2px_0_#0f172a] flex items-center justify-center"
+                    className="mode-btn min-h-[44px] py-2.5 px-3 rounded-xl text-xs sm:text-sm font-black transition-colors cursor-pointer bg-amber-300 text-slate-900 border-2 border-slate-900 shadow-[0_2px_0_#0f172a] flex items-center justify-center"
                   >
                     Casual
                   </button>
                   <button
+                    id="modeBtnRanked"
                     type="button"
                     data-mode="RANKED"
-                    className="mode-btn min-h-[42px] py-2.5 px-3 rounded-xl text-xs sm:text-sm font-extrabold transition-colors cursor-pointer text-slate-600 hover:text-slate-900 flex items-center justify-center"
+                    className="mode-btn min-h-[44px] py-2.5 px-3 rounded-xl text-xs sm:text-sm font-extrabold transition-colors cursor-pointer text-slate-600 hover:text-slate-900 flex items-center justify-center"
                   >
                     Ranked
                   </button>
                   <button
+                    id="modeBtnTourney"
                     type="button"
                     data-mode="TOURNAMENT"
-                    className="mode-btn min-h-[42px] py-2.5 px-3 rounded-xl text-xs sm:text-sm font-extrabold transition-colors cursor-pointer text-slate-600 hover:text-slate-900 flex items-center justify-center"
+                    className="mode-btn min-h-[44px] py-2.5 px-3 rounded-xl text-xs sm:text-sm font-extrabold transition-colors cursor-pointer text-slate-600 hover:text-slate-900 flex items-center justify-center"
                   >
                     Tournament
                   </button>
-                </div>
-
-                {/* Knockout Tournament 3-Match Bracket Tracker (shown when Tournament is selected) */}
-                <div id="tournamentBracketWrap" className="hidden mt-3 grid grid-cols-3 gap-2">
-                  <div
-                    id="tourneyStep0"
-                    className="min-w-0 py-2 px-2 rounded-xl bg-amber-300 border-2 border-slate-900 text-slate-900 font-black text-[10px] sm:text-xs shadow-[0_2px_0_#0f172a] flex items-center justify-center text-center truncate"
-                  >
-                    <span className="truncate">1. Quarter-Final</span>
-                  </div>
-                  <div
-                    id="tourneyStep1"
-                    className="min-w-0 py-2 px-2 rounded-xl bg-white border border-slate-300 text-slate-500 font-bold text-[10px] sm:text-xs flex items-center justify-center text-center truncate"
-                  >
-                    <span className="truncate">2. Semi-Final</span>
-                  </div>
-                  <div
-                    id="tourneyStep2"
-                    className="min-w-0 py-2 px-2 rounded-xl bg-white border border-slate-300 text-slate-500 font-bold text-[10px] sm:text-xs flex items-center justify-center text-center truncate"
-                  >
-                    <span className="truncate">3. Grand Final</span>
-                  </div>
                 </div>
               </div>
 
@@ -6800,7 +8713,7 @@ export default function App() {
                 <div className="text-[11px] font-black uppercase tracking-wider text-slate-500 mb-2 px-1">
                   SELECT TEAM KIT
                 </div>
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-2 gap-2.5">
                   <button
                     id="kitHomeBtn"
                     type="button"
@@ -6996,61 +8909,66 @@ export default function App() {
             </div>
           </div>
 
-          {/* Primary Actions */}
-          <div id="menuBottomBar" className="glass-modal rounded-3xl p-4 sm:p-5 flex flex-col space-y-2.5 sm:space-y-3">
-            <button
-              id="startBtn"
-              type="button"
-              data-start="true"
-              className="indie-cta-btn w-full min-h-[52px] py-3.5 sm:py-4 px-6 rounded-2xl bg-sky-500 hover:bg-sky-400 text-white font-black text-sm sm:text-lg tracking-wide cursor-pointer flex items-center justify-center space-x-2.5"
+          {/* Primary Actions — Centered & Well-Proportioned (Never Stretched Super Wide) */}
+          <div id="menuBottomBar" className="glass-modal rounded-3xl p-3.5 sm:p-4 flex flex-col items-center space-y-2">
+            <div
+              id="menuActionsRow"
+              className="w-full flex flex-col sm:flex-row flex-wrap items-center justify-center gap-2 sm:gap-3"
             >
-              <i id="startBtnIcon" className="fa-solid fa-play text-xs" />
-              <span id="startBtnText">FIND CASUAL MATCH</span>
-            </button>
-
-            <button
-              id="rematchSameBtn"
-              type="button"
-              className="btn-clean hidden w-full min-h-[46px] py-3 px-6 rounded-2xl bg-amber-300 hover:bg-amber-200 border-2 border-slate-900 text-slate-900 font-black text-xs sm:text-sm tracking-wide cursor-pointer flex items-center justify-center space-x-2"
-            >
-              <i className="fa-solid fa-rotate-right text-xs" />
-              <span id="rematchSameText">Rematch</span>
-            </button>
-
-            <button
-              id="mainMenuBtn"
-              type="button"
-              className="btn-clean hidden w-full min-h-[46px] py-3 px-6 rounded-2xl bg-slate-200 hover:bg-slate-300 border-2 border-slate-900 text-slate-900 font-black text-xs sm:text-sm tracking-wide cursor-pointer flex items-center justify-center space-x-2"
-            >
-              <i className="fa-solid fa-house text-xs" />
-              <span>Return to Home Menu</span>
-            </button>
-
-            <button
-              id="resumeBtn"
-              type="button"
-              className="indie-cta-btn hidden w-full min-h-[48px] py-3.5 px-6 rounded-2xl bg-emerald-500 hover:bg-emerald-400 text-white font-black text-base tracking-wide cursor-pointer"
-            >
-              Resume Match
-            </button>
-
-            <button
-              id="forfeitBtn"
-              type="button"
-              className="btn-clean hidden w-full min-h-[46px] py-3 px-6 rounded-2xl bg-rose-500 hover:bg-rose-400 border-2 border-slate-900 text-white font-black text-xs sm:text-sm tracking-wide uppercase cursor-pointer flex items-center justify-center space-x-2"
-            >
-              <i className="fa-solid fa-house text-xs" />
-              <span>Forfeit Match</span>
-            </button>
-
-            <div className="flex items-center justify-center pt-1">
               <button
-                id="howToPlayBtn"
+                id="startBtn"
                 type="button"
-                className="btn-clean min-h-[38px] py-2 px-5 rounded-xl bg-slate-100 hover:bg-slate-200 border border-slate-300 text-slate-700 font-extrabold text-xs tracking-wide cursor-pointer"
+                data-start="true"
+                className="indie-cta-btn w-full sm:w-auto sm:min-w-[240px] sm:max-w-[320px] min-h-[46px] sm:min-h-[50px] py-3 sm:py-3.5 px-7 rounded-2xl bg-sky-500 hover:bg-sky-400 text-white font-black text-sm sm:text-base tracking-wide cursor-pointer flex items-center justify-center space-x-2.5"
               >
-                How to Play &amp; Controls
+                <i id="startBtnIcon" className="fa-solid fa-play text-xs shrink-0" />
+                <span id="startBtnText" className="truncate">FIND CASUAL MATCH</span>
               </button>
+
+              <button
+                id="rematchSameBtn"
+                type="button"
+                className="btn-clean hidden w-full sm:w-auto sm:min-w-[175px] sm:max-w-[250px] min-h-[42px] py-2.5 px-5 rounded-2xl bg-amber-300 hover:bg-amber-200 border-2 border-slate-900 text-slate-900 font-black text-xs sm:text-sm tracking-wide cursor-pointer flex items-center justify-center space-x-2"
+              >
+                <i className="fa-solid fa-rotate-right text-xs shrink-0" />
+                <span id="rematchSameText" className="truncate">Rematch</span>
+              </button>
+
+              <button
+                id="mainMenuBtn"
+                type="button"
+                className="btn-clean hidden w-full sm:w-auto sm:min-w-[165px] sm:max-w-[235px] min-h-[42px] py-2.5 px-5 rounded-2xl bg-slate-200 hover:bg-slate-300 border-2 border-slate-900 text-slate-900 font-black text-xs sm:text-sm tracking-wide cursor-pointer flex items-center justify-center space-x-2"
+              >
+                <i className="fa-solid fa-house text-xs shrink-0" />
+                <span className="truncate">Home Menu</span>
+              </button>
+
+              <button
+                id="resumeBtn"
+                type="button"
+                className="indie-cta-btn hidden w-full sm:w-auto sm:min-w-[185px] sm:max-w-[250px] min-h-[44px] py-3 px-6 rounded-2xl bg-emerald-500 hover:bg-emerald-400 text-white font-black text-sm sm:text-base tracking-wide cursor-pointer"
+              >
+                Resume Match
+              </button>
+
+              <button
+                id="forfeitBtn"
+                type="button"
+                className="btn-clean hidden w-full sm:w-auto sm:min-w-[165px] sm:max-w-[225px] min-h-[42px] py-2.5 px-5 rounded-2xl bg-rose-500 hover:bg-rose-400 border-2 border-slate-900 text-white font-black text-xs sm:text-sm tracking-wide uppercase cursor-pointer flex items-center justify-center space-x-2"
+              >
+                <i className="fa-solid fa-house text-xs shrink-0" />
+                <span className="truncate">Forfeit Match</span>
+              </button>
+
+              <div id="howToPlayWrap" className="flex items-center justify-center w-full sm:w-auto">
+                <button
+                  id="howToPlayBtn"
+                  type="button"
+                  className="btn-clean w-full sm:w-auto min-h-[42px] py-2.5 px-5 rounded-2xl bg-slate-100 hover:bg-slate-200 border-2 border-slate-300 text-slate-700 font-extrabold text-xs tracking-wide cursor-pointer whitespace-nowrap"
+                >
+                  How to Play &amp; Controls
+                </button>
+              </div>
             </div>
 
             {/* Collapsible Controls & Tips Drawer with Selectable Computer / Remote (DualShock 5) / Mobile Tabs */}
