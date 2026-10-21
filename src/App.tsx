@@ -359,13 +359,51 @@ export default function App() {
 
     type InternalGameState = 'SPLASH' | 'MENU' | 'PLAYING' | 'PAUSED' | 'GOAL_CELEBRATION' | 'MATCH_OVER';
     let gameState: InternalGameState = 'SPLASH';
+    let hasDetectedTouchInput = false;
+
+    function isCoarseTouchHardware(): boolean {
+      return (
+        typeof window.matchMedia === 'function' &&
+        window.matchMedia('(pointer: coarse) and (hover: none)').matches
+      );
+    }
 
     function isMobileOrTabletViewport(): boolean {
       const w = window.innerWidth;
       const h = window.innerHeight;
-      const hasCoarsePointer =
-        typeof window.matchMedia === 'function' && window.matchMedia('(pointer: coarse)').matches;
-      return w <= 1024 || (h <= 620 && w <= 1180) || (hasCoarsePointer && w <= 1366);
+      return w < h || hasDetectedTouchInput || (isCoarseTouchHardware() && w <= 1366);
+    }
+
+    function shouldShowMobileTouchControls(): boolean {
+      if (gameState !== 'PLAYING' && gameState !== 'GOAL_CELEBRATION') return false;
+      const vsOverlay = document.getElementById('preMatchVsOverlay');
+      const winOverlay = document.getElementById('tournamentWinOverlay');
+      const menuOverlayEl = document.getElementById('menuOverlay');
+      const splashEl = document.getElementById('splashScreen');
+      if (vsOverlay && !vsOverlay.classList.contains('hidden')) return false;
+      if (winOverlay && !winOverlay.classList.contains('hidden')) return false;
+      if (menuOverlayEl && !menuOverlayEl.classList.contains('hidden')) return false;
+      if (splashEl && !splashEl.classList.contains('hidden')) return false;
+
+      if (hasDetectedTouchInput) return true;
+      if (
+        isCoarseTouchHardware() &&
+        activeControlScheme !== 'MOUSE' &&
+        activeControlScheme !== 'KEYBOARD' &&
+        activeControlScheme !== 'GAMEPAD'
+      ) {
+        return true;
+      }
+      return false;
+    }
+
+    function syncMobileControlsVisibility() {
+      const mobileControlsEl = document.getElementById('mobileControls');
+      if (!mobileControlsEl) return;
+      const showTouch = shouldShowMobileTouchControls();
+      mobileControlsEl.classList.toggle('hidden', !showTouch);
+      mobileControlsEl.classList.toggle('flex', showTouch);
+      mobileControlsEl.style.display = showTouch ? 'flex' : 'none';
     }
 
     function syncBodyStateAttr(state: InternalGameState) {
@@ -375,7 +413,6 @@ export default function App() {
       else if (state === 'MATCH_OVER') document.body.dataset.state = 'gameover';
 
       const hudEl = document.getElementById('hud');
-      const mobileControlsEl = document.getElementById('mobileControls');
       const splashEl = document.getElementById('splashScreen');
       const homeMenuEl = document.getElementById('menuOverlay');
       const pauseEl = document.getElementById('pauseOverlay');
@@ -383,13 +420,6 @@ export default function App() {
       const inActiveMatch = state === 'PLAYING' || state === 'PAUSED' || state === 'GOAL_CELEBRATION';
       if (hudEl) {
         hudEl.classList.toggle('hidden', !inActiveMatch);
-      }
-      if (mobileControlsEl) {
-        // Strictly show mobile UI only on mobile/tablet mode during active gameplay
-        const showTouch =
-          (state === 'PLAYING' || state === 'GOAL_CELEBRATION') && isMobileOrTabletViewport();
-        mobileControlsEl.classList.toggle('hidden', !showTouch);
-        mobileControlsEl.classList.toggle('flex', showTouch);
       }
       if (splashEl) {
         splashEl.classList.toggle('hidden', state !== 'SPLASH');
@@ -401,6 +431,7 @@ export default function App() {
       if (pauseEl) {
         pauseEl.classList.toggle('hidden', state !== 'PAUSED');
       }
+      syncMobileControlsVisibility();
     }
     syncBodyStateAttr('SPLASH');
 
@@ -576,6 +607,81 @@ export default function App() {
     let matchLaunchTimeout: ReturnType<typeof setTimeout> | null = null;
     const pitchFlowers: PitchFlower[] = [];
 
+    interface TournamentBracketState {
+      initialized: boolean;
+      qfOpponent: (typeof OCEANIA_PLAYERS)[0];
+      sfOpponent: (typeof OCEANIA_PLAYERS)[0];
+      gfOpponent: (typeof OCEANIA_PLAYERS)[0];
+      otherQfLoserB: (typeof OCEANIA_PLAYERS)[0];
+      otherQfLoserC: (typeof OCEANIA_PLAYERS)[0];
+      otherQfLoserD: (typeof OCEANIA_PLAYERS)[0];
+      otherSfLoser: (typeof OCEANIA_PLAYERS)[0];
+      scores: {
+        qfYou: string;
+        sfYou: string;
+        gfYou: string;
+      };
+      totalGoalsYou: number;
+      totalGoalsAi: number;
+    }
+
+    const tournamentBracket: TournamentBracketState = {
+      initialized: false,
+      qfOpponent: OCEANIA_PLAYERS[2],
+      sfOpponent: OCEANIA_PLAYERS[3],
+      gfOpponent: OCEANIA_PLAYERS[4],
+      otherQfLoserB: OCEANIA_PLAYERS[5],
+      otherQfLoserC: OCEANIA_PLAYERS[6],
+      otherQfLoserD: OCEANIA_PLAYERS[7],
+      otherSfLoser: OCEANIA_PLAYERS[8],
+      scores: { qfYou: '', sfYou: '', gfYou: '' },
+      totalGoalsYou: 0,
+      totalGoalsAi: 0,
+    };
+
+    function initTournamentBracket() {
+      const shuffled = [...OCEANIA_PLAYERS].sort(() => Math.random() - 0.5);
+      const qfPool = shuffled.filter((p) => p.rank === 'Gold II');
+      const sfPool = shuffled.filter((p) => p.rank === 'Platinum I');
+      const gfPool = shuffled.filter((p) => p.rank === 'Star League');
+
+      tournamentBracket.qfOpponent = qfPool[0] || shuffled[0];
+      tournamentBracket.sfOpponent = sfPool[0] || shuffled[1];
+      tournamentBracket.gfOpponent = gfPool[0] || shuffled[2];
+
+      const usedTags = new Set([
+        tournamentBracket.qfOpponent.tag,
+        tournamentBracket.sfOpponent.tag,
+        tournamentBracket.gfOpponent.tag,
+      ]);
+      const rest = shuffled.filter((p) => !usedTags.has(p.tag));
+      tournamentBracket.otherQfLoserB = rest[0] || shuffled[3];
+      tournamentBracket.otherQfLoserC = rest[1] || shuffled[4];
+      tournamentBracket.otherQfLoserD = rest[2] || shuffled[5];
+      tournamentBracket.otherSfLoser = rest[3] || shuffled[6];
+      tournamentBracket.scores = { qfYou: '', sfYou: '', gfYou: '' };
+      tournamentBracket.totalGoalsYou = 0;
+      tournamentBracket.totalGoalsAi = 0;
+      tournamentBracket.initialized = true;
+    }
+
+    function triggerScreenTransition(onMidpoint?: () => void) {
+      const veil = document.getElementById('screenTransitionVeil');
+      if (!veil) {
+        if (onMidpoint) onMidpoint();
+        return;
+      }
+      veil.classList.remove('pointer-events-none', 'opacity-0');
+      veil.classList.add('opacity-100');
+      setTimeout(() => {
+        if (onMidpoint) onMidpoint();
+        setTimeout(() => {
+          veil.classList.remove('opacity-100');
+          veil.classList.add('opacity-0', 'pointer-events-none');
+        }, 60);
+      }, 140);
+    }
+
     function clearMatchmakingTimers() {
       if (matchmakingInterval) {
         clearInterval(matchmakingInterval);
@@ -639,11 +745,11 @@ export default function App() {
       const kitAwayBtn = document.getElementById('kitAwayBtn');
       if (kitHomeBtn && kitAwayBtn) {
         kitHomeBtn.className = youIsHome
-          ? 'kit-btn py-2.5 px-3.5 rounded-xl text-xs font-black transition-all cursor-pointer bg-sky-400 text-slate-900 border-2 border-slate-900 shadow-[0_3px_0_#0f172a] flex items-center justify-center space-x-2 whitespace-nowrap'
-          : 'kit-btn py-2.5 px-3.5 rounded-xl text-xs font-extrabold transition-all cursor-pointer bg-slate-100 text-slate-600 hover:text-slate-900 border-2 border-transparent flex items-center justify-center space-x-2 whitespace-nowrap';
+          ? 'kit-btn min-h-[44px] py-2.5 px-3.5 sm:px-4 rounded-xl text-xs sm:text-sm font-black transition-all cursor-pointer bg-sky-400 text-slate-900 border-2 border-slate-900 shadow-[0_3px_0_#0f172a] flex items-center justify-center gap-2'
+          : 'kit-btn min-h-[44px] py-2.5 px-3.5 sm:px-4 rounded-xl text-xs sm:text-sm font-extrabold transition-all cursor-pointer bg-slate-100 text-slate-600 hover:text-slate-900 border-2 border-slate-300 flex items-center justify-center gap-2';
         kitAwayBtn.className = !youIsHome
-          ? 'kit-btn py-2.5 px-3.5 rounded-xl text-xs font-black transition-all cursor-pointer bg-rose-400 text-white border-2 border-slate-900 shadow-[0_3px_0_#0f172a] flex items-center justify-center space-x-2 whitespace-nowrap'
-          : 'kit-btn py-2.5 px-3.5 rounded-xl text-xs font-extrabold transition-all cursor-pointer bg-slate-100 text-slate-600 hover:text-slate-900 border-2 border-transparent flex items-center justify-center space-x-2 whitespace-nowrap';
+          ? 'kit-btn min-h-[44px] py-2.5 px-3.5 sm:px-4 rounded-xl text-xs sm:text-sm font-black transition-all cursor-pointer bg-rose-400 text-white border-2 border-slate-900 shadow-[0_3px_0_#0f172a] flex items-center justify-center gap-2'
+          : 'kit-btn min-h-[44px] py-2.5 px-3.5 sm:px-4 rounded-xl text-xs sm:text-sm font-extrabold transition-all cursor-pointer bg-slate-100 text-slate-600 hover:text-slate-900 border-2 border-slate-300 flex items-center justify-center gap-2';
       }
 
       // 2. Update Player Card in Home Menu (Rank shown on Ranked & Tournament; hidden on Casual)
@@ -675,20 +781,23 @@ export default function App() {
       const hudAiPill = document.getElementById('hudAiPill');
       if (hudYouPill) {
         hudYouPill.className = youIsHome
-          ? 'flex items-center space-x-1 sm:space-x-2 bg-sky-500 text-white px-1.5 py-0.5 sm:px-2.5 sm:py-1 md:px-3.5 md:py-1 rounded-lg sm:rounded-xl border-2 border-slate-900 shadow-xs transition-colors'
-          : 'flex items-center space-x-1 sm:space-x-2 bg-rose-500 text-white px-1.5 py-0.5 sm:px-2.5 sm:py-1 md:px-3.5 md:py-1 rounded-lg sm:rounded-xl border-2 border-slate-900 shadow-xs transition-colors';
+          ? 'flex items-center space-x-1.5 sm:space-x-2 bg-sky-500 text-white px-2 py-0.5 sm:px-3 sm:py-1 rounded-lg sm:rounded-xl border-2 border-slate-900 shadow-xs transition-colors'
+          : 'flex items-center space-x-1.5 sm:space-x-2 bg-rose-500 text-white px-2 py-0.5 sm:px-3 sm:py-1 rounded-lg sm:rounded-xl border-2 border-slate-900 shadow-xs transition-colors';
       }
       if (hudAiPill) {
         hudAiPill.className = cpuKit === 'AWAY'
-          ? 'flex items-center space-x-1 sm:space-x-2 bg-rose-500 text-white px-1.5 py-0.5 sm:px-2.5 sm:py-1 md:px-3.5 md:py-1 rounded-lg sm:rounded-xl border-2 border-slate-900 shadow-xs transition-colors'
-          : 'flex items-center space-x-1 sm:space-x-2 bg-sky-500 text-white px-1.5 py-0.5 sm:px-2.5 sm:py-1 md:px-3.5 md:py-1 rounded-lg sm:rounded-xl border-2 border-slate-900 shadow-xs transition-colors';
+          ? 'flex items-center space-x-1.5 sm:space-x-2 bg-rose-500 text-white px-2 py-0.5 sm:px-3 sm:py-1 rounded-lg sm:rounded-xl border-2 border-slate-900 shadow-xs transition-colors'
+          : 'flex items-center space-x-1.5 sm:space-x-2 bg-sky-500 text-white px-2 py-0.5 sm:px-3 sm:py-1 rounded-lg sm:rounded-xl border-2 border-slate-900 shadow-xs transition-colors';
       }
 
       // 4. Update Tournament Knockout Bracket UI
       const bracketWrap = document.getElementById('tournamentBracketWrap');
       const hudTourneyBadge = document.getElementById('hudTourneyBadge');
       if (currentGameMode === 'TOURNAMENT') {
-        if (bracketWrap) bracketWrap.classList.remove('hidden');
+        if (bracketWrap) {
+          bracketWrap.classList.remove('hidden');
+          bracketWrap.className = 'mt-3 grid grid-cols-3 gap-2';
+        }
         if (hudTourneyBadge) {
           hudTourneyBadge.classList.remove('hidden');
           hudTourneyBadge.innerText = `CUP ${tournamentRound + 1}/${TOTAL_TOURNAMENT_GAMES} · ${TOURNAMENT_ROUNDS[tournamentRound].toUpperCase()}`;
@@ -697,11 +806,11 @@ export default function App() {
           const stepEl = document.getElementById(`tourneyStep${r}`);
           if (!stepEl) continue;
           if (r < tournamentRound) {
-            stepEl.className = 'flex-1 py-1.5 px-2 rounded-xl bg-emerald-400 border-2 border-slate-900 text-slate-900 font-black text-[11px] flex items-center justify-center space-x-1';
+            stepEl.className = 'min-w-0 py-2 px-2 rounded-xl bg-emerald-400 border-2 border-slate-900 text-slate-900 font-black text-[10px] sm:text-xs flex items-center justify-center text-center truncate';
           } else if (r === tournamentRound) {
-            stepEl.className = 'flex-1 py-1.5 px-2 rounded-xl bg-amber-300 border-2 border-slate-900 text-slate-900 font-black text-[11px] shadow-[0_2px_0_#0f172a] flex items-center justify-center space-x-1';
+            stepEl.className = 'min-w-0 py-2 px-2 rounded-xl bg-amber-300 border-2 border-slate-900 text-slate-900 font-black text-[10px] sm:text-xs shadow-[0_2px_0_#0f172a] flex items-center justify-center text-center truncate';
           } else {
-            stepEl.className = 'flex-1 py-1.5 px-2 rounded-xl bg-slate-100 border border-slate-300 text-slate-500 font-bold text-[11px] flex items-center justify-center space-x-1';
+            stepEl.className = 'min-w-0 py-2 px-2 rounded-xl bg-white border border-slate-300 text-slate-500 font-bold text-[10px] sm:text-xs flex items-center justify-center text-center truncate';
           }
         }
       } else {
@@ -733,7 +842,7 @@ export default function App() {
       const vsOverlay = document.getElementById('preMatchVsOverlay');
       if (vsOverlay) vsOverlay.classList.add('hidden');
 
-      if (card) card.className = 'lg:col-span-5 p-4 sm:p-5 rounded-3xl bg-white border-3 border-slate-900 shadow-[0_6px_0_#0f172a] text-left transition-all duration-300 relative overflow-hidden flex flex-col justify-between';
+      if (card) card.className = 'lg:col-span-5 w-full p-4 sm:p-5 rounded-3xl bg-white border-3 border-slate-900 shadow-[0_6px_0_#0f172a] text-left transition-all duration-300 relative overflow-hidden flex flex-col justify-between';
       if (statusLabel) statusLabel.className = 'flex items-center space-x-2 text-slate-800 transition-colors';
       if (statusIcon) statusIcon.className = 'fa-solid fa-trophy text-amber-500 text-xs';
       if (statusText) {
@@ -747,33 +856,33 @@ export default function App() {
       if (searchTimer) searchTimer.classList.add('hidden');
       if (oppCard) {
         oppCard.className = cpuWearsAway
-          ? 'bg-gradient-to-b from-rose-50 to-white rounded-2xl p-4 border-2 border-dashed border-rose-300 flex flex-col items-center justify-center text-center transition-all duration-300'
-          : 'bg-gradient-to-b from-sky-50 to-white rounded-2xl p-4 border-2 border-dashed border-sky-300 flex flex-col items-center justify-center text-center transition-all duration-300';
+          ? 'bg-gradient-to-b from-rose-50 to-white rounded-2xl p-3.5 sm:p-4 border-2 border-dashed border-rose-300 flex flex-col items-center justify-center text-center transition-all duration-300 min-w-0'
+          : 'bg-gradient-to-b from-sky-50 to-white rounded-2xl p-3.5 sm:p-4 border-2 border-dashed border-sky-300 flex flex-col items-center justify-center text-center transition-all duration-300 min-w-0';
       }
       if (mmName) {
         mmName.innerText = 'Searching Slot';
         mmName.className = cpuWearsAway
-          ? 'text-sm font-black text-rose-500 truncate max-w-[140px]'
-          : 'text-sm font-black text-sky-600 truncate max-w-[140px]';
+          ? 'text-xs sm:text-sm font-black text-rose-500 truncate max-w-full px-1'
+          : 'text-xs sm:text-sm font-black text-sky-600 truncate max-w-full px-1';
       }
       if (mmAvatar) {
         mmAvatar.innerHTML = '<i class="fa-solid fa-user-astronaut text-base"></i>';
         mmAvatar.className = cpuWearsAway
-          ? 'w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-rose-100/80 border-2 border-dashed border-rose-300 text-rose-500 font-black text-base flex items-center justify-center mb-2 relative transition-all duration-300'
-          : 'w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-sky-100/80 border-2 border-dashed border-sky-300 text-sky-600 font-black text-base flex items-center justify-center mb-2 relative transition-all duration-300';
+          ? 'w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-rose-100/80 border-2 border-dashed border-rose-300 text-rose-500 font-black text-base flex items-center justify-center mb-2 relative transition-all duration-300 shrink-0'
+          : 'w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-sky-100/80 border-2 border-dashed border-sky-300 text-sky-600 font-black text-base flex items-center justify-center mb-2 relative transition-all duration-300 shrink-0';
       }
       if (mmPingPill) {
-        mmPingPill.innerHTML = `<span>${cpuWearsAway ? 'Away Kit (Coral)' : 'Home Kit (Sky)'}</span>`;
+        mmPingPill.innerHTML = `<span class="truncate">${cpuWearsAway ? 'Away Kit (Coral)' : 'Home Kit (Sky)'}</span>`;
         mmPingPill.className = cpuWearsAway
-          ? 'inline-flex items-center space-x-1 mt-1 px-2.5 py-0.5 rounded-full bg-rose-100 text-[11px] font-extrabold text-rose-800'
-          : 'inline-flex items-center space-x-1 mt-1 px-2.5 py-0.5 rounded-full bg-sky-100 text-[11px] font-extrabold text-sky-800';
+          ? 'inline-flex items-center space-x-1 mt-1 px-2.5 py-0.5 rounded-full bg-rose-100 text-[10px] sm:text-[11px] font-extrabold text-rose-800 max-w-full'
+          : 'inline-flex items-center space-x-1 mt-1 px-2.5 py-0.5 rounded-full bg-sky-100 text-[10px] sm:text-[11px] font-extrabold text-sky-800 max-w-full';
       }
-      if (vsBadge) vsBadge.className = 'w-10 h-10 rounded-2xl bg-amber-300 text-slate-900 text-xs font-black flex items-center justify-center shadow-[0_3px_0_#0f172a] border-2 border-slate-900 absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-10 transition-all duration-300';
+      if (vsBadge) vsBadge.className = 'w-9 h-9 sm:w-10 sm:h-10 rounded-2xl bg-amber-300 text-slate-900 text-xs font-black flex items-center justify-center shadow-[0_3px_0_#0f172a] border-2 border-slate-900 absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-10 transition-all duration-300';
       if (progressWrap) progressWrap.classList.add('hidden');
       if (startBtnEl) {
         startBtnEl.classList.remove('hidden');
         startBtnEl.removeAttribute('disabled');
-        startBtnEl.className = 'indie-cta-btn w-full py-4 px-6 rounded-2xl bg-sky-500 hover:bg-sky-400 text-white font-black text-base sm:text-lg tracking-wide cursor-pointer flex items-center justify-center space-x-3 whitespace-nowrap';
+        startBtnEl.className = 'indie-cta-btn w-full min-h-[52px] py-3.5 sm:py-4 px-6 rounded-2xl bg-sky-500 hover:bg-sky-400 text-white font-black text-sm sm:text-lg tracking-wide cursor-pointer flex items-center justify-center space-x-3';
       }
       if (startBtnTextEl) {
         startBtnTextEl.innerText =
@@ -831,6 +940,22 @@ export default function App() {
     }
 
     function pickRandomOpponent(excludeCurrent = true) {
+      if (currentGameMode === 'TOURNAMENT') {
+        if (tournamentRound === 0 || !tournamentBracket.initialized) {
+          initTournamentBracket();
+        }
+        currentOpponent =
+          tournamentRound === 0
+            ? tournamentBracket.qfOpponent
+            : tournamentRound === 1
+              ? tournamentBracket.sfOpponent
+              : tournamentBracket.gfOpponent;
+        liveOppPing = currentOpponent.basePing + Math.floor(Math.random() * 5) - 2;
+        hasMatchedOpponent = true;
+        syncOpponentUi();
+        return;
+      }
+
       const preset = getActiveDifficultyPreset();
       const rankFiltered = OCEANIA_PLAYERS.filter(
         (p) => (!excludeCurrent || p.tag !== currentOpponent.tag) && p.rank === preset.rankLabel
@@ -1023,6 +1148,7 @@ export default function App() {
     type ControlScheme = 'MOUSE' | 'KEYBOARD' | 'JOYSTICK' | 'GAMEPAD';
     let activeControlScheme: ControlScheme = 'MOUSE';
     let activeControlGuideTab: ControlGuideTab = 'COMPUTER';
+    let hasUsedKeyboardMove = false;
 
     const mouseState = {
       screenX: window.innerWidth * 0.5,
@@ -1030,6 +1156,8 @@ export default function App() {
       worldX: PITCH.width * 0.5,
       worldY: PITCH.height * 0.5,
       active: false,
+      isDown: false,
+      moveTimer: 0,
     };
 
     const joyVec = { x: 0, y: 0, active: false, pointerId: -1 };
@@ -1095,8 +1223,8 @@ export default function App() {
         hairColor: hairColors[(index + (isYou ? 0 : 3)) % hairColors.length],
         homeX: x, homeY: y, x, y, vx: 0, vy: 0,
         radius: 16.5, angle: isYou ? 0 : Math.PI,
-        baseSpeed: isYou ? 5.05 : preset.cpuSpeed,
-        dribbleSpeed: isYou ? 4.48 : preset.cpuDribble,
+        baseSpeed: isYou ? 5.12 : preset.cpuSpeed,
+        dribbleSpeed: isYou ? 4.98 : preset.cpuDribble,
         speedBoostTimer: 0, actionCooldown: 0, lungeTimer: 0,
         lungeDirX: 0, lungeDirY: 0, stunTimer: 0, giveAndGoTimer: 0,
         commandedRunTimer: 0, commandedTargetX: x, commandedTargetY: y,
@@ -1165,16 +1293,25 @@ export default function App() {
       const isMobileOrTablet = isMobileOrTabletViewport();
 
       if (isPortrait) {
-        // Portrait mobile/tablet: close-up action zoom above virtual controls
-        canvasOffsetY = -Math.round(Math.min(44, h * 0.055));
-        const availH = h - 175;
-        viewScale = Math.max(0.32, Math.min(w / (PITCH.width * 0.58), availH / (PITCH.height * 0.86)));
+        // Portrait phone & tablet: shift pitch slightly above the bottom thumb controls & zoom for crisp readability
+        const isTabletPortrait = w >= 600;
+        canvasOffsetY = -Math.round(Math.min(68, h * (isTabletPortrait ? 0.055 : 0.075)));
+        const availH = h - (isTabletPortrait ? 200 : 190);
+        const pitchFractionX = isTabletPortrait ? 0.58 : 0.44;
+        const pitchFractionY = isTabletPortrait ? 0.76 : 0.72;
+        viewScale = Math.max(
+          isTabletPortrait ? 0.46 : 0.39,
+          Math.min(w / (PITCH.width * pitchFractionX), availH / (PITCH.height * pitchFractionY))
+        );
       } else if (isMobileOrTablet) {
-        // Landscape mobile/tablet: generous pitch zoom so the pitch & players look large and crisp
-        canvasOffsetY = 6;
-        const scaleX = w / (PITCH.width * 0.76);
-        const scaleY = (h - 28) / (PITCH.height * 0.80);
-        viewScale = Math.max(0.28, Math.min(scaleX, scaleY));
+        // Landscape phone & tablet: generous stadium framing with clearance for top HUD & corner thumb controls
+        const isCompactPhoneLandscape = h <= 540;
+        canvasOffsetY = isCompactPhoneLandscape ? 6 : 12;
+        const pitchFractionX = isCompactPhoneLandscape ? 0.68 : 0.82;
+        const pitchFractionY = isCompactPhoneLandscape ? 0.72 : 0.82;
+        const scaleX = (w - (isCompactPhoneLandscape ? 12 : 36)) / (PITCH.width * pitchFractionX);
+        const scaleY = (h - (isCompactPhoneLandscape ? 16 : 64)) / (PITCH.height * pitchFractionY);
+        viewScale = Math.max(isCompactPhoneLandscape ? 0.34 : 0.44, Math.min(scaleX, scaleY));
       } else {
         // Desktop widescreen
         canvasOffsetY = 20;
@@ -1395,6 +1532,7 @@ export default function App() {
       wallGlows.push({ x1, y1, x2, y2, alpha: 0.95 });
       spawnRipple(bx, by, '#38bdf8', 38);
       spawnBurst(bx, by, '#bae6fd', 8, 3.2);
+      ball.isThroughBall = false;
 
       if (!ball.owner && !ball.isShot && ball.lastTouchTeam) {
         ball.wasWallBounce = true;
@@ -1712,7 +1850,7 @@ export default function App() {
         ball.passTargetY = targetY;
         ball.isThroughBall = Boolean(decision.isThroughBall);
 
-        // Seamless receiver selection: lock onto bestMate or nearest teammate who can run onto the through-ball
+        // Seamless receiver selection: lock onto bestMate or nearest teammate who can run onto the pass/through-ball
         let receiver = decision.bestMate || null;
         if (!receiver && isYou) {
           receiver = findBestReceiverForLooseBall(
@@ -1726,18 +1864,11 @@ export default function App() {
 
         if (receiver && isYou) {
           controlledPlayer = receiver;
-          receiver.speedBoostTimer = Math.max(receiver.speedBoostTimer, 65);
+          receiver.speedBoostTimer = Math.max(receiver.speedBoostTimer, 72);
           receiver.commandedTargetX = targetX;
           receiver.commandedTargetY = targetY;
-          if (decision.isThroughBall) {
-            receiver.commandedRunTimer = Math.max(receiver.commandedRunTimer, 55);
-            const rdx = targetX - receiver.x;
-            const rdy = targetY - receiver.y;
-            const rlen = Math.hypot(rdx, rdy) || 1;
-            receiver.vx = receiver.vx * 0.4 + (rdx / rlen) * receiver.baseSpeed * 0.72;
-            receiver.vy = receiver.vy * 0.4 + (rdy / rlen) * receiver.baseSpeed * 0.72;
-          }
-          spawnRipple(receiver.x, receiver.y, '#38bdf8', 38);
+          // Do not overwrite receiver velocity or lock manual steering; let other non-controlled teammates make support runs
+          spawnRipple(receiver.x, receiver.y, '#38bdf8', 42);
         }
 
         if (isYou) {
@@ -1773,9 +1904,15 @@ export default function App() {
 
       if (ball.owner && ball.owner !== actor) {
         if (ball.owner.team === actor.team) return false;
-        ball.owner.stunTimer = actor.team === 'YOU' ? 40 : 32;
-        ball.owner.vx = actor.lungeDirX * 3.8;
-        ball.owner.vy = actor.lungeDirY * 3.8;
+        if (actor.team === 'YOU') {
+          // Human tackling AI stuns the AI carrier
+          ball.owner.stunTimer = 38;
+          ball.owner.vx = actor.lungeDirX * 3.2;
+          ball.owner.vy = actor.lungeDirY * 3.2;
+        } else {
+          // AI tackling human NEVER stuns, freezes, or pulls the human player's movement!
+          ball.pickupCooldown = 15;
+        }
       }
       if (inOwnBox && ball.isShot) {
         ball.owner = null;
@@ -1795,7 +1932,7 @@ export default function App() {
         if (actor.team === 'YOU') {
           cpuPassCombo = 0;
           controlledPlayer = actor;
-          actor.speedBoostTimer = Math.max(actor.speedBoostTimer, 42);
+          actor.speedBoostTimer = Math.max(actor.speedBoostTimer, 48);
           triggerControllerRumble(55, 0.4, 0.28);
           spawnFloatingText(actor.x, actor.y - 26, 'WON BALL!', '#38bdf8');
         } else {
@@ -1819,12 +1956,12 @@ export default function App() {
         return;
       }
 
-      if (actor.actionCooldown > 0) return;
-
       if (ball.owner === actor) {
         executePassOrShot(actor, aimVec, false, chargePower);
         return;
       }
+
+      if (actor.actionCooldown > 0) return;
 
       const inOwnBox =
         actor.team === 'YOU'
@@ -1834,14 +1971,14 @@ export default function App() {
       const dxToBall = ball.x + ball.vx * 3 - actor.x;
       const dyToBall = ball.y + ball.vy * 3 - actor.y;
       const distToBall = Math.hypot(dxToBall, dyToBall) || 1;
-      const lockSnapDist = actor.team === 'YOU' ? 340 : 250;
+      const lockSnapDist = actor.team === 'YOU' ? 190 : 250;
       const lungeDirX = distToBall < lockSnapDist ? dxToBall / distToBall : aimVec.x;
       const lungeDirY = distToBall < lockSnapDist ? dyToBall / distToBall : aimVec.y;
 
       actor.lungeDirX = lungeDirX;
       actor.lungeDirY = lungeDirY;
-      actor.lungeTimer = inOwnBox ? 20 : 16;
-      actor.actionCooldown = actor.team === 'YOU' ? 22 : 30;
+      actor.lungeTimer = inOwnBox ? 16 : 12;
+      actor.actionCooldown = actor.team === 'YOU' ? 16 : 30;
       actor.angle = Math.atan2(lungeDirY, lungeDirX);
       actor.scaleX = 1.38;
       actor.scaleY = 0.72;
@@ -2167,7 +2304,7 @@ export default function App() {
 
     function dismissSplashScreen() {
       if (gameState !== 'SPLASH') return;
-      sound.init();
+      sound.unlock();
       sound.setMenuMode(true);
       sound.startMusic(() => ({
         isPlaying: gameState === 'PLAYING' || gameState === 'GOAL_CELEBRATION',
@@ -2175,14 +2312,16 @@ export default function App() {
         flowCombo,
       }));
       sound.playMatchFound();
-      const splashEl = document.getElementById('splashScreen');
-      const menuOverlayEl = document.getElementById('menuOverlay');
-      if (splashEl) splashEl.classList.add('hidden');
-      if (menuOverlayEl) menuOverlayEl.classList.remove('hidden');
-      gameState = 'MENU';
-      syncBodyStateAttr('MENU');
-      syncMenuLayoutForState('MENU');
-      syncMenuFocusVisual(true);
+      triggerScreenTransition(() => {
+        const splashEl = document.getElementById('splashScreen');
+        const menuOverlayEl = document.getElementById('menuOverlay');
+        if (splashEl) splashEl.classList.add('hidden');
+        if (menuOverlayEl) menuOverlayEl.classList.remove('hidden');
+        gameState = 'MENU';
+        syncBodyStateAttr('MENU');
+        syncMenuLayoutForState('MENU');
+        syncMenuFocusVisual(true);
+      });
     }
 
     function syncMenuLayoutForState(state: InternalGameState) {
@@ -2202,23 +2341,24 @@ export default function App() {
         if (overlay) {
           overlay.classList.add('hidden');
         }
+        syncMobileControlsVisibility();
         return;
       }
 
       if (state === 'PAUSED' || state === 'MATCH_OVER') {
         if (overlay) {
           overlay.className =
-            'absolute inset-0 bg-slate-900/55 flex items-center justify-center z-30 p-4 sm:p-6 transition-opacity duration-150 overflow-y-auto';
+            'absolute inset-0 bg-slate-900/55 flex items-center justify-center z-30 p-3 sm:p-6 transition-opacity duration-150 overflow-y-auto';
         }
         modalCard.className =
-          'glass-modal rounded-[28px] max-w-md w-full max-h-[92vh] overflow-y-auto p-5 sm:p-7 text-center relative transition-all duration-200 my-auto';
+          'glass-modal rounded-[28px] max-w-lg w-full max-h-[92dvh] overflow-y-auto p-5 sm:p-7 text-center relative transition-all duration-200 my-auto';
         if (topBar) {
           topBar.className =
             'flex flex-col sm:flex-row items-center justify-center gap-3 pb-4 mb-4 border-b-2 border-slate-200';
         }
-        if (mainGrid) mainGrid.className = 'flex flex-col gap-4 text-left mb-5';
+        if (mainGrid) mainGrid.className = 'flex flex-col gap-4 text-left mb-4';
         if (leftCol) leftCol.classList.add('hidden');
-        if (bottomBar) bottomBar.className = 'flex flex-col space-y-3';
+        if (bottomBar) bottomBar.className = 'flex flex-col space-y-2.5 sm:space-y-3';
         if (profileBar) profileBar.classList.add('hidden');
         if (editProfileBtn) editProfileBtn.classList.add('hidden');
         if (mainMenuBtn) {
@@ -2228,38 +2368,55 @@ export default function App() {
           startBtnEl.classList.remove('hidden');
         }
       } else {
-        // Unconstrained full-screen Home Menu layout over the live stadium pitch
+        // Polished, responsive Home Menu layout over the live stadium pitch (zero squishing across screen sizes)
         if (overlay) {
           overlay.className =
-            'absolute inset-0 bg-slate-950/25 flex items-center justify-center z-30 p-3 sm:p-6 lg:p-10 transition-opacity duration-150 overflow-y-auto';
+            'absolute inset-0 bg-slate-950/25 flex items-center justify-center z-30 p-3 sm:p-5 lg:p-8 transition-opacity duration-150 overflow-y-auto';
         }
         modalCard.className =
-          'w-full max-w-6xl min-h-[82vh] flex flex-col justify-between gap-4 sm:gap-6 text-center relative transition-all duration-200 my-auto';
+          'w-full max-w-2xl lg:max-w-5xl flex flex-col gap-3 sm:gap-4 text-center relative transition-all duration-200 my-auto';
         if (topBar) {
           topBar.className =
-            'glass-modal rounded-3xl px-5 py-3.5 sm:px-7 sm:py-4 flex flex-col sm:flex-row items-center justify-between gap-3.5';
+            'glass-modal rounded-3xl px-4 py-3 sm:px-6 sm:py-4 flex flex-wrap sm:flex-nowrap items-center justify-between gap-3';
         }
         if (mainGrid) {
-          mainGrid.className = 'grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-6 items-stretch text-left my-auto';
+          mainGrid.className = 'grid grid-cols-1 lg:grid-cols-12 gap-3.5 sm:gap-4 items-stretch text-left';
         }
         if (leftCol) {
           leftCol.className =
-            'lg:col-span-7 glass-modal rounded-3xl p-5 sm:p-6 flex flex-col justify-between space-y-4';
+            'lg:col-span-7 glass-modal rounded-3xl p-4 sm:p-6 flex flex-col justify-between gap-4';
         }
         if (bottomBar) {
-          bottomBar.className = 'glass-modal rounded-3xl p-4 sm:p-5 flex flex-col space-y-3';
+          bottomBar.className = 'glass-modal rounded-3xl p-4 sm:p-5 flex flex-col space-y-2.5 sm:space-y-3';
         }
         if (profileBar) profileBar.classList.remove('hidden');
         if (editProfileBtn) editProfileBtn.classList.remove('hidden');
         if (mainMenuBtn) mainMenuBtn.classList.add('hidden');
         if (startBtnEl) startBtnEl.classList.remove('hidden');
       }
+      syncMobileControlsVisibility();
     }
 
     // Returns currently visible & focusable UI buttons in the active screen/modal for DualShock 5 / Keyboard navigation
     function getFocusableMenuButtons(): HTMLElement[] {
       if (gameState === 'SPLASH') {
         return [];
+      }
+
+      const vsOverlay = document.getElementById('preMatchVsOverlay');
+      if (vsOverlay && !vsOverlay.classList.contains('hidden')) {
+        const vsBtns = Array.from(
+          vsOverlay.querySelectorAll<HTMLElement>('#vsKickoffNowBtn, #vsBackToMenuBtn')
+        );
+        return vsBtns.filter((el) => !el.classList.contains('hidden') && !el.closest('.hidden'));
+      }
+
+      const winOverlay = document.getElementById('tournamentWinOverlay');
+      if (winOverlay && !winOverlay.classList.contains('hidden')) {
+        const winBtns = Array.from(
+          winOverlay.querySelectorAll<HTMLElement>('#tourneyCelebrateNewBtn, #tourneyCelebrateHomeBtn')
+        );
+        return winBtns.filter((el) => !el.classList.contains('hidden') && !el.closest('.hidden'));
       }
 
       const editModal = document.getElementById('editProfileModal');
@@ -2414,10 +2571,12 @@ export default function App() {
         triangleDown ||
         optionsDown
       ) {
+        hasDetectedTouchInput = false;
         if (activeControlScheme !== 'GAMEPAD') {
           activeControlScheme = 'GAMEPAD';
           setControlGuideTab('REMOTE');
           syncMenuFocusVisual(gameState !== 'PLAYING');
+          syncMobileControlsVisibility();
           updateHudState();
         }
       }
@@ -2577,28 +2736,46 @@ export default function App() {
       if (queuedOneTouchTimer > 0) {
         queuedOneTouchTimer = Math.max(0, queuedOneTouchTimer - dtScale);
       }
+      if (mouseState.moveTimer > 0) {
+        mouseState.moveTimer = Math.max(0, mouseState.moveTimer - dtScale);
+      }
+      updateMouseWorldCoords();
 
-      // Stable Single-Player Control Selection (fixes 2-player oscillation & keeps teammates moving in space)
+      // Seamless Auto Player Selection:
+      // Automatically selects the carrier or dynamically tracks the best receiver along a pass / through-ball trajectory
       if (ball.owner && ball.owner.team === 'YOU') {
         controlledPlayer = ball.owner;
       } else if (!ball.owner && ball.lastTouchTeam === 'YOU' && !ball.isShot) {
-        if (ball.passTarget && ball.passTarget.team === 'YOU' && ball.passTarget.stunTimer <= 0) {
-          controlledPlayer = ball.passTarget;
-        } else {
-          const excludePasser = ball.pickupCooldown > 0 ? ball.lastTouchPlayer : null;
-          const bestReceiver = findBestReceiverForLooseBall(
-            ball,
-            players,
-            excludePasser,
-            controlledPlayer
-          );
-          if (bestReceiver) {
-            ball.passTarget = bestReceiver;
-            controlledPlayer = bestReceiver;
-          }
+        const ballSpd = Math.hypot(ball.vx, ball.vy);
+        if (ballSpd < 2.5) {
+          ball.passTarget = null;
+          ball.isThroughBall = false;
         }
-      } else if (!controlledPlayer || controlledPlayer.team !== 'YOU') {
-        controlledPlayer = players.find((p) => p.team === 'YOU') || null;
+        const excludePasser = ball.pickupCooldown > 0 ? ball.lastTouchPlayer : null;
+        const bestReceiver = findBestReceiverForLooseBall(
+          ball,
+          players,
+          excludePasser,
+          ball.passTarget || controlledPlayer
+        );
+        if (bestReceiver) {
+          if (ballSpd >= 2.5) {
+            ball.passTarget = bestReceiver;
+          }
+          controlledPlayer = bestReceiver;
+        } else if (ball.passTarget && ball.passTarget.team === 'YOU') {
+          controlledPlayer = ball.passTarget;
+        }
+      } else if (!controlledPlayer || controlledPlayer.team !== 'YOU' || controlledPlayer.stunTimer > 0) {
+        const unstunnedMates = players.filter((p) => p.team === 'YOU' && p.stunTimer <= 0);
+        if (unstunnedMates.length > 0) {
+          unstunnedMates.sort(
+            (a, b) => Math.hypot(a.x - ball.x, a.y - ball.y) - Math.hypot(b.x - ball.x, b.y - ball.y)
+          );
+          controlledPlayer = unstunnedMates[0];
+        } else {
+          controlledPlayer = players.find((p) => p.team === 'YOU') || null;
+        }
       }
 
       if (kickChargeState.active && controlledPlayer && ball.owner === controlledPlayer) {
@@ -2620,9 +2797,93 @@ export default function App() {
         p.scaleX += (1 - p.scaleX) * 0.22 * dtScale;
         p.scaleY += (1 - p.scaleY) * 0.22 * dtScale;
 
-        if (p.stunTimer > 0) {
-          p.vx *= 0.85;
-          p.vy *= 0.85;
+        // 1. Human-Controlled Player: 100% Free, Unconstrained Movement (never locked out by stunTimer, lungeTimer, or idle mouse)
+        if (p === controlledPlayer && p.team === 'YOU') {
+          p.stunTimer = 0;
+          const hasBall = ball.owner === p;
+          const isLunging = p.lungeTimer > 0;
+          if (isLunging) {
+            p.lungeTimer = Math.max(0, p.lungeTimer - dtScale);
+            const inOwnBox =
+              p.x < PITCH.boxWidth && Math.abs(p.y - PITCH.height / 2) < PITCH.boxHeight / 2;
+            attemptTackleCapture(p, inOwnBox);
+          }
+
+          const boostMult =
+            (p.speedBoostTimer > 0 || flowCombo >= PASSES_FOR_FLOW_BOOST ? 1.18 : 1.0) *
+            (isLunging ? 1.38 : 1.0);
+          const topSpeed = (hasBall ? p.dribbleSpeed : p.baseSpeed) * boostMult;
+
+          let mx = 0;
+          let my = 0;
+          if (keys['KeyW'] || keys['ArrowUp']) my -= 1;
+          if (keys['KeyS'] || keys['ArrowDown']) my += 1;
+          if (keys['KeyA'] || keys['ArrowLeft']) mx -= 1;
+          if (keys['KeyD'] || keys['ArrowRight']) mx += 1;
+
+          const isReceivingPass =
+            !hasBall &&
+            !ball.owner &&
+            ball.passTarget === p &&
+            Math.hypot(ball.vx, ball.vy) > 3.5 &&
+            Math.hypot(ball.x - p.x, ball.y - p.y) < 320;
+
+          if (mx !== 0 || my !== 0) {
+            const len = Math.hypot(mx, my);
+            p.vx = (mx / len) * topSpeed;
+            p.vy = (my / len) * topSpeed;
+            p.angle = Math.atan2(my, mx);
+          } else if (joyVec.active && Math.hypot(joyVec.x, joyVec.y) > 0.06) {
+            const jLen = Math.hypot(joyVec.x, joyVec.y) || 1;
+            const mag = Math.min(1, Math.max(0.45, jLen));
+            p.vx = (joyVec.x / jLen) * topSpeed * mag;
+            p.vy = (joyVec.y / jLen) * topSpeed * mag;
+            p.angle = Math.atan2(joyVec.y, joyVec.x);
+          } else if (activeControlScheme === 'GAMEPAD' && gamepadState.moveActive) {
+            const gLen = Math.hypot(gamepadState.moveX, gamepadState.moveY) || 1;
+            const mag = Math.min(1, gLen);
+            p.vx = (gamepadState.moveX / gLen) * topSpeed * mag;
+            p.vy = (gamepadState.moveY / gLen) * topSpeed * mag;
+            p.angle = Math.atan2(gamepadState.moveY, gamepadState.moveX);
+          } else if (
+            activeControlScheme === 'MOUSE' &&
+            !hasUsedKeyboardMove &&
+            mouseState.active &&
+            (mouseState.moveTimer > 0 || mouseState.isDown) &&
+            !isMobileOrTabletViewport()
+          ) {
+            const dx = mouseState.worldX - p.x;
+            const dy = mouseState.worldY - p.y;
+            const dist = Math.hypot(dx, dy);
+            if (dist > 22) {
+              const arrivalScale = Math.min(1, (dist - 12) / 55);
+              p.vx = (dx / dist) * topSpeed * arrivalScale;
+              p.vy = (dy / dist) * topSpeed * arrivalScale;
+            } else {
+              p.vx *= 0.65;
+              p.vy *= 0.65;
+            }
+          } else if (isLunging) {
+            p.vx = p.lungeDirX * topSpeed;
+            p.vy = p.lungeDirY * topSpeed;
+          } else if (isReceivingPass) {
+            const bSpd = Math.hypot(ball.vx, ball.vy);
+            const toPlayerX = p.x - ball.x;
+            const toPlayerY = p.y - ball.y;
+            const proj = Math.max(3, Math.min(18, (toPlayerX * ball.vx + toPlayerY * ball.vy) / (bSpd * bSpd)));
+            const lineX = Math.max(65, Math.min(PITCH.width - 65, ball.x + ball.vx * proj));
+            const lineY = Math.max(65, Math.min(PITCH.height - 65, ball.y + ball.vy * proj));
+            movePlayerToward(p, lineX, lineY, topSpeed * 1.05);
+          } else {
+            p.vx *= 0.74;
+            p.vy *= 0.74;
+          }
+
+          const aim = getActivePlayerAimVector(p);
+          p.angle = Math.atan2(aim.y, aim.x);
+        } else if (p.stunTimer > 0) {
+          p.vx *= 0.82;
+          p.vy *= 0.82;
         } else if (p.lungeTimer > 0) {
           p.lungeTimer = Math.max(0, p.lungeTimer - dtScale);
           const lungeSpeed = p.baseSpeed * (p.team === 'YOU' ? 2.12 : 1.92);
@@ -2633,112 +2894,6 @@ export default function App() {
               ? p.x < PITCH.boxWidth && Math.abs(p.y - PITCH.height / 2) < PITCH.boxHeight / 2
               : p.x > PITCH.width - PITCH.boxWidth && Math.abs(p.y - PITCH.height / 2) < PITCH.boxHeight / 2;
           attemptTackleCapture(p, inOwnBox);
-        } else if (p === controlledPlayer && p.team === 'YOU') {
-          const hasBall = ball.owner === p;
-          const boostMult = p.speedBoostTimer > 0 || flowCombo >= PASSES_FOR_FLOW_BOOST ? 1.18 : 1.0;
-          const topSpeed = (hasBall ? p.dribbleSpeed : p.baseSpeed) * boostMult;
-
-          let mx = 0;
-          let my = 0;
-          if (keys['KeyW'] || keys['ArrowUp']) my -= 1;
-          if (keys['KeyS'] || keys['ArrowDown']) my += 1;
-          if (keys['KeyA'] || keys['ArrowLeft']) mx -= 1;
-          if (keys['KeyD'] || keys['ArrowRight']) mx += 1;
-
-          // Magnetic Pass / Through-Ball Run Assist when ball is travelling toward this receiver
-          const isReceivingPass =
-            !hasBall && !ball.owner && ball.passTarget === p && Math.hypot(ball.vx, ball.vy) > 1.8;
-          let interceptAssistX = p.x;
-          let interceptAssistY = p.y;
-          if (isReceivingPass) {
-            const bSpd = Math.hypot(ball.vx, ball.vy);
-            const toPlayerX = p.x - ball.x;
-            const toPlayerY = p.y - ball.y;
-            const proj = Math.max(4, Math.min(28, (toPlayerX * ball.vx + toPlayerY * ball.vy) / (bSpd * bSpd)));
-            const lineX = ball.x + ball.vx * proj;
-            const lineY = ball.y + ball.vy * proj;
-            interceptAssistX = Math.max(
-              65,
-              Math.min(PITCH.width - 65, ball.isThroughBall ? lineX * 0.55 + ball.passTargetX * 0.45 : lineX)
-            );
-            interceptAssistY = Math.max(
-              65,
-              Math.min(PITCH.height - 65, ball.isThroughBall ? lineY * 0.55 + ball.passTargetY * 0.45 : lineY)
-            );
-          }
-
-          if (mx !== 0 || my !== 0) {
-            const len = Math.hypot(mx, my);
-            const rawVx = (mx / len) * topSpeed;
-            const rawVy = (my / len) * topSpeed;
-            if (isReceivingPass) {
-              const idx = interceptAssistX - p.x;
-              const idy = interceptAssistY - p.y;
-              const idist = Math.hypot(idx, idy) || 1;
-              p.vx = rawVx * 0.62 + (idx / idist) * topSpeed * 0.48;
-              p.vy = rawVy * 0.62 + (idy / idist) * topSpeed * 0.48;
-            } else {
-              p.vx = rawVx;
-              p.vy = rawVy;
-            }
-            p.angle = Math.atan2(my, mx);
-          } else if (activeControlScheme === 'GAMEPAD' && gamepadState.moveActive) {
-            const rawVx = gamepadState.moveX * topSpeed;
-            const rawVy = gamepadState.moveY * topSpeed;
-            if (isReceivingPass) {
-              const idx = interceptAssistX - p.x;
-              const idy = interceptAssistY - p.y;
-              const idist = Math.hypot(idx, idy) || 1;
-              p.vx = rawVx * 0.62 + (idx / idist) * topSpeed * 0.48;
-              p.vy = rawVy * 0.62 + (idy / idist) * topSpeed * 0.48;
-            } else {
-              p.vx = rawVx;
-              p.vy = rawVy;
-            }
-            p.angle = Math.atan2(gamepadState.moveY, gamepadState.moveX);
-          } else if (joyVec.active && Math.hypot(joyVec.x, joyVec.y) > 0.12) {
-            const rawVx = joyVec.x * topSpeed;
-            const rawVy = joyVec.y * topSpeed;
-            if (isReceivingPass) {
-              const idx = interceptAssistX - p.x;
-              const idy = interceptAssistY - p.y;
-              const idist = Math.hypot(idx, idy) || 1;
-              p.vx = rawVx * 0.62 + (idx / idist) * topSpeed * 0.48;
-              p.vy = rawVy * 0.62 + (idy / idist) * topSpeed * 0.48;
-            } else {
-              p.vx = rawVx;
-              p.vy = rawVy;
-            }
-            p.angle = Math.atan2(joyVec.y, joyVec.x);
-          } else if (activeControlScheme === 'MOUSE' && mouseState.active) {
-            const dx = mouseState.worldX - p.x;
-            const dy = mouseState.worldY - p.y;
-            const dist = Math.hypot(dx, dy);
-
-            if (isReceivingPass) {
-              movePlayerToward(
-                p,
-                interceptAssistX * 0.84 + mouseState.worldX * 0.16,
-                interceptAssistY * 0.84 + mouseState.worldY * 0.16,
-                topSpeed * 1.16
-              );
-            } else if (dist > 18) {
-              const arrivalScale = Math.min(1, (dist - 12) / 95);
-              p.vx = (dx / dist) * topSpeed * arrivalScale;
-              p.vy = (dy / dist) * topSpeed * arrivalScale;
-            } else {
-              p.vx *= 0.65;
-              p.vy *= 0.65;
-            }
-          } else if (isReceivingPass) {
-            movePlayerToward(p, interceptAssistX, interceptAssistY, topSpeed * 1.16);
-          } else {
-            p.vx *= 0.75;
-            p.vy *= 0.75;
-          }
-
-          const aim = getActivePlayerAimVector(p);
-          p.angle = Math.atan2(aim.y, aim.x);
         } else if (p.team === 'YOU') {
           if (isTeamInPossession('YOU')) {
             updateOffBallTeammateAI(p, ball.owner || controlledPlayer);
@@ -2763,7 +2918,7 @@ export default function App() {
           p.stridePhase += spd * 0.14 * dtScale;
           if (spd > 3.8 && matchTick % 5 < 1) {
             if (afterimages.length > 35) afterimages.shift();
-            afterimages.push({ x: p.x, y: p.y, radius: p.radius, team: p.team, alpha: 0.28 });
+            afterimages.push({ x: p.x, y: p.y, radius: p.radius, alpha: 0.28, team: p.team });
           }
         }
 
@@ -3145,10 +3300,7 @@ export default function App() {
               if (p.team === 'YOU') {
                 controlledPlayer = p;
                 triggerControllerRumble(28, 0.2, 0.1);
-                const aim = getActivePlayerAimVector(p);
-                p.vx += aim.x * 1.5;
-                p.vy += aim.y * 1.5;
-                p.speedBoostTimer = Math.max(p.speedBoostTimer, 38);
+                p.speedBoostTimer = Math.max(p.speedBoostTimer, 42);
 
                 if (queuedOneTouchTimer > 0) {
                   queuedOneTouchTimer = 0;
@@ -3713,12 +3865,12 @@ export default function App() {
         const focusY = ball.y * 0.65 + (controlledPlayer ? controlledPlayer.y * 0.35 : PITCH.height * 0.175);
         const isPortrait = canvas ? canvas.width < canvas.height : false;
         const isMobOrTab = isMobileOrTabletViewport();
-        const panFactorX = isPortrait ? 0.72 : isMobOrTab ? 0.52 : 0.14;
-        const panFactorY = isPortrait ? 0.36 : isMobOrTab ? 0.38 : 0.12;
+        const panFactorX = isPortrait ? 0.78 : isMobOrTab ? 0.56 : 0.14;
+        const panFactorY = isPortrait ? 0.40 : isMobOrTab ? 0.38 : 0.12;
         const rawCamX = PITCH.width * 0.5 + (focusX - PITCH.width * 0.5) * panFactorX;
         const rawCamY = PITCH.height * 0.5 + (focusY - PITCH.height * 0.5) * panFactorY;
-        const clampMarginX = isPortrait ? 0.18 : isMobOrTab ? 0.20 : 0.22;
-        const clampMarginY = isPortrait ? 0.22 : isMobOrTab ? 0.24 : 0.28;
+        const clampMarginX = isPortrait ? 0.14 : isMobOrTab ? 0.18 : 0.22;
+        const clampMarginY = isPortrait ? 0.20 : isMobOrTab ? 0.22 : 0.28;
         targetCamX = Math.max(PITCH.width * clampMarginX, Math.min(PITCH.width * (1 - clampMarginX), rawCamX));
         targetCamY = Math.max(PITCH.height * clampMarginY, Math.min(PITCH.height * (1 - clampMarginY), rawCamY));
         if (gameState === 'GOAL_CELEBRATION') {
@@ -3825,48 +3977,100 @@ export default function App() {
     }
 
     function returnToHomeMenu() {
-      sound.init();
+      sound.unlock();
       sound.setMenuMode(true);
       clearMatchmakingTimers();
+      const winOverlay = document.getElementById('tournamentWinOverlay');
+      if (winOverlay) winOverlay.classList.add('hidden');
+      const vsOverlay = document.getElementById('preMatchVsOverlay');
+      if (vsOverlay) vsOverlay.classList.add('hidden');
       if (currentGameMode === 'TOURNAMENT') {
         tournamentRound = 0;
+        tournamentBracket.initialized = false;
       }
-      clearOldMatchArtifacts();
-      gameState = 'MENU';
-      syncBodyStateAttr('MENU');
-      syncMenuLayoutForState('MENU');
+      triggerScreenTransition(() => {
+        clearOldMatchArtifacts();
+        gameState = 'MENU';
+        syncBodyStateAttr('MENU');
+        syncMenuLayoutForState('MENU');
 
-      const titleEl = document.getElementById('menuTitleVisible');
-      const srTitleEl = document.getElementById('menuTitle');
-      const subEl = document.getElementById('menuSubtitle');
-      const statsRow = document.getElementById('matchStatsRow');
-      const playlistWrap = document.getElementById('playlistSelectorWrap');
-      const kitWrap = document.getElementById('kitSelectorWrap');
-      const pitchWrap = document.getElementById('pitchSelectorWrap');
+        const titleEl = document.getElementById('menuTitleVisible');
+        const srTitleEl = document.getElementById('menuTitle');
+        const subEl = document.getElementById('menuSubtitle');
+        const statsRow = document.getElementById('matchStatsRow');
+        const playlistWrap = document.getElementById('playlistSelectorWrap');
+        const kitWrap = document.getElementById('kitSelectorWrap');
+        const pitchWrap = document.getElementById('pitchSelectorWrap');
 
-      if (titleEl) {
-        titleEl.innerHTML = `REMATCH <span class="px-2.5 py-0.5 rounded-xl bg-amber-300 border-2 border-slate-900 font-mono-num text-sm md:text-base font-black text-slate-900 shadow-[0_2px_0_#0f172a]">0.2</span>`;
-      }
-      if (srTitleEl) srTitleEl.innerText = 'REMATCH 0.2';
-      if (subEl) {
-        subEl.innerText = '';
-        subEl.classList.add('hidden');
-      }
-      if (statsRow) {
-        statsRow.classList.add('hidden');
-        statsRow.classList.remove('grid');
-      }
-      if (playlistWrap) playlistWrap.classList.remove('hidden');
-      if (kitWrap) kitWrap.classList.remove('hidden');
-      if (pitchWrap) pitchWrap.classList.remove('hidden');
-      if (resumeBtn) resumeBtn.classList.add('hidden');
-      if (forfeitBtn) forfeitBtn.classList.add('hidden');
-      if (rematchSameBtn) rematchSameBtn.classList.add('hidden');
-      if (mainMenuBtn) mainMenuBtn.classList.add('hidden');
+        if (titleEl) {
+          titleEl.innerHTML = `REMATCH <span class="px-2.5 py-0.5 rounded-xl bg-amber-300 border-2 border-slate-900 font-mono-num text-sm md:text-base font-black text-slate-900 shadow-[0_2px_0_#0f172a]">0.2</span>`;
+        }
+        if (srTitleEl) srTitleEl.innerText = 'REMATCH 0.2';
+        if (subEl) {
+          subEl.innerText = '';
+          subEl.classList.add('hidden');
+        }
+        if (statsRow) {
+          statsRow.classList.add('hidden');
+          statsRow.classList.remove('grid');
+        }
+        if (playlistWrap) playlistWrap.classList.remove('hidden');
+        if (kitWrap) kitWrap.classList.remove('hidden');
+        if (pitchWrap) pitchWrap.classList.remove('hidden');
+        if (resumeBtn) resumeBtn.classList.add('hidden');
+        if (forfeitBtn) forfeitBtn.classList.add('hidden');
+        if (rematchSameBtn) rematchSameBtn.classList.add('hidden');
+        if (mainMenuBtn) mainMenuBtn.classList.add('hidden');
 
-      setMatchmakingIdleUI();
-      if (menuOverlay) menuOverlay.classList.remove('hidden');
-      syncMenuFocusVisual(true);
+        setMatchmakingIdleUI();
+        if (menuOverlay) menuOverlay.classList.remove('hidden');
+        syncMenuFocusVisual(true);
+      });
+    }
+
+    function openTournamentWinCelebration(possPct: number) {
+      sound.playTournamentWin();
+      spawnGoalConfetti(0, PITCH.height * 0.5, 'YOU');
+      spawnGoalConfetti(PITCH.width, PITCH.height * 0.5, 'YOU');
+      spawnGoalConfetti(PITCH.width * 0.5, PITCH.height * 0.35, 'YOU');
+
+      const winOverlay = document.getElementById('tournamentWinOverlay');
+      const winAvatar = document.getElementById('tourneyWinAvatar');
+      const winPlayerName = document.getElementById('tourneyWinPlayerName');
+      const winQfRecap = document.getElementById('tourneyWinQfRecap');
+      const winSfRecap = document.getElementById('tourneyWinSfRecap');
+      const winGfRecap = document.getElementById('tourneyWinGfRecap');
+      const winGoalsStat = document.getElementById('tourneyWinGoalsStat');
+      const winComboStat = document.getElementById('tourneyWinComboStat');
+      const winPassesStat = document.getElementById('tourneyWinPassesStat');
+      const winPossStat = document.getElementById('tourneyWinPossStat');
+
+      const youIsHome = userKitChoice === 'HOME';
+      if (winAvatar) {
+        winAvatar.className = youIsHome
+          ? 'w-20 h-20 sm:w-24 sm:h-24 rounded-3xl bg-sky-400 border-[3px] border-slate-900 text-slate-900 font-black text-xl flex flex-col items-center justify-center shadow-[0_5px_0_#0f172a] relative overflow-hidden shrink-0'
+          : 'w-20 h-20 sm:w-24 sm:h-24 rounded-3xl bg-rose-400 border-[3px] border-slate-900 text-white font-black text-xl flex flex-col items-center justify-center shadow-[0_5px_0_#0f172a] relative overflow-hidden shrink-0';
+        winAvatar.innerHTML = getProfileAvatarInnerHtml(userProfile, youIsHome);
+      }
+      if (winPlayerName) winPlayerName.innerText = userProfile.name;
+      if (winQfRecap) {
+        winQfRecap.innerText = `vs ${tournamentBracket.qfOpponent.tag} (${tournamentBracket.scores.qfYou || 'W'})`;
+      }
+      if (winSfRecap) {
+        winSfRecap.innerText = `vs ${tournamentBracket.sfOpponent.tag} (${tournamentBracket.scores.sfYou || 'W'})`;
+      }
+      if (winGfRecap) {
+        winGfRecap.innerText = `vs ${tournamentBracket.gfOpponent.tag} (${tournamentBracket.scores.gfYou || 'W'})`;
+      }
+      if (winGoalsStat) {
+        winGoalsStat.innerText = `${tournamentBracket.totalGoalsYou} - ${tournamentBracket.totalGoalsAi}`;
+      }
+      if (winComboStat) winComboStat.innerText = `x${maxFlowCombo}`;
+      if (winPassesStat) winPassesStat.innerText = String(totalPassesYou);
+      if (winPossStat) winPossStat.innerText = `${possPct}%`;
+
+      if (menuOverlay) menuOverlay.classList.add('hidden');
+      if (winOverlay) winOverlay.classList.remove('hidden');
     }
 
     function endMatch(reason = '') {
@@ -3886,13 +4090,22 @@ export default function App() {
       const pitchWrap = document.getElementById('pitchSelectorWrap');
 
       const youWon = scoreYou > scoreAi;
+      const possPct = Math.round((possessionFramesYou / Math.max(1, possessionFramesTotal)) * 100);
       let nextBtnLabel = 'FIND NEW MATCH';
       let showRematchBtn = true;
+      let isTournamentChampion = false;
 
       if (subEl) subEl.classList.remove('hidden');
 
       if (currentGameMode === 'TOURNAMENT') {
         showRematchBtn = false;
+        const scoreStr = `${scoreYou}-${scoreAi}`;
+        tournamentBracket.totalGoalsYou += scoreYou;
+        tournamentBracket.totalGoalsAi += scoreAi;
+        if (tournamentRound === 0) tournamentBracket.scores.qfYou = scoreStr;
+        else if (tournamentRound === 1) tournamentBracket.scores.sfYou = scoreStr;
+        else tournamentBracket.scores.gfYou = scoreStr;
+
         if (youWon) {
           if (tournamentRound < TOTAL_TOURNAMENT_GAMES - 1) {
             tournamentRound++;
@@ -3902,10 +4115,12 @@ export default function App() {
             if (subEl) subEl.innerText = `Advanced to ${nextRoundName} (Game ${tournamentRound + 1} of ${TOTAL_TOURNAMENT_GAMES})!`;
             nextBtnLabel = `PLAY ${nextRoundName.toUpperCase()} (${tournamentRound + 1}/${TOTAL_TOURNAMENT_GAMES})`;
           } else {
+            isTournamentChampion = true;
             if (titleEl) titleEl.innerHTML = `CHAMPION! <span class="font-light text-amber-500">·</span> ${scoreYou}-${scoreAi}`;
             if (srTitleEl) srTitleEl.innerText = `TOURNAMENT CHAMPION ${scoreYou}-${scoreAi}`;
             if (subEl) subEl.innerText = `3-0 Knockout Sweep! You won the Knockout Cup vs ${currentOpponent.tag}!`;
             tournamentRound = 0;
+            tournamentBracket.initialized = false;
             nextBtnLabel = 'ENTER NEW TOURNAMENT';
           }
         } else {
@@ -3914,6 +4129,7 @@ export default function App() {
           if (srTitleEl) srTitleEl.innerText = `ELIMINATED ${scoreYou}-${scoreAi}`;
           if (subEl) subEl.innerText = `Knocked out in the ${knockedOutRound} by ${currentOpponent.tag}.`;
           tournamentRound = 0;
+          tournamentBracket.initialized = false;
           nextBtnLabel = 'ENTER NEW TOURNAMENT';
         }
       } else {
@@ -3940,7 +4156,6 @@ export default function App() {
       if (spEl) spEl.innerText = String(totalPassesYou);
       if (scEl) scEl.innerText = `x${maxFlowCombo}`;
       if (ssEl) ssEl.innerText = String(totalShotsYou);
-      const possPct = Math.round((possessionFramesYou / Math.max(1, possessionFramesTotal)) * 100);
       if (spoEl) spoEl.innerText = `${possPct}%`;
 
       if (statsRow) {
@@ -3968,8 +4183,15 @@ export default function App() {
 
       // Reset background pitch cleanly so the ended game isn't awkwardly sitting mid-play behind the summary
       resetPositionsForKickoff('YOU');
-      if (menuOverlay) menuOverlay.classList.remove('hidden');
-      syncMenuFocusVisual(true);
+
+      triggerScreenTransition(() => {
+        if (isTournamentChampion) {
+          openTournamentWinCelebration(possPct);
+        } else {
+          if (menuOverlay) menuOverlay.classList.remove('hidden');
+          syncMenuFocusVisual(true);
+        }
+      });
     }
 
     function pickRandomPitchArena() {
@@ -3977,6 +4199,76 @@ export default function App() {
       selectedPitchTheme = randomTheme.id;
       applyPitchTheme(selectedPitchTheme);
       rebuildStaticPitchCache();
+    }
+
+    function populateTournamentBracketVisual() {
+      const bracketSec = document.getElementById('vsTournamentBracketSection');
+      if (!bracketSec) return;
+      if (currentGameMode !== 'TOURNAMENT') {
+        bracketSec.classList.add('hidden');
+        return;
+      }
+      bracketSec.classList.remove('hidden');
+
+      const setElText = (id: string, txt: string) => {
+        const el = document.getElementById(id);
+        if (el) el.innerText = txt;
+      };
+
+      setElText('brkYouNameQf', userProfile.name);
+      setElText('brkOppNameQf', tournamentBracket.qfOpponent.tag);
+      setElText('brkScoreQf1', tournamentRound === 0 ? 'NOW' : tournamentBracket.scores.qfYou || 'W');
+
+      setElText('brkB1NameQf', tournamentBracket.sfOpponent.tag);
+      setElText('brkB2NameQf', tournamentBracket.otherQfLoserB.tag);
+      setElText('brkScoreQf2', tournamentRound >= 1 ? '2-1' : 'QF 2');
+
+      setElText('brkC1NameQf', tournamentBracket.otherSfLoser.tag);
+      setElText('brkC2NameQf', tournamentBracket.otherQfLoserC.tag);
+      setElText('brkScoreQf3', tournamentRound >= 1 ? '2-0' : 'QF 3');
+
+      setElText('brkD1NameQf', tournamentBracket.gfOpponent.tag);
+      setElText('brkD2NameQf', tournamentBracket.otherQfLoserD.tag);
+      setElText('brkScoreQf4', tournamentRound >= 1 ? '3-1' : 'QF 4');
+
+      // Semi-Finals
+      setElText('brkYouNameSf', tournamentRound >= 1 ? userProfile.name : 'Winner QF 1');
+      setElText('brkOppNameSf', tournamentRound >= 1 ? tournamentBracket.sfOpponent.tag : 'Winner QF 2');
+      setElText('brkScoreSf1', tournamentRound === 1 ? 'NOW' : tournamentRound > 1 ? tournamentBracket.scores.sfYou || 'W' : 'SF 1');
+
+      setElText('brkGfOppNameSf', tournamentRound >= 1 ? tournamentBracket.gfOpponent.tag : 'Winner QF 4');
+      setElText('brkOtherSfName', tournamentRound >= 1 ? tournamentBracket.otherSfLoser.tag : 'Winner QF 3');
+      setElText('brkScoreSf2', tournamentRound >= 2 ? '2-1' : 'SF 2');
+
+      // Grand Final
+      setElText('brkYouNameGf', tournamentRound >= 2 ? userProfile.name : 'Winner SF 1');
+      setElText('brkOppNameGf', tournamentRound >= 2 ? tournamentBracket.gfOpponent.tag : 'Winner SF 2');
+      setElText('brkScoreGf', tournamentRound === 2 ? 'FINAL' : 'CUP');
+
+      const qfCard = document.getElementById('brkMatchCardQf1');
+      const sfCard = document.getElementById('brkMatchCardSf1');
+      const gfCard = document.getElementById('brkMatchCardGf');
+
+      if (qfCard) {
+        qfCard.className =
+          tournamentRound === 0
+            ? 'p-2 rounded-xl bg-amber-200 border-2 border-slate-900 shadow-[0_2px_0_#0f172a] text-left transition-all'
+            : 'p-2 rounded-xl bg-emerald-100 border-2 border-emerald-700 text-left opacity-90';
+      }
+      if (sfCard) {
+        sfCard.className =
+          tournamentRound === 1
+            ? 'p-2.5 rounded-xl bg-amber-200 border-2 border-slate-900 shadow-[0_2px_0_#0f172a] text-left transition-all'
+            : tournamentRound > 1
+              ? 'p-2.5 rounded-xl bg-emerald-100 border-2 border-emerald-700 text-left opacity-90'
+              : 'p-2.5 rounded-xl bg-white border border-slate-300 text-left opacity-75';
+      }
+      if (gfCard) {
+        gfCard.className =
+          tournamentRound === 2
+            ? 'p-3 rounded-2xl bg-gradient-to-br from-amber-300 via-yellow-200 to-amber-200 border-2 border-slate-900 shadow-[0_3px_0_#0f172a] text-left transition-all'
+            : 'p-3 rounded-2xl bg-white border-2 border-dashed border-amber-400 text-left opacity-80';
+      }
     }
 
     function populatePreMatchVsOverlay() {
@@ -4002,7 +4294,7 @@ export default function App() {
       if (vsModeLabel) {
         vsModeLabel.innerText =
           currentGameMode === 'TOURNAMENT'
-            ? `KNOCKOUT CUP • ${TOURNAMENT_ROUNDS[tournamentRound].toUpperCase()}`
+            ? `KNOCKOUT CUP • ${TOURNAMENT_ROUNDS[tournamentRound].toUpperCase()} (MATCH ${tournamentRound + 1}/3)`
             : currentGameMode === 'RANKED'
               ? 'RANKED 1V1 CHAMPIONSHIP'
               : 'CASUAL 1V1 EXHIBITION';
@@ -4013,8 +4305,8 @@ export default function App() {
       if (vsYouName) vsYouName.innerText = userProfile.name;
       if (vsYouAvatar) {
         vsYouAvatar.className = youIsHome
-          ? 'w-20 h-20 sm:w-24 sm:h-24 rounded-3xl bg-sky-400 border-[3px] border-slate-900 text-slate-900 font-black text-lg flex flex-col items-center justify-center shadow-[0_5px_0_#0f172a] mb-3 relative overflow-hidden'
-          : 'w-20 h-20 sm:w-24 sm:h-24 rounded-3xl bg-rose-400 border-[3px] border-slate-900 text-white font-black text-lg flex flex-col items-center justify-center shadow-[0_5px_0_#0f172a] mb-3 relative overflow-hidden';
+          ? 'w-16 h-16 sm:w-20 sm:h-20 rounded-3xl bg-sky-400 border-[3px] border-slate-900 text-slate-900 font-black text-lg flex flex-col items-center justify-center shadow-[0_4px_0_#0f172a] mb-2 relative overflow-hidden'
+          : 'w-16 h-16 sm:w-20 sm:h-20 rounded-3xl bg-rose-400 border-[3px] border-slate-900 text-white font-black text-lg flex flex-col items-center justify-center shadow-[0_4px_0_#0f172a] mb-2 relative overflow-hidden';
         vsYouAvatar.innerHTML = getProfileAvatarInnerHtml(userProfile, youIsHome);
       }
       if (vsYouRankPill) {
@@ -4030,8 +4322,8 @@ export default function App() {
       if (vsOppAvatar) {
         vsOppAvatar.innerText = currentOpponent.initials;
         vsOppAvatar.className = cpuWearsAway
-          ? 'w-20 h-20 sm:w-24 sm:h-24 rounded-3xl bg-rose-500 border-[3px] border-slate-900 text-white font-black text-xl sm:text-2xl flex items-center justify-center shadow-[0_5px_0_#0f172a] mb-3'
-          : 'w-20 h-20 sm:w-24 sm:h-24 rounded-3xl bg-sky-500 border-[3px] border-slate-900 text-white font-black text-xl sm:text-2xl flex items-center justify-center shadow-[0_5px_0_#0f172a] mb-3';
+          ? 'w-16 h-16 sm:w-20 sm:h-20 rounded-3xl bg-rose-500 border-[3px] border-slate-900 text-white font-black text-lg sm:text-xl flex items-center justify-center shadow-[0_4px_0_#0f172a] mb-2'
+          : 'w-16 h-16 sm:w-20 sm:h-20 rounded-3xl bg-sky-500 border-[3px] border-slate-900 text-white font-black text-lg sm:text-xl flex items-center justify-center shadow-[0_4px_0_#0f172a] mb-2';
       }
       if (vsOppRankPill) {
         if (showRank) {
@@ -4042,18 +4334,60 @@ export default function App() {
         }
       }
 
-      if (vsOverlay) {
-        vsOverlay.classList.remove('hidden');
+      populateTournamentBracketVisual();
+
+      const vsStatusPromptText = document.getElementById('vsStatusPromptText');
+      const vsKickoffNowBtnEl = document.getElementById('vsKickoffNowBtn');
+      const vsBackToMenuBtnEl = document.getElementById('vsBackToMenuBtn');
+
+      if (currentGameMode === 'TOURNAMENT') {
+        const roundName = TOURNAMENT_ROUNDS[tournamentRound].toUpperCase();
+        if (vsStatusPromptText) {
+          vsStatusPromptText.innerText = 'BRACKET READY • PRESS START MATCH TO KICK OFF';
+          vsStatusPromptText.className = 'text-xs font-black uppercase tracking-wider text-amber-700';
+        }
+        if (vsKickoffNowBtnEl) {
+          vsKickoffNowBtnEl.innerText = `START ${roundName} MATCH ▶`;
+          vsKickoffNowBtnEl.className =
+            'indie-cta-btn min-h-[46px] py-2.5 px-6 rounded-2xl bg-amber-300 hover:bg-amber-200 text-slate-900 font-black text-xs sm:text-sm uppercase tracking-wider cursor-pointer';
+        }
+        if (vsBackToMenuBtnEl) {
+          vsBackToMenuBtnEl.classList.remove('hidden');
+        }
+      } else {
+        if (vsStatusPromptText) {
+          vsStatusPromptText.innerText = 'ENTERING STADIUM PITCH...';
+          vsStatusPromptText.className = 'text-xs font-black uppercase tracking-widest text-emerald-600 animate-pulse';
+        }
+        if (vsKickoffNowBtnEl) {
+          vsKickoffNowBtnEl.innerText = 'Kick Off Now ▶';
+          vsKickoffNowBtnEl.className =
+            'btn-clean min-h-[42px] py-2 px-5 rounded-xl bg-emerald-400 hover:bg-emerald-300 border-2 border-slate-900 text-slate-900 font-black text-xs uppercase tracking-wider shadow-[0_3px_0_#0f172a] cursor-pointer';
+        }
+        if (vsBackToMenuBtnEl) {
+          vsBackToMenuBtnEl.classList.add('hidden');
+        }
       }
-      if (menuOverlay) {
-        menuOverlay.classList.add('hidden');
-      }
+
+      triggerScreenTransition(() => {
+        if (vsOverlay) {
+          vsOverlay.classList.remove('hidden');
+        }
+        if (menuOverlay) {
+          menuOverlay.classList.add('hidden');
+        }
+        syncMobileControlsVisibility();
+        gamepadState.focusedMenuIndex = 0;
+        syncMenuFocusVisual(true);
+      });
     }
 
     function launchMatchNow() {
       clearMatchmakingTimers();
       const vsOverlay = document.getElementById('preMatchVsOverlay');
+      const winOverlay = document.getElementById('tournamentWinOverlay');
       if (vsOverlay) vsOverlay.classList.add('hidden');
+      if (winOverlay) winOverlay.classList.add('hidden');
       if (document.activeElement instanceof HTMLElement) {
         document.activeElement.blur();
       }
@@ -4064,7 +4398,7 @@ export default function App() {
       applyPitchTheme(selectedPitchTheme);
       rebuildStaticPitchCache();
 
-      sound.init();
+      sound.unlock();
       sound.setMenuMode(false);
       sound.startMusic(() => ({
         isPlaying: gameState === 'PLAYING' || gameState === 'GOAL_CELEBRATION',
@@ -4129,17 +4463,17 @@ export default function App() {
       const stageMsg = searchStages[Math.min(step, searchStages.length - 1)];
       const candidatePlayer = OCEANIA_PLAYERS[(step * 3 + tournamentRound) % OCEANIA_PLAYERS.length];
 
-      if (card) card.className = 'lg:col-span-5 p-4 sm:p-5 rounded-3xl bg-sky-50 border-3 border-slate-900 shadow-[0_6px_0_#0f172a] text-left transition-all duration-300 relative overflow-hidden flex flex-col justify-between';
+      if (card) card.className = 'lg:col-span-5 w-full p-4 sm:p-5 rounded-3xl bg-sky-50 border-3 border-slate-900 shadow-[0_6px_0_#0f172a] text-left transition-all duration-300 relative overflow-hidden flex flex-col justify-between';
       if (mmStatusLabel) mmStatusLabel.className = 'flex items-center space-x-2 text-sky-800';
       if (mmStatusText) mmStatusText.innerText = stageMsg;
       if (mmStatusIcon) mmStatusIcon.className = 'fa-solid fa-satellite-dish fa-spin text-sky-600 text-xs';
 
-      if (oppCard) oppCard.className = 'bg-white rounded-2xl p-4 border-2 border-sky-400 flex flex-col items-center justify-center text-center transition-all duration-300';
-      if (vsBadge) vsBadge.className = 'w-10 h-10 rounded-2xl bg-sky-400 text-slate-900 text-xs font-black flex items-center justify-center shadow-[0_3px_0_#0f172a] border-2 border-slate-900 absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-10 animate-pulse';
+      if (oppCard) oppCard.className = 'bg-white rounded-2xl p-3.5 sm:p-4 border-2 border-sky-400 flex flex-col items-center justify-center text-center transition-all duration-300 min-w-0';
+      if (vsBadge) vsBadge.className = 'w-9 h-9 sm:w-10 sm:h-10 rounded-2xl bg-sky-400 text-slate-900 text-xs font-black flex items-center justify-center shadow-[0_3px_0_#0f172a] border-2 border-slate-900 absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-10 animate-pulse';
 
       if (mmName) {
         mmName.innerText = step <= 1 ? 'Scanning Queue...' : `Checking ${candidatePlayer.tag.slice(0, 10)}…`;
-        mmName.className = 'text-sm font-black text-sky-700 truncate max-w-[140px]';
+        mmName.className = 'text-xs sm:text-sm font-black text-sky-700 truncate max-w-full px-1';
       }
       if (mmPingPill) {
         const pillMsg =
@@ -4148,18 +4482,18 @@ export default function App() {
             : step === 0
               ? 'Rank Filter'
               : candidatePlayer.rank;
-        mmPingPill.innerHTML = `<span>${pillMsg}</span>`;
-        mmPingPill.className = 'inline-flex items-center space-x-1 mt-1 px-2.5 py-0.5 rounded-full bg-sky-100 border border-sky-200 text-[11px] font-extrabold text-sky-800';
+        mmPingPill.innerHTML = `<span class="truncate">${pillMsg}</span>`;
+        mmPingPill.className = 'inline-flex items-center space-x-1 mt-1 px-2.5 py-0.5 rounded-full bg-sky-100 border border-sky-200 text-[10px] sm:text-[11px] font-extrabold text-sky-800 max-w-full';
       }
       if (mmAvatar) {
         mmAvatar.innerHTML = '<i class="fa-solid fa-tower-broadcast fa-fade text-sm text-sky-600"></i>';
-        mmAvatar.className = 'w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-sky-100 border-2 border-sky-400 text-sky-700 font-black text-base flex items-center justify-center mb-2 relative radar-ring';
+        mmAvatar.className = 'w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-sky-100 border-2 border-sky-400 text-sky-700 font-black text-base flex items-center justify-center mb-2 relative radar-ring shrink-0';
       }
 
       // No Skip Queue UI: button displays locked searching state
       if (startBtn) {
         startBtn.setAttribute('disabled', 'true');
-        startBtn.className = 'indie-cta-btn w-full py-4 px-6 rounded-2xl bg-slate-800 text-slate-200 font-black text-base sm:text-lg tracking-wide cursor-wait flex items-center justify-center space-x-3 opacity-90';
+        startBtn.className = 'indie-cta-btn w-full min-h-[52px] py-3.5 sm:py-4 px-6 rounded-2xl bg-slate-800 text-slate-200 font-black text-sm sm:text-lg tracking-wide cursor-wait flex items-center justify-center space-x-3 opacity-90';
       }
       if (startBtnText) startBtnText.innerText = 'SEARCHING FOR OPPONENT...';
       if (startIcon) startIcon.className = 'fa-solid fa-circle-notch fa-spin text-sm text-sky-300';
@@ -4173,11 +4507,14 @@ export default function App() {
     }
 
     function startMatch() {
-      sound.init();
+      sound.unlock();
       if (isSearchingMatch || matchLaunchTimeout) {
         return;
       }
       sound.playUiClick();
+
+      const winOverlay = document.getElementById('tournamentWinOverlay');
+      if (winOverlay) winOverlay.classList.add('hidden');
 
       clearMatchmakingTimers();
       isSearchingMatch = true;
@@ -4218,24 +4555,31 @@ export default function App() {
           const progressBar = document.getElementById('mmProgressBar');
           const startIcon = document.getElementById('startBtnIcon');
 
-          if (card) card.className = 'lg:col-span-5 p-4 sm:p-5 rounded-3xl bg-emerald-50 border-3 border-slate-900 shadow-[0_6px_0_#0f172a] text-left transition-all duration-300 relative overflow-hidden flex flex-col justify-between';
+          if (card) card.className = 'lg:col-span-5 w-full p-4 sm:p-5 rounded-3xl bg-emerald-50 border-3 border-slate-900 shadow-[0_6px_0_#0f172a] text-left transition-all duration-300 relative overflow-hidden flex flex-col justify-between';
           if (mmStatusLabel) mmStatusLabel.className = 'flex items-center space-x-2 text-emerald-800';
           if (mmStatusText) mmStatusText.innerText = `Opponent Matched • ${currentOpponent.tag}`;
           if (mmStatusIcon) mmStatusIcon.className = 'fa-solid fa-circle-check text-emerald-600 text-xs';
-          if (vsBadge) vsBadge.className = 'w-10 h-10 rounded-2xl bg-emerald-400 text-slate-900 text-xs font-black flex items-center justify-center shadow-[0_3px_0_#0f172a] border-2 border-slate-900 absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-10 scale-110 transition-all';
+          if (vsBadge) vsBadge.className = 'w-9 h-9 sm:w-10 sm:h-10 rounded-2xl bg-emerald-400 text-slate-900 text-xs font-black flex items-center justify-center shadow-[0_3px_0_#0f172a] border-2 border-slate-900 absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-10 scale-110 transition-all';
           if (progressBar) progressBar.style.width = '100%';
 
-          if (startBtn) startBtn.className = 'indie-cta-btn w-full py-4 px-6 rounded-2xl bg-emerald-400 text-slate-900 font-black text-base sm:text-lg tracking-wide flex items-center justify-center space-x-3';
+          if (startBtn) startBtn.className = 'indie-cta-btn w-full min-h-[52px] py-3.5 sm:py-4 px-6 rounded-2xl bg-emerald-400 text-slate-900 font-black text-sm sm:text-lg tracking-wide flex items-center justify-center space-x-3';
           if (startBtnText) startBtnText.innerText = 'LOADING INTO ARENA...';
           if (startIcon) startIcon.className = 'fa-solid fa-bolt text-sm';
 
-          // Show Pre-Match Versus Screen featuring both players' profiles (and rank on Ranked/Tournament, no rank on Casual)
+          // Show Pre-Match Versus Screen featuring both players' profiles (plus Knockout Bracket in Tournament mode!)
           populatePreMatchVsOverlay();
 
-          matchLaunchTimeout = setTimeout(() => {
+          // In Tournament mode, stay on the Knockout Bracket screen until the player presses Start Match!
+          if (currentGameMode === 'TOURNAMENT') {
             matchLaunchTimeout = null;
-            launchMatchNow();
-          }, 1900);
+          } else {
+            matchLaunchTimeout = setTimeout(() => {
+              matchLaunchTimeout = null;
+              triggerScreenTransition(() => {
+                launchMatchNow();
+              });
+            }, 1900);
+          }
         }
       }, 380);
     }
@@ -4516,9 +4860,9 @@ export default function App() {
         tournamentRound = 0;
       }
       modeButtons.forEach((b) => {
-        b.className = 'mode-btn py-2.5 px-3 rounded-xl text-xs sm:text-sm font-extrabold transition-colors cursor-pointer text-slate-600 hover:text-slate-900 whitespace-nowrap';
+        b.className = 'mode-btn min-h-[42px] py-2.5 px-3 rounded-xl text-xs sm:text-sm font-extrabold transition-colors cursor-pointer text-slate-600 hover:text-slate-900 flex items-center justify-center';
       });
-      btn.className = 'mode-btn py-2.5 px-3 rounded-xl text-xs sm:text-sm font-black transition-colors cursor-pointer bg-amber-300 text-slate-900 border-2 border-slate-900 shadow-[0_2px_0_#0f172a] whitespace-nowrap';
+      btn.className = 'mode-btn min-h-[42px] py-2.5 px-3 rounded-xl text-xs sm:text-sm font-black transition-colors cursor-pointer bg-amber-300 text-slate-900 border-2 border-slate-900 shadow-[0_2px_0_#0f172a] flex items-center justify-center';
       applyDifficultySettings();
       if (gameState !== 'PAUSED') {
         setMatchmakingIdleUI();
@@ -4675,9 +5019,12 @@ export default function App() {
       }
 
       keys[e.code] = true;
+      hasDetectedTouchInput = false;
       if (['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) {
         activeControlScheme = 'KEYBOARD';
+        hasUsedKeyboardMove = true;
       }
+      syncMobileControlsVisibility();
       if (gameState !== 'PLAYING' && gameState !== 'GOAL_CELEBRATION' && !e.repeat) {
         if (e.code === 'ArrowDown' || e.code === 'ArrowRight') {
           e.preventDefault();
@@ -4696,8 +5043,7 @@ export default function App() {
           if (focused) {
             focused.click();
           } else {
-            pickRandomOpponent(true);
-            launchMatchNow();
+            startMatch();
           }
           return;
         }
@@ -4706,8 +5052,12 @@ export default function App() {
         const editModal = document.getElementById('editProfileModal');
         if (editModal && !editModal.classList.contains('hidden')) return;
         e.preventDefault();
-        pickRandomOpponent(true);
-        launchMatchNow();
+        const vsOverlay = document.getElementById('preMatchVsOverlay');
+        if (vsOverlay && !vsOverlay.classList.contains('hidden')) {
+          document.getElementById('vsKickoffNowBtn')?.click();
+          return;
+        }
+        startMatch();
         return;
       }
       if ((e.code === 'Escape' || e.code === 'KeyP') && !e.repeat) {
@@ -4715,6 +5065,12 @@ export default function App() {
         if (editModal && !editModal.classList.contains('hidden')) {
           e.preventDefault();
           closeEditProfileModal();
+          return;
+        }
+        const vsOverlay = document.getElementById('preMatchVsOverlay');
+        if (vsOverlay && !vsOverlay.classList.contains('hidden') && currentGameMode === 'TOURNAMENT') {
+          e.preventDefault();
+          returnToHomeMenu();
           return;
         }
         if (gameState === 'PLAYING' || gameState === 'PAUSED') {
@@ -4729,7 +5085,7 @@ export default function App() {
       }
       if (e.code === 'Space' && gameState === 'PLAYING' && !e.repeat) {
         e.preventDefault();
-        sound.init();
+        sound.unlock();
         if (controlledPlayer && ball.owner === controlledPlayer) {
           kickChargeState.active = true;
           kickChargeState.power = 0;
@@ -4757,33 +5113,151 @@ export default function App() {
     window.addEventListener('keydown', handleKeyDown);
     window.addEventListener('keyup', handleKeyUp);
 
+    // Global iOS/Phone Audio Unlock & Foreground Recovery Listeners
+    const unlockAudioOnGesture = (e: Event) => {
+      if (e.type === 'touchstart' || e.type === 'touchend') {
+        hasDetectedTouchInput = true;
+        syncMobileControlsVisibility();
+      }
+      sound.unlock();
+      if (gameState !== 'SPLASH') {
+        sound.startMusic(() => ({
+          isPlaying: gameState === 'PLAYING' || gameState === 'GOAL_CELEBRATION',
+          isSuperFlow: flowCombo >= PASSES_FOR_FLOW_BOOST,
+          flowCombo,
+        }));
+      }
+    };
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        sound.unlock();
+      }
+    };
+    window.addEventListener('touchstart', unlockAudioOnGesture, { passive: true, capture: true });
+    window.addEventListener('touchend', unlockAudioOnGesture, { passive: true, capture: true });
+    window.addEventListener('pointerdown', unlockAudioOnGesture, { passive: true, capture: true });
+    window.addEventListener('pointerup', unlockAudioOnGesture, { passive: true, capture: true });
+    window.addEventListener('click', unlockAudioOnGesture, { passive: true, capture: true });
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
     const handlePointerMove = (e: PointerEvent) => {
       if (e.pointerType === 'mouse') {
-        activeControlScheme = 'MOUSE';
+        hasDetectedTouchInput = false;
+        if (!hasUsedKeyboardMove) {
+          activeControlScheme = 'MOUSE';
+        }
         mouseState.screenX = e.clientX;
         mouseState.screenY = e.clientY;
         mouseState.active = true;
+        mouseState.moveTimer = 18;
         updateMouseWorldCoords();
+        syncMobileControlsVisibility();
       }
     };
     window.addEventListener('pointermove', handlePointerMove);
 
-    const handleCanvasPointerDown = (e: PointerEvent) => {
-      sound.init();
-      sound.startMusic(() => ({
-        isPlaying: gameState === 'PLAYING' || gameState === 'GOAL_CELEBRATION',
-        isSuperFlow: flowCombo >= PASSES_FOR_FLOW_BOOST,
-        flowCombo,
-      }));
-      if (gameState !== 'PLAYING') return;
+    // Bind Tournament Celebration, Pre-Match Kickoff Now & Back to Lobby Buttons
+    const vsKickoffNowBtn = document.getElementById('vsKickoffNowBtn');
+    const vsBackToMenuBtn = document.getElementById('vsBackToMenuBtn');
+    const tourneyCelebrateNewBtn = document.getElementById('tourneyCelebrateNewBtn');
+    const tourneyCelebrateHomeBtn = document.getElementById('tourneyCelebrateHomeBtn');
 
-      if (e.pointerType === 'touch') {
-        mouseState.screenX = e.clientX;
-        mouseState.screenY = e.clientY;
+    if (vsKickoffNowBtn) {
+      vsKickoffNowBtn.addEventListener('click', () => {
+        sound.unlock();
+        sound.playUiClick();
+        clearMatchmakingTimers();
+        triggerScreenTransition(() => {
+          launchMatchNow();
+        });
+      });
+    }
+    if (vsBackToMenuBtn) {
+      vsBackToMenuBtn.addEventListener('click', () => {
+        sound.unlock();
+        sound.playUiBack();
+        returnToHomeMenu();
+      });
+    }
+    if (tourneyCelebrateNewBtn) {
+      tourneyCelebrateNewBtn.addEventListener('click', () => {
+        sound.unlock();
+        sound.playUiClick();
+        currentGameMode = 'TOURNAMENT';
+        tournamentRound = 0;
+        initTournamentBracket();
+        const winOverlay = document.getElementById('tournamentWinOverlay');
+        if (winOverlay) winOverlay.classList.add('hidden');
+        if (menuOverlay) menuOverlay.classList.remove('hidden');
+        syncMenuLayoutForState('MENU');
+        startMatch();
+      });
+    }
+    if (tourneyCelebrateHomeBtn) {
+      tourneyCelebrateHomeBtn.addEventListener('click', () => {
+        sound.unlock();
+        sound.playUiBack();
+        returnToHomeMenu();
+      });
+    }
+
+    // Multi-touch Mobile Controls (tracks dedicated Touch ID + Pointer ID so left-thumb move & right-thumb kick never conflict on iPhone/Tablet)
+    const joystickZone = document.getElementById('joystickZone');
+    const joystickKnob = document.getElementById('joystickKnob');
+    const mobileActionBtn = document.getElementById('mobileActionBtn');
+    const mobileSwitchBtn = document.getElementById('mobileSwitchBtn');
+    let activeJoyTouchId: number | null = null;
+    let joyOriginX = 0;
+    let joyOriginY = 0;
+
+    const updateJoystickFromCoords = (clientX: number, clientY: number, customOrigin = false) => {
+      if (!joystickZone || !joystickKnob) return;
+      const rect = joystickZone.getBoundingClientRect();
+      const cx = customOrigin ? joyOriginX : rect.left + rect.width / 2;
+      const cy = customOrigin ? joyOriginY : rect.top + rect.height / 2;
+      const dx = clientX - cx;
+      const dy = clientY - cy;
+      const maxR = Math.max(42, rect.width * 0.42);
+      const dist = Math.hypot(dx, dy) || 1;
+      const clamped = Math.min(maxR, dist);
+      const nx = dx / dist;
+      const ny = dy / dist;
+      joystickKnob.style.transform = `translate(${nx * clamped}px, ${ny * clamped}px)`;
+      const filtered = applyRadialDeadzone((nx * clamped) / maxR, (ny * clamped) / maxR, 0.07);
+      joyVec.x = filtered.x;
+      joyVec.y = filtered.y;
+      joyVec.active = filtered.active;
+      activeControlScheme = 'JOYSTICK';
+    };
+
+    const resetJoystickState = () => {
+      activeJoyTouchId = null;
+      joyVec.pointerId = -1;
+      joyVec.active = false;
+      joyVec.x = 0;
+      joyVec.y = 0;
+      if (joystickKnob) {
+        joystickKnob.style.transform = 'translate(0px, 0px)';
+      }
+    };
+
+    // Native TouchStart on Canvas for Left-Half Floating Thumbstick & Tap-to-Switch (100% immune to iOS multi-touch pointercancel!)
+    const handleCanvasTouchStart = (e: TouchEvent) => {
+      sound.unlock();
+      if (gameState !== 'PLAYING') return;
+      for (let i = 0; i < e.changedTouches.length; i++) {
+        const t = e.changedTouches[i];
+        mouseState.screenX = t.clientX;
+        mouseState.screenY = t.clientY;
         updateMouseWorldCoords();
+
         if (!isTeamInPossession('YOU')) {
           for (const p of players) {
-            if (p.team === 'YOU' && p !== controlledPlayer && Math.hypot(mouseState.worldX - p.x, mouseState.worldY - p.y) < p.radius + 28) {
+            if (
+              p.team === 'YOU' &&
+              p !== controlledPlayer &&
+              Math.hypot(mouseState.worldX - p.x, mouseState.worldY - p.y) < p.radius + 38
+            ) {
               controlledPlayer = p;
               sound.playSwitch();
               spawnRipple(p.x, p.y, '#ffffff', 38);
@@ -4791,6 +5265,24 @@ export default function App() {
             }
           }
         }
+
+        if (t.clientX < window.innerWidth * 0.5 && activeJoyTouchId === null) {
+          activeJoyTouchId = t.identifier;
+          joyOriginX = t.clientX;
+          joyOriginY = t.clientY;
+          updateJoystickFromCoords(t.clientX, t.clientY, true);
+          break;
+        }
+      }
+    };
+    canvas.addEventListener('touchstart', handleCanvasTouchStart, { passive: true });
+
+    const handleCanvasPointerDown = (e: PointerEvent) => {
+      sound.unlock();
+      if (gameState !== 'PLAYING') return;
+
+      // On touch devices, TouchEvent handlers manage multi-touch exclusively so pointercancel never kills the joystick
+      if (e.pointerType === 'touch') {
         return;
       }
 
@@ -4798,6 +5290,8 @@ export default function App() {
       mouseState.screenX = e.clientX;
       mouseState.screenY = e.clientY;
       mouseState.active = true;
+      mouseState.isDown = true;
+      mouseState.moveTimer = 25;
       updateMouseWorldCoords();
 
       if (e.button === 2) {
@@ -4825,7 +5319,20 @@ export default function App() {
     };
     canvas.addEventListener('pointerdown', handleCanvasPointerDown);
 
+    const handleWindowPointerMove = (e: PointerEvent) => {
+      if (e.pointerType === 'touch') return;
+      if (joyVec.pointerId !== -1 && e.pointerId === joyVec.pointerId && activeJoyTouchId === null) {
+        updateJoystickFromCoords(e.clientX, e.clientY, joyOriginX > 0);
+      }
+    };
     const handleWindowPointerUp = (e: PointerEvent) => {
+      if (e.pointerType === 'touch') return;
+      mouseState.isDown = false;
+      if (joyVec.pointerId !== -1 && e.pointerId === joyVec.pointerId && activeJoyTouchId === null) {
+        joyOriginX = 0;
+        joyOriginY = 0;
+        resetJoystickState();
+      }
       if (e.pointerType === 'mouse' && e.button === 0 && kickChargeState.active) {
         const pwr = kickChargeState.power;
         kickChargeState.active = false;
@@ -4835,72 +5342,73 @@ export default function App() {
         }
       }
     };
+    window.addEventListener('pointermove', handleWindowPointerMove);
     window.addEventListener('pointerup', handleWindowPointerUp);
+    window.addEventListener('pointercancel', handleWindowPointerUp);
 
-    // Multi-touch Mobile Controls (tracks pointerId per control so simultaneous thumb move + charge works)
-    const joystickZone = document.getElementById('joystickZone');
-    const joystickKnob = document.getElementById('joystickKnob');
-    const mobileActionBtn = document.getElementById('mobileActionBtn');
-    const mobileSwitchBtn = document.getElementById('mobileSwitchBtn');
+    // Native iOS WebKit Multi-Touch Joystick Handlers (immune to pointercancel when right thumb taps Kick/Switch)
+    const handleWindowTouchMove = (e: TouchEvent) => {
+      if (activeJoyTouchId === null) return;
+      for (let i = 0; i < e.changedTouches.length; i++) {
+        const t = e.changedTouches[i];
+        if (t.identifier === activeJoyTouchId) {
+          e.preventDefault();
+          updateJoystickFromCoords(t.clientX, t.clientY, joyOriginX > 0);
+          break;
+        }
+      }
+    };
+    const handleWindowTouchEnd = (e: TouchEvent) => {
+      if (activeJoyTouchId === null) return;
+      for (let i = 0; i < e.changedTouches.length; i++) {
+        if (e.changedTouches[i].identifier === activeJoyTouchId) {
+          joyOriginX = 0;
+          joyOriginY = 0;
+          resetJoystickState();
+          break;
+        }
+      }
+    };
+    window.addEventListener('touchmove', handleWindowTouchMove, { passive: false });
+    window.addEventListener('touchend', handleWindowTouchEnd, { passive: true });
+    window.addEventListener('touchcancel', handleWindowTouchEnd, { passive: true });
 
     if (joystickZone && joystickKnob) {
-      const handleJoy = (e: PointerEvent) => {
-        const rect = joystickZone.getBoundingClientRect();
-        const cx = rect.left + rect.width / 2;
-        const cy = rect.top + rect.height / 2;
-        const dx = e.clientX - cx;
-        const dy = e.clientY - cy;
-        const maxR = rect.width * 0.38;
-        const dist = Math.hypot(dx, dy) || 1;
-        const clamped = Math.min(maxR, dist);
-        const nx = dx / dist;
-        const ny = dy / dist;
-        joystickKnob.style.transform = `translate(${nx * clamped}px, ${ny * clamped}px)`;
-        const filtered = applyRadialDeadzone((nx * clamped) / maxR, (ny * clamped) / maxR, 0.12);
-        joyVec.x = filtered.x;
-        joyVec.y = filtered.y;
-        joyVec.active = filtered.active;
-        activeControlScheme = 'JOYSTICK';
-      };
+      joystickZone.addEventListener(
+        'touchstart',
+        (e: TouchEvent) => {
+          e.preventDefault();
+          sound.unlock();
+          const t = e.changedTouches[0];
+          if (t) {
+            activeJoyTouchId = t.identifier;
+            joyOriginX = 0;
+            joyOriginY = 0;
+            updateJoystickFromCoords(t.clientX, t.clientY, false);
+          }
+        },
+        { passive: false }
+      );
 
       const onJoyDown = (e: PointerEvent) => {
+        if (e.pointerType === 'touch') return;
         e.preventDefault();
-        sound.init();
+        sound.unlock();
         joyVec.pointerId = e.pointerId;
+        joyOriginX = 0;
+        joyOriginY = 0;
         try {
           joystickZone.setPointerCapture(e.pointerId);
         } catch {}
-        handleJoy(e);
-      };
-      const onJoyMove = (e: PointerEvent) => {
-        if (e.pointerId === joyVec.pointerId) {
-          handleJoy(e);
-        }
-      };
-      const endJoy = (e: PointerEvent) => {
-        if (e.pointerId === joyVec.pointerId) {
-          joyVec.pointerId = -1;
-          joyVec.active = false;
-          joyVec.x = 0;
-          joyVec.y = 0;
-          joystickKnob.style.transform = 'translate(0px, 0px)';
-        }
+        updateJoystickFromCoords(e.clientX, e.clientY, false);
       };
       joystickZone.addEventListener('pointerdown', onJoyDown);
-      joystickZone.addEventListener('pointermove', onJoyMove);
-      joystickZone.addEventListener('pointerup', endJoy);
-      joystickZone.addEventListener('pointercancel', endJoy);
     }
 
     if (mobileActionBtn) {
       let actionPointerId = -1;
-      mobileActionBtn.addEventListener('pointerdown', (e) => {
-        e.preventDefault();
-        sound.init();
-        actionPointerId = e.pointerId;
-        try {
-          mobileActionBtn.setPointerCapture(e.pointerId);
-        } catch {}
+      const startMobileAction = () => {
+        sound.unlock();
         if (gameState !== 'PLAYING' || !controlledPlayer) return;
         if (ball.owner === controlledPlayer) {
           kickChargeState.active = true;
@@ -4908,9 +5416,8 @@ export default function App() {
         } else {
           triggerContextAction(controlledPlayer, getActivePlayerAimVector(controlledPlayer), 0);
         }
-      });
-      const releaseMobileAction = (e: PointerEvent) => {
-        if (e.pointerId !== actionPointerId && actionPointerId !== -1) return;
+      };
+      const endMobileAction = () => {
         actionPointerId = -1;
         if (kickChargeState.active && controlledPlayer) {
           const pwr = kickChargeState.power;
@@ -4919,15 +5426,45 @@ export default function App() {
           triggerContextAction(controlledPlayer, getActivePlayerAimVector(controlledPlayer), pwr);
         }
       };
-      mobileActionBtn.addEventListener('pointerup', releaseMobileAction);
-      mobileActionBtn.addEventListener('pointercancel', releaseMobileAction);
+      mobileActionBtn.addEventListener(
+        'touchstart',
+        (e) => {
+          e.preventDefault();
+          startMobileAction();
+        },
+        { passive: false }
+      );
+      mobileActionBtn.addEventListener('touchend', (e) => {
+        e.preventDefault();
+        endMobileAction();
+      });
+      mobileActionBtn.addEventListener('touchcancel', endMobileAction);
+      mobileActionBtn.addEventListener('pointerdown', (e) => {
+        if (e.pointerType === 'touch') return;
+        e.preventDefault();
+        actionPointerId = e.pointerId;
+        startMobileAction();
+      });
+      mobileActionBtn.addEventListener('pointerup', (e) => {
+        if (e.pointerType === 'touch') return;
+        if (e.pointerId === actionPointerId || actionPointerId === -1) endMobileAction();
+      });
+      mobileActionBtn.addEventListener('pointercancel', (e) => {
+        if (e.pointerType === 'touch') return;
+        endMobileAction();
+      });
     }
 
     if (mobileSwitchBtn) {
-      mobileSwitchBtn.addEventListener('pointerdown', (e) => {
+      const triggerMobileSwitch = (e: Event) => {
         e.preventDefault();
         sound.init();
         if (gameState === 'PLAYING') toggleControlledPlayer();
+      };
+      mobileSwitchBtn.addEventListener('touchstart', triggerMobileSwitch, { passive: false });
+      mobileSwitchBtn.addEventListener('pointerdown', (e) => {
+        if (e.pointerType === 'touch') return;
+        triggerMobileSwitch(e);
       });
     }
 
@@ -5094,12 +5631,22 @@ export default function App() {
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
       window.removeEventListener('pointermove', handlePointerMove);
+      window.removeEventListener('pointermove', handleWindowPointerMove);
       window.removeEventListener('pointerup', handleWindowPointerUp);
+      window.removeEventListener('pointercancel', handleWindowPointerUp);
+      window.removeEventListener('touchmove', handleWindowTouchMove);
+      window.removeEventListener('touchend', handleWindowTouchEnd);
+      window.removeEventListener('touchcancel', handleWindowTouchEnd);
+      window.removeEventListener('touchstart', unlockAudioOnGesture, true);
+      window.removeEventListener('touchend', unlockAudioOnGesture, true);
+      window.removeEventListener('pointerdown', unlockAudioOnGesture, true);
+      window.removeEventListener('click', unlockAudioOnGesture, true);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
   }, []);
 
   return (
-    <div className="relative w-screen h-screen overflow-hidden select-none bg-[#63d297]">
+    <div className="app-viewport relative overflow-hidden select-none bg-[#63d297]">
       {/* Boot-Up Start Page ("PRESS ANY BUTTON TO START") over the clean original stadium background */}
       <div
         id="splashScreen"
@@ -5129,16 +5676,16 @@ export default function App() {
         </div>
       </div>
 
-      {/* Top Perimeter Indie Sports HUD (Responsive for Mobile, Tablet & Desktop) */}
+      {/* Top Perimeter Indie Sports HUD (Responsive for iPhone Portrait/Landscape, Tablet & Desktop) */}
       <div
         id="hud"
-        className="hidden absolute top-0 left-0 w-full px-2 py-1.5 sm:px-5 md:px-7 md:py-3 flex justify-between items-center gap-1.5 sm:gap-3 pointer-events-none z-20"
+        className="hud-safe-top hidden absolute top-0 left-0 w-full px-2.5 py-1.5 sm:px-5 md:px-7 md:py-2.5 flex justify-between items-center gap-2 sm:gap-3 pointer-events-none z-20"
       >
         {/* Left: Tactile Flow Combo Meter + Live Action Hint */}
         <div className="flex items-center space-x-1.5 sm:space-x-2.5 shrink-0">
           <div
             id="flowBadge"
-            className="glass-pill rounded-xl sm:rounded-2xl px-2 py-1 sm:px-3.5 sm:py-1.5 md:px-4 md:py-2 flex items-center space-x-1.5 sm:space-x-2.5 transition-colors duration-150"
+            className="glass-pill rounded-xl sm:rounded-2xl px-2.5 py-1 sm:px-3.5 sm:py-1.5 flex items-center space-x-1.5 sm:space-x-2 transition-colors duration-150"
           >
             <PixelFlameIcon className="w-4 h-4 sm:w-4 sm:h-4 md:w-5 md:h-5 shrink-0" />
             <div className="hidden sm:flex items-center space-x-1.5" id="passDotsContainer">
@@ -5153,7 +5700,7 @@ export default function App() {
 
           <div
             id="hudTourneyBadge"
-            className="hidden glass-pill rounded-2xl px-2.5 py-1 sm:px-3 sm:py-1.5 text-[9px] sm:text-[10px] font-black uppercase tracking-wider text-amber-900 bg-amber-200/95"
+            className="hidden md:inline-flex glass-pill rounded-2xl px-3 py-1.5 text-[10px] font-black uppercase tracking-wider text-amber-900 bg-amber-200/95 whitespace-nowrap"
           >
             CUP 1/3 · QUARTER-FINAL
           </div>
@@ -5167,24 +5714,24 @@ export default function App() {
         </div>
 
         {/* Center: Indie Arcade Broadcast Scoreboard */}
-        <div className="glass-pill rounded-xl sm:rounded-2xl p-1 sm:p-1.5 flex items-center space-x-1.5 sm:space-x-2 md:space-x-2.5 shrink-0">
+        <div className="glass-pill rounded-xl sm:rounded-2xl p-1 sm:p-1.5 flex items-center space-x-1.5 sm:space-x-2 shrink-0">
           {/* Player Team (YOU) Pill */}
           <div
             id="hudYouPill"
-            className="flex items-center space-x-1.5 sm:space-x-2 bg-sky-500 text-white px-2 py-0.5 sm:px-3 sm:py-1 md:px-3.5 md:py-1 rounded-lg sm:rounded-xl border-2 border-slate-900 shadow-xs transition-colors"
+            className="flex items-center space-x-1.5 sm:space-x-2 bg-sky-500 text-white px-2 py-0.5 sm:px-3 sm:py-1 rounded-lg sm:rounded-xl border-2 border-slate-900 shadow-xs transition-colors"
           >
             <span className="text-[9px] sm:text-[10px] md:text-xs font-black tracking-wider uppercase">YOU</span>
             <span
               id="scoreYou"
-              className="font-mono-num text-xs sm:text-sm md:text-lg font-black min-w-[12px] sm:min-w-[16px] text-center"
+              className="font-mono-num text-xs sm:text-sm md:text-base font-black min-w-[12px] sm:min-w-[16px] text-center"
             >
               0
             </span>
           </div>
 
           {/* Match Clock */}
-          <div className="bg-slate-900 text-white px-2 py-0.5 sm:px-2.5 sm:py-1 md:px-3.5 md:py-1 rounded-lg sm:rounded-xl flex items-center justify-center min-w-[44px] sm:min-w-[56px] md:min-w-[66px]">
-            <span id="timerText" className="font-mono-num text-[10px] sm:text-xs md:text-sm font-black tracking-wider text-amber-300">
+          <div className="bg-slate-900 text-white px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-lg sm:rounded-xl flex items-center justify-center min-w-[44px] sm:min-w-[54px]">
+            <span id="timerText" className="font-mono-num text-[10px] sm:text-xs font-black tracking-wider text-amber-300">
               02:00
             </span>
           </div>
@@ -5192,17 +5739,17 @@ export default function App() {
           {/* Opponent Team (RIVAL) Pill */}
           <div
             id="hudAiPill"
-            className="flex items-center space-x-1.5 sm:space-x-2 bg-rose-500 text-white px-2 py-0.5 sm:px-3 sm:py-1 md:px-3.5 md:py-1 rounded-lg sm:rounded-xl border-2 border-slate-900 shadow-xs transition-colors"
+            className="flex items-center space-x-1.5 sm:space-x-2 bg-rose-500 text-white px-2 py-0.5 sm:px-3 sm:py-1 rounded-lg sm:rounded-xl border-2 border-slate-900 shadow-xs transition-colors"
           >
             <span
               id="scoreAi"
-              className="font-mono-num text-xs sm:text-sm md:text-lg font-black min-w-[12px] sm:min-w-[16px] text-center"
+              className="font-mono-num text-xs sm:text-sm md:text-base font-black min-w-[12px] sm:min-w-[16px] text-center"
             >
               0
             </span>
             <span
               id="opponentTagHud"
-              className="hidden sm:inline text-[11px] md:text-xs font-extrabold tracking-tight max-w-[90px] md:max-w-[125px] truncate"
+              className="hidden sm:inline text-[11px] font-extrabold tracking-tight max-w-[85px] md:max-w-[120px] truncate"
             >
               smithstreamer007
             </span>
@@ -5219,12 +5766,12 @@ export default function App() {
             type="button"
             tabIndex={-1}
             aria-label="Toggle Audio"
-            className="glass-pill btn-clean w-9 h-9 sm:w-auto sm:h-auto sm:min-h-[40px] sm:min-w-[40px] px-0 sm:px-3 rounded-xl sm:rounded-2xl flex items-center justify-center space-x-2 text-slate-800 hover:bg-white cursor-pointer"
+            className="glass-pill btn-clean w-9 h-9 sm:w-auto sm:h-auto sm:min-h-[38px] sm:min-w-[38px] px-0 sm:px-3 rounded-xl sm:rounded-2xl flex items-center justify-center space-x-2 text-slate-800 hover:bg-white cursor-pointer"
             title="Toggle Audio [M]"
           >
             <PixelSoundOnIcon className="w-4 h-4 shrink-0" />
             <i id="muteIcon" className="fa-solid fa-volume-high text-xs text-emerald-600 sr-only" />
-            <span id="soundStatusText" className="text-[11px] font-extrabold hidden md:inline whitespace-nowrap">
+            <span id="soundStatusText" className="text-[11px] font-extrabold hidden lg:inline whitespace-nowrap">
               Audio On
             </span>
           </button>
@@ -5233,7 +5780,7 @@ export default function App() {
             type="button"
             tabIndex={-1}
             aria-label="Pause Match"
-            className="glass-pill btn-clean w-9 h-9 sm:w-auto sm:h-auto sm:min-w-[40px] sm:min-h-[40px] rounded-xl sm:rounded-2xl flex items-center justify-center text-slate-800 hover:bg-white cursor-pointer"
+            className="glass-pill btn-clean w-9 h-9 sm:w-auto sm:h-auto sm:min-w-[38px] sm:min-h-[38px] rounded-xl sm:rounded-2xl flex items-center justify-center text-slate-800 hover:bg-white cursor-pointer"
             title="Pause Match [P]"
           >
             <PixelPauseIcon className="w-4 h-4 text-slate-800" />
@@ -5241,105 +5788,369 @@ export default function App() {
         </div>
       </div>
 
-      {/* Mobile & Tablet Touch Controls (Strictly hidden on desktop; visible only on Mobile/Tablet during play) */}
+      {/* Mobile & Tablet Touch Controls (Strictly hidden on Computer/Gamepad; displayed only on touch devices during active play) */}
       <div
         id="mobileControls"
-        className="hidden fixed bottom-2.5 sm:bottom-4 left-0 w-full px-3 sm:px-6 justify-between items-end pointer-events-none z-20 lg:hidden"
+        style={{ display: 'none' }}
+        className="mobile-controls-safe hidden fixed bottom-0 left-0 w-full justify-between items-end pointer-events-none z-20"
       >
+        {/* Left Thumb: Generous 360° Arcade Analog Thumbstick with Directional Guides */}
         <div
           id="joystickZone"
           aria-label="Virtual Movement Joystick"
-          className="w-24 h-24 sm:w-28 sm:h-28 rounded-full glass-pill relative flex items-center justify-center pointer-events-auto touch-none shadow-lg opacity-90"
+          className="rounded-full glass-pill relative flex items-center justify-center pointer-events-auto touch-none shadow-xl opacity-95"
         >
-          <div className="w-9 h-9 rounded-full border border-slate-300 pointer-events-none absolute" />
+          <span className="absolute top-2 text-[9px] font-black text-slate-400 pointer-events-none">▲</span>
+          <span className="absolute bottom-2 text-[9px] font-black text-slate-400 pointer-events-none">▼</span>
+          <span className="absolute left-2.5 text-[9px] font-black text-slate-400 pointer-events-none">◀</span>
+          <span className="absolute right-2.5 text-[9px] font-black text-slate-400 pointer-events-none">▶</span>
+          <div className="w-14 h-14 rounded-full border-2 border-dashed border-slate-300/90 pointer-events-none absolute" />
           <div
             id="joystickKnob"
-            className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-slate-900 shadow-md transition-transform duration-75 pointer-events-none relative z-10"
-          />
+            className="rounded-full bg-slate-900 border-[2.5px] border-sky-400 shadow-[0_3px_0_#0f172a] transition-transform duration-75 pointer-events-none relative z-10 flex items-center justify-center"
+          >
+            <div className="w-4 h-4 rounded-full bg-sky-400/90" />
+          </div>
         </div>
-        <div className="flex items-center space-x-2.5 sm:space-x-3.5 pointer-events-auto touch-none opacity-95">
+
+        {/* Right Thumb: Ergonomic Arcade Action Cluster (Send Run/Switch + Large Elevated Kick/Curve Button) */}
+        <div className="flex items-end space-x-3.5 sm:space-x-5 pointer-events-auto touch-none opacity-95">
           <button
             id="mobileSwitchBtn"
             type="button"
             aria-label="Send Teammate Run or Switch Defender"
-            className="w-14 h-14 sm:w-16 sm:h-16 rounded-full glass-pill text-slate-900 font-extrabold text-[10px] sm:text-xs flex flex-col items-center justify-center active:scale-95 transition-transform whitespace-nowrap shadow-lg"
+            className="rounded-full glass-pill text-slate-900 font-black text-xs sm:text-sm flex flex-col items-center justify-center active:scale-90 transition-transform whitespace-nowrap shadow-[0_5px_0_#0f172a] mb-0.5"
           >
-            <i className="fa-solid fa-bolt text-xs sm:text-sm mb-0.5 text-sky-500" />
+            <i className="fa-solid fa-bolt text-base mb-0.5 text-amber-500" />
             <span id="mobileSecondaryText">Send Run</span>
           </button>
           <button
             id="mobileActionBtn"
             type="button"
             aria-label="Kick, Pass, or Hold for Finesse Shot"
-            className="w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-sky-500 border-2 border-slate-900 text-white font-extrabold text-xs sm:text-sm shadow-[0_4px_0_#0f172a] flex flex-col items-center justify-center active:scale-95 transition-transform whitespace-nowrap"
+            className="rounded-full bg-sky-500 active:bg-amber-400 border-[3.5px] border-slate-900 text-white active:text-slate-900 font-black text-sm sm:text-base shadow-[0_6px_0_#0f172a] flex flex-col items-center justify-center active:translate-y-1 transition-all whitespace-nowrap mb-3"
           >
-            <PixelSoccerBallIcon className="w-5 h-5 sm:w-6 sm:h-6 mb-0.5" />
+            <PixelSoccerBallIcon className="w-7 h-7 sm:w-8 sm:h-8 mb-0.5" />
             <span id="mobileActionText">Kick</span>
           </button>
         </div>
       </div>
 
-      {/* Pre-Match VS Face-Off Overlay (Shows both players' profiles, and shows Rank on Ranked/Tournament only) */}
+      {/* Smooth Screen Transition Veil */}
+      <div
+        id="screenTransitionVeil"
+        className="fixed inset-0 z-50 bg-slate-950/80 opacity-0 pointer-events-none transition-opacity duration-150"
+      />
+
+      {/* Pre-Match VS Face-Off & Tournament Knockout Bracket Overlay */}
       <div
         id="preMatchVsOverlay"
-        className="hidden fixed inset-0 z-40 bg-slate-950/75 flex items-center justify-center p-4 sm:p-8"
+        className="hidden fixed inset-0 z-40 bg-slate-950/80 flex items-center justify-center p-3 sm:p-6 overflow-y-auto"
       >
-        <div className="glass-modal rounded-[32px] max-w-2xl w-full p-6 sm:p-8 text-center border-3 border-slate-900 shadow-[0_10px_0_#0f172a]">
-          <div className="inline-flex items-center space-x-2 px-3.5 py-1 rounded-full bg-amber-300 border-2 border-slate-900 text-[11px] font-black uppercase tracking-widest text-slate-900 mb-2">
+        <div className="glass-modal screen-enter rounded-[28px] sm:rounded-[32px] max-w-4xl w-full p-4 sm:p-6 md:p-7 text-center border-3 border-slate-900 shadow-[0_10px_0_#0f172a] my-auto">
+          <div className="inline-flex items-center space-x-2 px-3.5 py-1 rounded-full bg-amber-300 border-2 border-slate-900 text-[10px] sm:text-[11px] font-black uppercase tracking-widest text-slate-900 mb-1.5">
             <i className="fa-solid fa-bolt text-xs" />
             <span id="vsOverlayModeLabel">CASUAL 1V1 EXHIBITION</span>
           </div>
-          <div id="vsOverlayPitchLabel" className="text-xs font-extrabold uppercase tracking-wider text-slate-500 mb-6">
+          <div id="vsOverlayPitchLabel" className="text-[10px] sm:text-xs font-extrabold uppercase tracking-wider text-slate-500 mb-3.5 sm:mb-4">
             SUNLIT TURF ARENA • FIRST TO +3 OR 02:00
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-11 gap-4 items-center">
+          <div className="grid grid-cols-11 gap-2 sm:gap-4 items-center">
             {/* Player 1 (YOU) */}
-            <div className="sm:col-span-5 bg-slate-50 rounded-3xl p-5 border-2 border-slate-900 flex flex-col items-center">
+            <div className="col-span-5 bg-slate-50 rounded-2xl sm:rounded-3xl p-3 sm:p-4 border-2 border-slate-900 flex flex-col items-center min-w-0">
               <div
                 id="vsOverlayYouAvatar"
-                className="w-20 h-20 sm:w-24 sm:h-24 rounded-3xl bg-sky-400 border-[3px] border-slate-900 text-slate-900 font-black text-lg flex flex-col items-center justify-center shadow-[0_5px_0_#0f172a] mb-3 relative overflow-hidden"
+                className="w-14 h-14 sm:w-18 sm:h-18 rounded-2xl sm:rounded-3xl bg-sky-400 border-[3px] border-slate-900 text-slate-900 font-black text-base sm:text-lg flex flex-col items-center justify-center shadow-[0_4px_0_#0f172a] mb-1.5 sm:mb-2 relative overflow-hidden shrink-0"
               />
-              <div id="vsOverlayYouName" className="text-base sm:text-lg font-black text-slate-900 truncate max-w-[180px]">
+              <div id="vsOverlayYouName" className="text-xs sm:text-base md:text-lg font-black text-slate-900 truncate max-w-full px-1">
                 Player
               </div>
               <div
                 id="vsOverlayYouRank"
-                className="hidden mt-1.5 px-3 py-0.5 rounded-full bg-amber-200 border border-slate-900 text-xs font-black text-slate-900"
+                className="hidden mt-1 px-2.5 py-0.5 rounded-full bg-amber-200 border border-slate-900 text-[10px] sm:text-xs font-black text-slate-900 truncate max-w-full"
               >
                 Diamond I
               </div>
             </div>
 
             {/* VS Badge */}
-            <div className="sm:col-span-1 flex items-center justify-center">
-              <div className="w-12 h-12 rounded-2xl bg-amber-300 border-2 border-slate-900 shadow-[0_4px_0_#0f172a] font-black text-sm text-slate-900 flex items-center justify-center">
+            <div className="col-span-1 flex items-center justify-center">
+              <div className="w-9 h-9 sm:w-11 sm:h-11 rounded-xl sm:rounded-2xl bg-amber-300 border-2 border-slate-900 shadow-[0_3px_0_#0f172a] font-black text-[11px] sm:text-sm text-slate-900 flex items-center justify-center shrink-0">
                 VS
               </div>
             </div>
 
             {/* Player 2 (RIVAL) */}
-            <div className="sm:col-span-5 bg-slate-50 rounded-3xl p-5 border-2 border-slate-900 flex flex-col items-center">
+            <div className="col-span-5 bg-slate-50 rounded-2xl sm:rounded-3xl p-3 sm:p-4 border-2 border-slate-900 flex flex-col items-center min-w-0">
               <div
                 id="vsOverlayOppAvatar"
-                className="w-20 h-20 sm:w-24 sm:h-24 rounded-3xl bg-rose-500 border-[3px] border-slate-900 text-white font-black text-xl sm:text-2xl flex items-center justify-center shadow-[0_5px_0_#0f172a] mb-3"
+                className="w-14 h-14 sm:w-18 sm:h-18 rounded-2xl sm:rounded-3xl bg-rose-500 border-[3px] border-slate-900 text-white font-black text-base sm:text-lg flex items-center justify-center shadow-[0_4px_0_#0f172a] mb-1.5 sm:mb-2 shrink-0"
               >
                 SM
               </div>
-              <div id="vsOverlayOppName" className="text-base sm:text-lg font-black text-slate-900 truncate max-w-[180px]">
+              <div id="vsOverlayOppName" className="text-xs sm:text-base md:text-lg font-black text-slate-900 truncate max-w-full px-1">
                 smithstreamer007
               </div>
               <div
                 id="vsOverlayOppRank"
-                className="hidden mt-1.5 px-3 py-0.5 rounded-full bg-rose-100 border border-slate-900 text-xs font-black text-rose-900"
+                className="hidden mt-1 px-2.5 py-0.5 rounded-full bg-rose-100 border border-slate-900 text-[10px] sm:text-xs font-black text-rose-900 truncate max-w-full"
               >
                 Diamond I
               </div>
             </div>
           </div>
 
-          <div className="mt-6 text-xs font-black uppercase tracking-widest text-emerald-600 animate-pulse">
-            ENTERING STADIUM PITCH...
+          {/* Tournament Knockout Bracket Visual (Shown before each Tournament Match) */}
+          <div
+            id="vsTournamentBracketSection"
+            className="hidden mt-4 pt-3.5 border-t-2 border-slate-200 text-left"
+          >
+            <div className="flex items-center justify-between mb-2.5 px-1">
+              <span className="text-[11px] font-black uppercase tracking-wider text-slate-800 flex items-center space-x-1.5">
+                <i className="fa-solid fa-trophy text-amber-500" />
+                <span>8-Club Knockout Cup Bracket</span>
+              </span>
+              <span className="text-[10px] font-extrabold uppercase tracking-wider text-sky-600">
+                Single Elimination
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5 sm:gap-3 items-center bg-slate-100 p-3 rounded-2xl border-2 border-slate-900">
+              {/* Column 1: Quarter-Finals */}
+              <div className="space-y-1.5 min-w-0">
+                <div className="text-[10px] font-black uppercase tracking-wider text-slate-500 px-1">
+                  Quarter-Finals
+                </div>
+                <div id="brkMatchCardQf1" className="p-2.5 rounded-xl bg-amber-200 border-2 border-slate-900 shadow-[0_2px_0_#0f172a] text-left">
+                  <div className="flex items-center justify-between gap-2 text-[11px] font-black text-slate-900">
+                    <span id="brkYouNameQf" className="truncate min-w-0">Player</span>
+                    <span id="brkScoreQf1" className="px-1.5 py-0.5 rounded bg-slate-900 text-amber-300 font-mono-num text-[9px] shrink-0">NOW</span>
+                  </div>
+                  <div className="flex items-center justify-between gap-2 text-[11px] font-bold text-slate-700 mt-0.5">
+                    <span id="brkOppNameQf" className="truncate min-w-0">Rival</span>
+                    <span className="text-[9px] font-extrabold text-slate-500 shrink-0">QF 1</span>
+                  </div>
+                </div>
+                <div className="p-2 rounded-xl bg-white border border-slate-300 text-left">
+                  <div className="flex items-center justify-between gap-2 text-[10px] font-extrabold text-slate-800">
+                    <span id="brkB1NameQf" className="truncate min-w-0">Rival B1</span>
+                    <span id="brkScoreQf2" className="font-mono-num text-[9px] text-slate-500 shrink-0">QF 2</span>
+                  </div>
+                  <div className="flex items-center justify-between gap-2 text-[10px] font-semibold text-slate-500 mt-0.5">
+                    <span id="brkB2NameQf" className="truncate min-w-0">Rival B2</span>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-1.5">
+                  <div className="p-1.5 rounded-lg bg-white/80 border border-slate-300 text-[9px] min-w-0">
+                    <div id="brkC1NameQf" className="font-bold text-slate-700 truncate">Rival C1</div>
+                    <div id="brkC2NameQf" className="text-slate-400 truncate">Rival C2</div>
+                    <div id="brkScoreQf3" className="font-mono-num text-[8px] font-bold text-emerald-600 mt-0.5">QF 3</div>
+                  </div>
+                  <div className="p-1.5 rounded-lg bg-white/80 border border-slate-300 text-[9px] min-w-0">
+                    <div id="brkD1NameQf" className="font-bold text-slate-700 truncate">Rival D1</div>
+                    <div id="brkD2NameQf" className="text-slate-400 truncate">Rival D2</div>
+                    <div id="brkScoreQf4" className="font-mono-num text-[8px] font-bold text-emerald-600 mt-0.5">QF 4</div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Column 2: Semi-Finals */}
+              <div className="space-y-2 min-w-0">
+                <div className="text-[10px] font-black uppercase tracking-wider text-slate-500 px-1">
+                  Semi-Finals
+                </div>
+                <div id="brkMatchCardSf1" className="p-2.5 rounded-xl bg-white border border-slate-300 text-left">
+                  <div className="flex items-center justify-between gap-2 text-xs font-black text-slate-900">
+                    <span id="brkYouNameSf" className="truncate min-w-0">Winner QF 1</span>
+                    <span id="brkScoreSf1" className="px-1.5 py-0.5 rounded bg-slate-800 text-white font-mono-num text-[9px] shrink-0">SF 1</span>
+                  </div>
+                  <div className="flex items-center justify-between gap-2 text-[11px] font-bold text-slate-600 mt-1">
+                    <span id="brkOppNameSf" className="truncate min-w-0">Winner QF 2</span>
+                    <span className="text-[9px] font-extrabold text-slate-400 shrink-0">UPPER</span>
+                  </div>
+                </div>
+                <div className="p-2.5 rounded-xl bg-white border border-slate-300 text-left">
+                  <div className="flex items-center justify-between gap-2 text-[11px] font-extrabold text-slate-800">
+                    <span id="brkGfOppNameSf" className="truncate min-w-0">Winner QF 4</span>
+                    <span id="brkScoreSf2" className="font-mono-num text-[9px] text-slate-500 shrink-0">SF 2</span>
+                  </div>
+                  <div className="flex items-center justify-between gap-2 text-[10px] font-semibold text-slate-500 mt-0.5">
+                    <span id="brkOtherSfName" className="truncate min-w-0">Winner QF 3</span>
+                    <span className="text-[9px] text-slate-400 shrink-0">LOWER</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Column 3: Grand Final */}
+              <div className="space-y-2 min-w-0">
+                <div className="text-[10px] font-black uppercase tracking-wider text-amber-600 px-1 flex items-center space-x-1">
+                  <i className="fa-solid fa-crown text-[10px]" />
+                  <span>Grand Final</span>
+                </div>
+                <div id="brkMatchCardGf" className="p-3 rounded-2xl bg-white border-2 border-dashed border-amber-400 text-left">
+                  <div className="flex items-center justify-between gap-2 text-xs font-black text-slate-900">
+                    <span id="brkYouNameGf" className="truncate min-w-0">Winner SF 1</span>
+                    <span id="brkScoreGf" className="px-2 py-0.5 rounded-full bg-amber-300 border border-slate-900 text-slate-900 font-mono-num text-[9px] font-black shrink-0">CUP</span>
+                  </div>
+                  <div className="text-[10px] font-black text-amber-600 my-1">VS</div>
+                  <div className="flex items-center justify-between gap-2 text-xs font-black text-slate-800">
+                    <span id="brkOppNameGf" className="truncate min-w-0">Winner SF 2</span>
+                    <i className="fa-solid fa-trophy text-amber-500 text-sm shrink-0" />
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-4 flex flex-col sm:flex-row items-center justify-between gap-3 pt-2">
+            <div id="vsStatusPromptText" className="text-xs font-black uppercase tracking-widest text-emerald-600 animate-pulse">
+              ENTERING STADIUM PITCH...
+            </div>
+            <div className="flex flex-wrap items-center justify-center gap-2.5 w-full sm:w-auto">
+              <button
+                id="vsBackToMenuBtn"
+                type="button"
+                className="btn-clean hidden min-h-[44px] py-2.5 px-4 rounded-xl bg-slate-200 hover:bg-slate-300 border-2 border-slate-900 text-slate-800 font-black text-xs uppercase tracking-wider cursor-pointer"
+              >
+                Back to Lobby
+              </button>
+              <button
+                id="vsKickoffNowBtn"
+                type="button"
+                className="btn-clean min-h-[44px] py-2.5 px-6 rounded-xl bg-emerald-400 hover:bg-emerald-300 border-2 border-slate-900 text-slate-900 font-black text-xs sm:text-sm uppercase tracking-wider shadow-[0_3px_0_#0f172a] cursor-pointer flex-1 sm:flex-initial"
+              >
+                Kick Off Now ▶
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Special Tournament Champions Celebration Screen */}
+      <div
+        id="tournamentWinOverlay"
+        className="hidden fixed inset-0 z-40 bg-slate-950/85 flex items-center justify-center p-3 sm:p-6 overflow-y-auto"
+      >
+        <div className="glass-modal screen-enter rounded-[32px] max-w-2xl w-full p-5 sm:p-8 text-center border-3 border-slate-900 shadow-[0_12px_0_#0f172a] my-auto relative overflow-hidden">
+          <div className="inline-flex items-center space-x-2 px-4 py-1 rounded-full bg-amber-300 border-2 border-slate-900 text-xs font-black uppercase tracking-widest text-slate-900 shadow-[0_2px_0_#0f172a] mb-3">
+            <i className="fa-solid fa-crown text-amber-600" />
+            <span>UNDEFEATED 3-0 KNOCKOUT SWEEP</span>
+          </div>
+
+          {/* Animated 16-Bit Gold Trophy Emblem */}
+          <div className="w-24 h-24 sm:w-28 sm:h-28 mx-auto my-2 rounded-3xl bg-gradient-to-b from-amber-200 via-amber-300 to-amber-400 border-3 border-slate-900 shadow-[0_6px_0_#0f172a] flex items-center justify-center trophy-float">
+            <svg className="w-16 h-16 sm:w-20 sm:h-20" viewBox="0 0 16 16" shapeRendering="crispEdges">
+              <rect x="4" y="2" width="8" height="2" fill="#0f172a" />
+              <rect x="2" y="3" width="12" height="4" fill="#0f172a" />
+              <rect x="4" y="7" width="8" height="3" fill="#0f172a" />
+              <rect x="6" y="10" width="4" height="2" fill="#0f172a" />
+              <rect x="4" y="12" width="8" height="3" fill="#0f172a" />
+              <rect x="5" y="3" width="6" height="5" fill="#facc15" />
+              <rect x="3" y="4" width="2" height="2" fill="#fde047" />
+              <rect x="11" y="4" width="2" height="2" fill="#f59e0b" />
+              <rect x="6" y="4" width="2" height="3" fill="#fef08a" />
+              <rect x="6" y="8" width="4" height="2" fill="#f59e0b" />
+              <rect x="7" y="10" width="2" height="2" fill="#facc15" />
+              <rect x="5" y="13" width="6" height="1" fill="#fde047" />
+            </svg>
+          </div>
+
+          <h2 className="text-2xl sm:text-4xl font-black tracking-tight text-slate-900 mt-2">
+            TOURNAMENT CHAMPIONS!
+          </h2>
+          <p className="text-xs sm:text-sm font-bold text-slate-600 mt-1 mb-4">
+            You conquered the Quarter-Final, Semi-Final &amp; Grand Final to lift the Rematch Cup!
+          </p>
+
+          {/* Champion Club Identity Card */}
+          <div className="flex items-center justify-center space-x-4 p-3.5 sm:p-4 rounded-2xl bg-gradient-to-r from-amber-50 via-yellow-50 to-sky-50 border-2 border-slate-900 shadow-[0_4px_0_#0f172a] mb-4">
+            <div
+              id="tourneyWinAvatar"
+              className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl bg-sky-400 border-2 border-slate-900 flex items-center justify-center relative overflow-hidden shrink-0"
+            />
+            <div className="text-left min-w-0">
+              <div className="text-[10px] font-black uppercase tracking-widest text-amber-600">
+                GRAND FINAL MVP &amp; CUP WINNER
+              </div>
+              <div id="tourneyWinPlayerName" className="text-lg sm:text-2xl font-black text-slate-900 truncate">
+                Player
+              </div>
+              <div className="inline-flex items-center space-x-1.5 mt-1 px-2.5 py-0.5 rounded-full bg-emerald-200 border border-slate-900 text-[10px] font-black text-emerald-950">
+                <i className="fa-solid fa-star text-amber-500" />
+                <span>Star League Champion</span>
+              </div>
+            </div>
+          </div>
+
+          {/* 3-Round Championship Road Recap */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-4 text-left">
+            <div className="p-2.5 rounded-xl bg-emerald-50 border-2 border-slate-900 min-w-0">
+              <div className="text-[9px] font-black uppercase text-emerald-700">1. Quarter-Final</div>
+              <div id="tourneyWinQfRecap" className="text-xs font-black text-slate-900 truncate mt-0.5">
+                vs Rival (W)
+              </div>
+            </div>
+            <div className="p-2.5 rounded-xl bg-emerald-50 border-2 border-slate-900 min-w-0">
+              <div className="text-[9px] font-black uppercase text-emerald-700">2. Semi-Final</div>
+              <div id="tourneyWinSfRecap" className="text-xs font-black text-slate-900 truncate mt-0.5">
+                vs Rival (W)
+              </div>
+            </div>
+            <div className="p-2.5 rounded-xl bg-amber-100 border-2 border-slate-900 min-w-0">
+              <div className="text-[9px] font-black uppercase text-amber-800">3. Grand Final 🏆</div>
+              <div id="tourneyWinGfRecap" className="text-xs font-black text-slate-900 truncate mt-0.5">
+                vs Rival (W)
+              </div>
+            </div>
+          </div>
+
+          {/* Tournament Stats Row */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-5 p-3 rounded-2xl bg-slate-100 border-2 border-slate-900 text-center">
+            <div>
+              <div className="text-[9px] font-extrabold uppercase text-slate-500">Cup Score</div>
+              <div id="tourneyWinGoalsStat" className="font-mono-num text-sm sm:text-base font-black text-emerald-600 mt-0.5">
+                9 - 2
+              </div>
+            </div>
+            <div>
+              <div className="text-[9px] font-extrabold uppercase text-slate-500">Best Flow</div>
+              <div id="tourneyWinComboStat" className="font-mono-num text-sm sm:text-base font-black text-amber-600 mt-0.5">
+                x5
+              </div>
+            </div>
+            <div>
+              <div className="text-[9px] font-extrabold uppercase text-slate-500">Final Passes</div>
+              <div id="tourneyWinPassesStat" className="font-mono-num text-sm sm:text-base font-black text-slate-900 mt-0.5">
+                12
+              </div>
+            </div>
+            <div>
+              <div className="text-[9px] font-extrabold uppercase text-slate-500">Possession</div>
+              <div id="tourneyWinPossStat" className="font-mono-num text-sm sm:text-base font-black text-sky-600 mt-0.5">
+                60%
+              </div>
+            </div>
+          </div>
+
+          {/* Celebration Actions */}
+          <div className="flex flex-col sm:flex-row gap-3">
+            <button
+              id="tourneyCelebrateNewBtn"
+              type="button"
+              className="indie-cta-btn flex-1 min-h-[48px] py-3.5 px-6 rounded-2xl bg-amber-300 hover:bg-amber-200 text-slate-900 font-black text-xs sm:text-base tracking-wide cursor-pointer flex items-center justify-center space-x-2"
+            >
+              <i className="fa-solid fa-trophy text-xs" />
+              <span>DEFEND THE CROWN (NEW CUP)</span>
+            </button>
+            <button
+              id="tourneyCelebrateHomeBtn"
+              type="button"
+              className="btn-clean min-h-[48px] py-3.5 px-6 rounded-2xl bg-slate-200 hover:bg-slate-300 border-2 border-slate-900 text-slate-900 font-black text-xs sm:text-sm tracking-wide cursor-pointer flex items-center justify-center space-x-2"
+            >
+              <i className="fa-solid fa-house text-xs" />
+              <span>Home Menu</span>
+            </button>
           </div>
         </div>
       </div>
@@ -5347,28 +6158,28 @@ export default function App() {
       {/* Full-Screen Home Menu / Pause Modal / Match Over Modal */}
       <div
         id="menuOverlay"
-        className="hidden absolute inset-0 bg-slate-950/25 flex items-center justify-center z-30 p-3 sm:p-6 lg:p-10 transition-opacity duration-150 overflow-y-auto"
+        className="hidden absolute inset-0 bg-slate-950/25 flex items-center justify-center z-30 p-3 sm:p-5 lg:p-8 transition-opacity duration-150 overflow-y-auto"
       >
         <div
           id="menuModalCard"
-          className="w-full max-w-6xl min-h-[82vh] flex flex-col justify-between gap-4 sm:gap-5 text-center relative my-auto"
+          className="w-full max-w-2xl lg:max-w-5xl flex flex-col gap-3 sm:gap-4 text-center relative my-auto"
         >
           {/* Top Bar: Title Lockup & Player Profile Bar */}
           <div
             id="menuTopBar"
-            className="glass-modal rounded-3xl px-5 py-3.5 sm:px-7 sm:py-4 flex flex-col sm:flex-row items-center justify-between gap-3.5"
+            className="glass-modal rounded-3xl px-4 py-3 sm:px-6 sm:py-4 flex flex-wrap sm:flex-nowrap items-center justify-between gap-3"
           >
-            <div className="flex items-center space-x-3.5">
-              <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-sky-400 flex items-center justify-center border-2 border-slate-900 shadow-[0_3px_0_#0f172a] shrink-0">
-                <PixelSoccerBallIcon className="w-7 h-7 sm:w-8 sm:h-8" />
+            <div className="flex items-center space-x-3">
+              <div className="w-11 h-11 sm:w-13 sm:h-13 rounded-2xl bg-sky-400 flex items-center justify-center border-2 border-slate-900 shadow-[0_3px_0_#0f172a] shrink-0">
+                <PixelSoccerBallIcon className="w-6 h-6 sm:w-7 sm:h-7" />
               </div>
               <div className="text-left">
                 <div
                   id="menuTitleVisible"
-                  className="flex items-center space-x-2.5 text-2xl sm:text-4xl font-black tracking-tight text-slate-900"
+                  className="flex items-center space-x-2 text-xl sm:text-3xl md:text-4xl font-black tracking-tight text-slate-900"
                 >
                   <span>REMATCH</span>
-                  <span className="px-2.5 py-0.5 rounded-xl bg-amber-300 border-2 border-slate-900 font-mono-num text-sm sm:text-base font-black text-slate-900 shadow-[0_2px_0_#0f172a]">
+                  <span className="px-2.5 py-0.5 rounded-xl bg-amber-300 border-2 border-slate-900 font-mono-num text-xs sm:text-base font-black text-slate-900 shadow-[0_2px_0_#0f172a]">
                     0.2
                   </span>
                 </div>
@@ -5379,9 +6190,9 @@ export default function App() {
             </div>
 
             {/* Player Profile Pill + Edit Profile Button */}
-            <div id="menuProfileBar" className="flex items-center space-x-2.5 sm:space-x-3">
-              <div className="flex items-center space-x-2.5 px-3 py-1.5 rounded-2xl bg-slate-100 border-2 border-slate-900 shadow-[0_2px_0_#0f172a]">
-                <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-sky-400 border-2 border-slate-900 overflow-hidden flex items-center justify-center shrink-0">
+            <div id="menuProfileBar" className="flex items-center space-x-2 sm:space-x-3 ml-auto sm:ml-0">
+              <div className="flex items-center space-x-2 px-2.5 py-1.5 rounded-2xl bg-slate-100 border-2 border-slate-900 shadow-[0_2px_0_#0f172a]">
+                <div className="w-8 h-8 rounded-xl bg-sky-400 border-2 border-slate-900 overflow-hidden flex items-center justify-center shrink-0">
                   <img
                     id="menuProfileAvatarImg"
                     alt="Profile Avatar"
@@ -5400,7 +6211,7 @@ export default function App() {
                   </div>
                   <div
                     id="menuProfileNameText"
-                    className="text-xs sm:text-sm font-black text-slate-900 max-w-[110px] sm:max-w-[150px] truncate"
+                    className="text-xs sm:text-sm font-black text-slate-900 max-w-[95px] sm:max-w-[140px] truncate"
                   >
                     Player
                   </div>
@@ -5410,7 +6221,7 @@ export default function App() {
               <button
                 id="editProfileBtn"
                 type="button"
-                className="btn-clean py-2.5 px-3.5 sm:px-4 rounded-2xl bg-amber-300 hover:bg-amber-200 border-2 border-slate-900 text-slate-900 font-black text-xs tracking-wide cursor-pointer shadow-[0_2px_0_#0f172a] flex items-center space-x-1.5 whitespace-nowrap"
+                className="btn-clean min-h-[42px] py-2 px-3 sm:px-4 rounded-2xl bg-amber-300 hover:bg-amber-200 border-2 border-slate-900 text-slate-900 font-black text-xs tracking-wide cursor-pointer shadow-[0_2px_0_#0f172a] flex items-center space-x-1.5 whitespace-nowrap"
               >
                 <i className="fa-solid fa-camera text-xs" />
                 <span>Edit Profile</span>
@@ -5418,60 +6229,60 @@ export default function App() {
             </div>
           </div>
 
-          <p id="menuSubtitle" className="hidden text-slate-600 font-semibold text-xs sm:text-sm mb-2" />
+          <p id="menuSubtitle" className="hidden text-slate-600 font-semibold text-xs sm:text-sm mb-1" />
 
-          {/* Main Dashboard Grid (Spacious 2-Column Layout on Desktop/Tablet) */}
-          <div id="menuMainGrid" className="grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-6 items-stretch text-left my-auto">
-            {/* Left Column: Mode, Kit & Pitch Arena Selection */}
-            <div id="menuLeftCol" className="lg:col-span-7 glass-modal rounded-3xl p-5 sm:p-6 flex flex-col justify-between space-y-4">
+          {/* Main Dashboard Grid (Spacious 2-Column Layout on Desktop, Clean Stacked on Tablet/Mobile so cards never squish) */}
+          <div id="menuMainGrid" className="grid grid-cols-1 lg:grid-cols-12 gap-3.5 sm:gap-4 items-stretch text-left">
+            {/* Left Column: Mode & Kit Selection */}
+            <div id="menuLeftCol" className="lg:col-span-7 glass-modal rounded-3xl p-4 sm:p-6 flex flex-col justify-between gap-4">
               {/* 1. Game Mode Selector: Casual / Ranked / Tournament */}
               <div id="playlistSelectorWrap">
                 <div className="text-[11px] font-black uppercase tracking-wider text-slate-500 mb-2 px-1">
                   SELECT MATCH MODE
                 </div>
-                <div className="grid grid-cols-3 gap-2.5 p-1.5 rounded-2xl bg-slate-100 border-2 border-slate-900">
+                <div className="grid grid-cols-3 gap-2 p-1.5 rounded-2xl bg-slate-100 border-2 border-slate-900">
                   <button
                     type="button"
                     data-mode="CASUAL"
-                    className="mode-btn py-2.5 px-3 rounded-xl text-xs sm:text-sm font-extrabold transition-colors cursor-pointer bg-amber-300 text-slate-900 border-2 border-slate-900 shadow-[0_2px_0_#0f172a] whitespace-nowrap"
+                    className="mode-btn min-h-[42px] py-2.5 px-3 rounded-xl text-xs sm:text-sm font-black transition-colors cursor-pointer bg-amber-300 text-slate-900 border-2 border-slate-900 shadow-[0_2px_0_#0f172a] flex items-center justify-center"
                   >
                     Casual
                   </button>
                   <button
                     type="button"
                     data-mode="RANKED"
-                    className="mode-btn py-2.5 px-3 rounded-xl text-xs sm:text-sm font-extrabold transition-colors cursor-pointer text-slate-600 hover:text-slate-900 whitespace-nowrap"
+                    className="mode-btn min-h-[42px] py-2.5 px-3 rounded-xl text-xs sm:text-sm font-extrabold transition-colors cursor-pointer text-slate-600 hover:text-slate-900 flex items-center justify-center"
                   >
                     Ranked
                   </button>
                   <button
                     type="button"
                     data-mode="TOURNAMENT"
-                    className="mode-btn py-2.5 px-3 rounded-xl text-xs sm:text-sm font-extrabold transition-colors cursor-pointer text-slate-600 hover:text-slate-900 whitespace-nowrap"
+                    className="mode-btn min-h-[42px] py-2.5 px-3 rounded-xl text-xs sm:text-sm font-extrabold transition-colors cursor-pointer text-slate-600 hover:text-slate-900 flex items-center justify-center"
                   >
                     Tournament
                   </button>
                 </div>
 
                 {/* Knockout Tournament 3-Match Bracket Tracker (shown when Tournament is selected) */}
-                <div id="tournamentBracketWrap" className="hidden mt-2.5 flex items-center gap-2">
+                <div id="tournamentBracketWrap" className="hidden mt-3 grid grid-cols-3 gap-2">
                   <div
                     id="tourneyStep0"
-                    className="flex-1 py-1.5 px-2.5 rounded-xl bg-amber-300 border-2 border-slate-900 text-slate-900 font-black text-[10px] sm:text-xs shadow-[0_2px_0_#0f172a] flex items-center justify-center"
+                    className="min-w-0 py-2 px-2 rounded-xl bg-amber-300 border-2 border-slate-900 text-slate-900 font-black text-[10px] sm:text-xs shadow-[0_2px_0_#0f172a] flex items-center justify-center text-center truncate"
                   >
-                    <span>1. Quarter-Final</span>
+                    <span className="truncate">1. Quarter-Final</span>
                   </div>
                   <div
                     id="tourneyStep1"
-                    className="flex-1 py-1.5 px-2.5 rounded-xl bg-white/80 border border-slate-300 text-slate-500 font-bold text-[10px] sm:text-xs flex items-center justify-center"
+                    className="min-w-0 py-2 px-2 rounded-xl bg-white border border-slate-300 text-slate-500 font-bold text-[10px] sm:text-xs flex items-center justify-center text-center truncate"
                   >
-                    <span>2. Semi-Final</span>
+                    <span className="truncate">2. Semi-Final</span>
                   </div>
                   <div
                     id="tourneyStep2"
-                    className="flex-1 py-1.5 px-2.5 rounded-xl bg-white/80 border border-slate-300 text-slate-500 font-bold text-[10px] sm:text-xs flex items-center justify-center"
+                    className="min-w-0 py-2 px-2 rounded-xl bg-white border border-slate-300 text-slate-500 font-bold text-[10px] sm:text-xs flex items-center justify-center text-center truncate"
                   >
-                    <span>3. Grand Final</span>
+                    <span className="truncate">3. Grand Final</span>
                   </div>
                 </div>
               </div>
@@ -5486,19 +6297,19 @@ export default function App() {
                     id="kitHomeBtn"
                     type="button"
                     data-kit="HOME"
-                    className="kit-btn py-2.5 px-4 rounded-2xl text-xs sm:text-sm font-black transition-colors cursor-pointer bg-sky-400 text-slate-900 border-2 border-slate-900 shadow-[0_2px_0_#0f172a] flex items-center justify-center space-x-2 whitespace-nowrap"
+                    className="kit-btn min-h-[44px] py-2.5 px-3.5 sm:px-4 rounded-xl text-xs sm:text-sm font-black transition-all cursor-pointer bg-sky-400 text-slate-900 border-2 border-slate-900 shadow-[0_3px_0_#0f172a] flex items-center justify-center gap-2"
                   >
                     <span className="w-3.5 h-3.5 rounded-full bg-amber-300 border border-slate-900 shrink-0" />
-                    <span>Home Kit (Sky)</span>
+                    <span className="truncate">Home Kit (Sky)</span>
                   </button>
                   <button
                     id="kitAwayBtn"
                     type="button"
                     data-kit="AWAY"
-                    className="kit-btn py-2.5 px-4 rounded-2xl text-xs sm:text-sm font-extrabold transition-colors cursor-pointer bg-white/70 text-slate-600 hover:text-slate-900 border border-slate-300 flex items-center justify-center space-x-2 whitespace-nowrap"
+                    className="kit-btn min-h-[44px] py-2.5 px-3.5 sm:px-4 rounded-xl text-xs sm:text-sm font-extrabold transition-all cursor-pointer bg-slate-100 text-slate-600 hover:text-slate-900 border-2 border-slate-300 flex items-center justify-center gap-2"
                   >
                     <span className="w-3.5 h-3.5 rounded-full bg-rose-500 border border-slate-900 shrink-0" />
-                    <span>Away Kit (Coral)</span>
+                    <span className="truncate">Away Kit (Coral)</span>
                   </button>
                 </div>
               </div>
@@ -5507,24 +6318,24 @@ export default function App() {
             {/* Right Column: Locker-Room 1v1 Online Matchmaking Card */}
             <div
               id="matchmakingCard"
-              className="lg:col-span-5 p-4 sm:p-5 rounded-3xl bg-slate-50 border-2 border-slate-900 shadow-[0_4px_0_#0f172a] text-left transition-colors duration-200 relative overflow-hidden flex flex-col justify-between"
+              className="lg:col-span-5 w-full p-4 sm:p-5 rounded-3xl bg-white border-3 border-slate-900 shadow-[0_6px_0_#0f172a] text-left transition-all duration-300 relative overflow-hidden flex flex-col justify-between"
             >
               <div className="flex items-center justify-between text-[11px] font-extrabold uppercase tracking-wider mb-3 px-1">
-                <span id="mmStatusLabel" className="flex items-center space-x-2 text-slate-800 transition-colors">
-                  <i id="mmStatusIcon" className="fa-solid fa-futbol text-sky-500 text-xs" />
-                  <span id="mmStatusText">Casual 1v1 Queue</span>
+                <span id="mmStatusLabel" className="flex items-center space-x-2 text-slate-800 transition-colors min-w-0">
+                  <i id="mmStatusIcon" className="fa-solid fa-futbol text-sky-500 text-xs shrink-0" />
+                  <span id="mmStatusText" className="truncate">Casual 1v1 Queue</span>
                 </span>
-                <span id="mmSearchTimer" className="font-mono-num text-[11px] font-bold text-sky-600 hidden">
+                <span id="mmSearchTimer" className="font-mono-num text-[11px] font-bold text-sky-600 hidden shrink-0 ml-2">
                   0.0s
                 </span>
               </div>
 
               <div className="grid grid-cols-2 gap-3 relative items-stretch my-auto">
                 {/* Left Card: YOU */}
-                <div className="bg-white rounded-2xl p-3 border-2 border-slate-900 shadow-[0_3px_0_rgba(15,23,42,0.08)] flex flex-col items-center text-center">
+                <div className="bg-slate-50 rounded-2xl p-3.5 sm:p-4 border-2 border-slate-900 shadow-[0_3px_0_rgba(15,23,42,0.08)] flex flex-col items-center justify-center text-center min-w-0">
                   <div
                     id="mmYouAvatar"
-                    className="w-14 h-14 rounded-2xl bg-sky-400 border-2 border-slate-900 text-slate-900 font-black text-xs flex flex-col items-center justify-center shadow-xs mb-2 relative overflow-hidden transition-colors"
+                    className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-sky-400 border-2 border-slate-900 text-slate-900 font-black text-xs flex flex-col items-center justify-center shadow-xs mb-2 relative overflow-hidden transition-colors shrink-0"
                   >
                     <img
                       id="mmYouAvatarImg"
@@ -5539,22 +6350,22 @@ export default function App() {
                       #10
                     </span>
                   </div>
-                  <div id="mmYouTitle" className="text-xs font-black text-slate-900 truncate max-w-[120px]">
+                  <div id="mmYouTitle" className="text-xs sm:text-sm font-black text-slate-900 truncate max-w-full px-1">
                     Player (Home Kit)
                   </div>
                   <div
                     id="mmYouPill"
-                    className="inline-flex items-center space-x-1 mt-1 px-2 py-0.5 rounded-full bg-sky-100 text-[10px] font-extrabold text-sky-800"
+                    className="inline-flex items-center space-x-1 mt-1 px-2.5 py-0.5 rounded-full bg-sky-100 text-[10px] sm:text-[11px] font-extrabold text-sky-800 max-w-full"
                   >
-                    <span id="mmYouDot" className="w-1.5 h-1.5 rounded-full bg-sky-500" />
-                    <span id="mmYouMeta">Sky &amp; Gold Kit</span>
+                    <span id="mmYouDot" className="w-1.5 h-1.5 rounded-full bg-sky-500 shrink-0" />
+                    <span id="mmYouMeta" className="truncate">Home Kit (Sky)</span>
                   </div>
                 </div>
 
                 {/* Center Floating VS Badge */}
                 <div
                   id="mmVsBadge"
-                  className="w-9 h-9 rounded-xl bg-amber-300 text-slate-900 font-black text-xs flex items-center justify-center shadow-[0_2px_0_#0f172a] border-2 border-slate-900 absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-10 transition-colors duration-200"
+                  className="w-9 h-9 sm:w-10 sm:h-10 rounded-2xl bg-amber-300 text-slate-900 font-black text-xs flex items-center justify-center shadow-[0_3px_0_#0f172a] border-2 border-slate-900 absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-10 transition-colors duration-200"
                 >
                   VS
                 </div>
@@ -5562,22 +6373,22 @@ export default function App() {
                 {/* Right Card: RIVAL SLOT */}
                 <div
                   id="mmOpponentSlotCard"
-                  className="bg-gradient-to-b from-rose-50 to-white rounded-2xl p-3 border-2 border-dashed border-rose-300 flex flex-col items-center text-center transition-colors duration-200"
+                  className="bg-gradient-to-b from-rose-50 to-white rounded-2xl p-3.5 sm:p-4 border-2 border-dashed border-rose-300 flex flex-col items-center justify-center text-center transition-colors duration-200 min-w-0"
                 >
                   <div
                     id="mmOpponentAvatar"
-                    className="w-14 h-14 rounded-2xl bg-rose-100/80 border-2 border-dashed border-rose-300 text-rose-500 font-black text-sm flex items-center justify-center mb-2 relative transition-colors duration-200"
+                    className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-rose-100/80 border-2 border-dashed border-rose-300 text-rose-500 font-black text-sm flex items-center justify-center mb-2 relative transition-colors duration-200 shrink-0"
                   >
                     <i className="fa-solid fa-user-astronaut text-sm" />
                   </div>
-                  <div id="mmOpponentName" className="text-xs font-black text-rose-500 truncate max-w-[120px]">
+                  <div id="mmOpponentName" className="text-xs sm:text-sm font-black text-rose-500 truncate max-w-full px-1">
                     Searching Slot
                   </div>
                   <div
                     id="mmOpponentPingPill"
-                    className="inline-flex items-center space-x-1 mt-1 px-2 py-0.5 rounded-full bg-rose-100 text-[10px] font-extrabold text-rose-800"
+                    className="inline-flex items-center space-x-1 mt-1 px-2.5 py-0.5 rounded-full bg-rose-100 text-[10px] sm:text-[11px] font-extrabold text-rose-800 max-w-full"
                   >
-                    <span id="mmOpponentMeta">Coral &amp; Berry (Away)</span>
+                    <span id="mmOpponentMeta" className="truncate">Away Kit (Coral)</span>
                   </div>
                 </div>
               </div>
@@ -5593,7 +6404,7 @@ export default function App() {
           {/* End-of-Match Summary */}
           <div
             id="matchStatsRow"
-            className="hidden grid-cols-4 gap-2.5 mb-5 p-3.5 rounded-2xl bg-slate-100 border-2 border-slate-900 text-center"
+            className="hidden grid-cols-2 sm:grid-cols-4 gap-2.5 mb-4 p-3.5 rounded-2xl bg-slate-100 border-2 border-slate-900 text-center"
           >
             <div>
               <div className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500">Passes</div>
@@ -5622,12 +6433,12 @@ export default function App() {
           </div>
 
           {/* Primary Actions */}
-          <div id="menuBottomBar" className="glass-modal rounded-3xl p-4 sm:p-5 flex flex-col space-y-3">
+          <div id="menuBottomBar" className="glass-modal rounded-3xl p-4 sm:p-5 flex flex-col space-y-2.5 sm:space-y-3">
             <button
               id="startBtn"
               type="button"
               data-start="true"
-              className="indie-cta-btn w-full py-4 px-6 rounded-2xl bg-sky-500 hover:bg-sky-400 text-white font-black text-base sm:text-lg tracking-wide cursor-pointer flex items-center justify-center space-x-2.5 whitespace-nowrap"
+              className="indie-cta-btn w-full min-h-[52px] py-3.5 sm:py-4 px-6 rounded-2xl bg-sky-500 hover:bg-sky-400 text-white font-black text-sm sm:text-lg tracking-wide cursor-pointer flex items-center justify-center space-x-2.5"
             >
               <i id="startBtnIcon" className="fa-solid fa-play text-xs" />
               <span id="startBtnText">FIND CASUAL MATCH</span>
@@ -5636,7 +6447,7 @@ export default function App() {
             <button
               id="rematchSameBtn"
               type="button"
-              className="btn-clean hidden w-full py-3.5 px-6 rounded-2xl bg-amber-300 hover:bg-amber-200 border-2 border-slate-900 text-slate-900 font-black text-xs sm:text-sm tracking-wide cursor-pointer flex items-center justify-center space-x-2 whitespace-nowrap"
+              className="btn-clean hidden w-full min-h-[46px] py-3 px-6 rounded-2xl bg-amber-300 hover:bg-amber-200 border-2 border-slate-900 text-slate-900 font-black text-xs sm:text-sm tracking-wide cursor-pointer flex items-center justify-center space-x-2"
             >
               <i className="fa-solid fa-rotate-right text-xs" />
               <span id="rematchSameText">Rematch</span>
@@ -5645,7 +6456,7 @@ export default function App() {
             <button
               id="mainMenuBtn"
               type="button"
-              className="btn-clean hidden w-full py-3 px-6 rounded-2xl bg-slate-200 hover:bg-slate-300 border-2 border-slate-900 text-slate-900 font-black text-xs sm:text-sm tracking-wide cursor-pointer flex items-center justify-center space-x-2 whitespace-nowrap"
+              className="btn-clean hidden w-full min-h-[46px] py-3 px-6 rounded-2xl bg-slate-200 hover:bg-slate-300 border-2 border-slate-900 text-slate-900 font-black text-xs sm:text-sm tracking-wide cursor-pointer flex items-center justify-center space-x-2"
             >
               <i className="fa-solid fa-house text-xs" />
               <span>Return to Home Menu</span>
@@ -5654,7 +6465,7 @@ export default function App() {
             <button
               id="resumeBtn"
               type="button"
-              className="indie-cta-btn hidden w-full py-3.5 px-6 rounded-2xl bg-emerald-500 hover:bg-emerald-400 text-white font-black text-base tracking-wide cursor-pointer whitespace-nowrap"
+              className="indie-cta-btn hidden w-full min-h-[48px] py-3.5 px-6 rounded-2xl bg-emerald-500 hover:bg-emerald-400 text-white font-black text-base tracking-wide cursor-pointer"
             >
               Resume Match
             </button>
@@ -5662,7 +6473,7 @@ export default function App() {
             <button
               id="forfeitBtn"
               type="button"
-              className="btn-clean hidden w-full py-3.5 px-6 rounded-2xl bg-rose-500 hover:bg-rose-400 border-2 border-slate-900 text-white font-black text-xs sm:text-sm tracking-wide uppercase cursor-pointer flex items-center justify-center space-x-2 whitespace-nowrap"
+              className="btn-clean hidden w-full min-h-[46px] py-3 px-6 rounded-2xl bg-rose-500 hover:bg-rose-400 border-2 border-slate-900 text-white font-black text-xs sm:text-sm tracking-wide uppercase cursor-pointer flex items-center justify-center space-x-2"
             >
               <i className="fa-solid fa-house text-xs" />
               <span>Forfeit Match</span>
@@ -5672,7 +6483,7 @@ export default function App() {
               <button
                 id="howToPlayBtn"
                 type="button"
-                className="btn-clean py-2 px-5 rounded-xl bg-slate-100 hover:bg-slate-200 border border-slate-300 text-slate-700 font-extrabold text-xs tracking-wide cursor-pointer whitespace-nowrap"
+                className="btn-clean min-h-[38px] py-2 px-5 rounded-xl bg-slate-100 hover:bg-slate-200 border border-slate-300 text-slate-700 font-extrabold text-xs tracking-wide cursor-pointer"
               >
                 How to Play &amp; Controls
               </button>

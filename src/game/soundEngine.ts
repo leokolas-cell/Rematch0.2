@@ -93,6 +93,10 @@ export class IndieSoundEngine {
   // Super-Flow Gentle Bell Shimmer Notes
   arpNotes = [523.25, 659.25, 783.99, 1046.5, 1318.51, 1046.5, 783.99, 659.25];
 
+  private iosUnlocked = false;
+  private htmlAudioUnlockEl: HTMLAudioElement | null = null;
+  private silentWavUrl: string | null = null;
+
   constructor(
     getGameState: () => string = () => 'PLAYING',
     getFlowCombo: () => number = () => 0
@@ -101,16 +105,53 @@ export class IndieSoundEngine {
     this.getFlowCombo = getFlowCombo;
   }
 
+  private getSilentWavUrl(): string {
+    if (this.silentWavUrl) return this.silentWavUrl;
+    try {
+      const numSamples = 2000;
+      const buffer = new ArrayBuffer(44 + numSamples);
+      const view = new DataView(buffer);
+      const writeString = (offset: number, str: string) => {
+        for (let i = 0; i < str.length; i++) {
+          view.setUint8(offset + i, str.charCodeAt(i));
+        }
+      };
+      writeString(0, 'RIFF');
+      view.setUint32(4, 36 + numSamples, true);
+      writeString(8, 'WAVE');
+      writeString(12, 'fmt ');
+      view.setUint32(16, 16, true);
+      view.setUint16(20, 1, true);
+      view.setUint16(22, 1, true);
+      view.setUint32(24, 8000, true);
+      view.setUint32(28, 8000, true);
+      view.setUint16(32, 1, true);
+      view.setUint16(34, 8, true);
+      writeString(36, 'data');
+      view.setUint32(40, numSamples, true);
+      for (let i = 0; i < numSamples; i++) {
+        view.setUint8(44 + i, 128);
+      }
+      const blob = new Blob([buffer], { type: 'audio/wav' });
+      this.silentWavUrl = URL.createObjectURL(blob);
+      return this.silentWavUrl;
+    } catch {
+      return 'data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA';
+    }
+  }
+
   init() {
     try {
-      const ua = (navigator as Navigator & { userActivation?: { isActive: boolean; hasBeenActive: boolean } }).userActivation;
-      if (ua && !ua.isActive && !ua.hasBeenActive) {
-        return;
+      // Configure iOS 16.4+ WebKit AudioSession to 'playback' so sound plays even if iPhone physical Silent Switch is on
+      const navWithAudioSession = navigator as Navigator & {
+        audioSession?: { type: string };
+      };
+      if (navWithAudioSession.audioSession) {
+        try {
+          navWithAudioSession.audioSession.type = 'playback';
+        } catch {}
       }
-      if (window.Tone && !this.toneReady) {
-        window.Tone.start().catch(() => {});
-        this.toneReady = true;
-      }
+
       if (!this.ctx) {
         const AudioCtx = window.AudioContext || window.webkitAudioContext;
         if (AudioCtx) {
@@ -150,18 +191,97 @@ export class IndieSoundEngine {
           crowdSrc.start(0);
         }
       }
-      if (this.ctx && this.ctx.state !== 'running') {
-        this.ctx.resume().catch(() => {});
+
+      if (this.ctx) {
+        const stateStr = this.ctx.state as string;
+        if (stateStr !== 'running') {
+          this.ctx.resume().catch(() => {});
+        }
       }
     } catch {
       // Ignore Web Audio restriction errors
     }
   }
 
+  /**
+   * Explicitly unlocks iOS Safari / Chrome WebKit & Android audio within a direct user gesture.
+   * Plays a silent AudioBuffer + micro-oscillator + silent HTMLAudioElement WAV so iOS promotes WebAudio
+   * to the active media playback channel (bypassing the hardware silent switch).
+   */
+  unlock() {
+    try {
+      const navWithAudioSession = navigator as Navigator & {
+        audioSession?: { type: string };
+      };
+      if (navWithAudioSession.audioSession) {
+        try {
+          navWithAudioSession.audioSession.type = 'playback';
+        } catch {}
+      }
+
+      this.init();
+      if (!this.ctx) return;
+
+      const stateStr = this.ctx.state as string;
+      if (stateStr !== 'running') {
+        this.ctx.resume().catch(() => {});
+      }
+
+      if (!this.iosUnlocked || stateStr !== 'running') {
+        try {
+          const silentBuf = this.ctx.createBuffer(1, 1, 22050);
+          const silentSrc = this.ctx.createBufferSource();
+          silentSrc.buffer = silentBuf;
+          silentSrc.connect(this.ctx.destination);
+          silentSrc.start(0);
+        } catch {}
+
+        try {
+          const osc = this.ctx.createOscillator();
+          const g = this.ctx.createGain();
+          g.gain.value = 0.00001;
+          osc.connect(g);
+          g.connect(this.ctx.destination);
+          osc.start(0);
+          osc.stop(this.ctx.currentTime + 0.005);
+        } catch {}
+
+        try {
+          if (!this.htmlAudioUnlockEl && typeof Audio !== 'undefined') {
+            const a = new Audio(this.getSilentWavUrl());
+            a.setAttribute('playsinline', 'true');
+            a.setAttribute('webkit-playsinline', 'true');
+            a.volume = 0.01;
+            this.htmlAudioUnlockEl = a;
+          }
+          if (this.htmlAudioUnlockEl) {
+            const p = this.htmlAudioUnlockEl.play();
+            if (p && typeof p.then === 'function') {
+              p.then(() => {
+                this.iosUnlocked = true;
+              }).catch(() => {});
+            }
+          }
+        } catch {}
+
+        if ((this.ctx.state as string) === 'running') {
+          this.iosUnlocked = true;
+        }
+      }
+
+      if (!this.isPlayingMusic) {
+        this.startMusic();
+      }
+    } catch {}
+  }
+
   ensureReady(): boolean {
     this.init();
-    if (this.ctx && this.ctx.state === 'suspended') {
-      this.ctx.resume().catch(() => {});
+    if (this.ctx) {
+      const stateStr = this.ctx.state as string;
+      if (stateStr === 'suspended' || stateStr === 'interrupted') {
+        this.ctx.resume().catch(() => {});
+      }
     }
     return Boolean(!this.muted && this.ctx && this.master);
   }
@@ -224,7 +344,12 @@ export class IndieSoundEngine {
     if (this.isPlayingMusic) return;
     this.isPlayingMusic = true;
     this.musicTimer = setInterval(() => {
-      if (this.muted || !this.ctx || this.ctx.state !== 'running') return;
+      if (this.muted || !this.ctx) return;
+      const stateStr = this.ctx.state as string;
+      if (stateStr !== 'running') {
+        this.ctx.resume().catch(() => {});
+        return;
+      }
       const st = this.getGameState ? this.getGameState() : 'PLAYING';
       if (st === 'PAUSED') {
         this.updateCrowdAmbience(0, false);
@@ -804,6 +929,37 @@ export class IndieSoundEngine {
       osc.start(now + i * 0.05);
       osc.stop(now + i * 0.05 + 0.24);
     });
+  }
+
+  playTournamentWin() {
+    if (!this.ensureReady() || !this.ctx || !this.master) return;
+    const t = this.ctx.currentTime;
+    const fanfareNotes = [
+      { f: 523.25, d: 0.0, len: 0.16 },  // C5
+      { f: 659.25, d: 0.11, len: 0.16 }, // E5
+      { f: 783.99, d: 0.22, len: 0.16 }, // G5
+      { f: 1046.5, d: 0.33, len: 0.32 }, // C6
+      { f: 987.77, d: 0.58, len: 0.16 }, // B5
+      { f: 1046.5, d: 0.72, len: 0.65 }, // C6
+      { f: 1318.5, d: 0.72, len: 0.65 }, // E6
+      { f: 1567.98, d: 0.72, len: 0.75 }, // G6
+    ];
+    fanfareNotes.forEach(({ f, d, len }) => {
+      if (!this.ctx || !this.master) return;
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(f, t + d);
+      gain.gain.setValueAtTime(0.0001, t + d);
+      gain.gain.linearRampToValueAtTime(0.28, t + d + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, t + d + len);
+      osc.connect(gain);
+      gain.connect(this.master);
+      osc.start(t + d);
+      osc.stop(t + d + len + 0.03);
+    });
+    // Celebratory crowd & snare burst
+    this.playNoiseBurst(0.55, 1600, 0.22, 1.2);
   }
 }
 

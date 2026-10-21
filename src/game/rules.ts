@@ -367,33 +367,45 @@ export function findBestReceiverForBall<P extends PlayerStateSnapshot>(
 ): P | undefined {
   let best: P | undefined;
   let bestScore = -Infinity;
+  const startX = actor ? actor.x : targetX - dirX * 400;
+  const startY = actor ? actor.y : targetY - dirY * 400;
+  const passDist = Math.max(280, Math.hypot(targetX - startX, targetY - startY));
+  const rayEndX = startX + dirX * (passDist + 160);
+  const rayEndY = startY + dirY * (passDist + 160);
+
   for (const mate of teammates) {
     if (mate === actor) continue;
     const futureX =
       mate.commandedRunTimer && mate.commandedRunTimer > 0 && mate.commandedTargetX !== undefined
-        ? mate.x * 0.5 + mate.commandedTargetX * 0.5
-        : mate.x + (mate.vx || 0) * 14;
+        ? mate.x * 0.6 + mate.commandedTargetX * 0.4
+        : mate.x + (mate.vx || 0) * 10;
     const futureY =
       mate.commandedRunTimer && mate.commandedRunTimer > 0 && mate.commandedTargetY !== undefined
-        ? mate.y * 0.5 + mate.commandedTargetY * 0.5
-        : mate.y + (mate.vy || 0) * 14;
+        ? mate.y * 0.6 + mate.commandedTargetY * 0.4
+        : mate.y + (mate.vy || 0) * 10;
 
     const distToTarget = Math.hypot(futureX - targetX, futureY - targetY);
+    const distToPassRay = pointToSegmentDistance(futureX, futureY, startX, startY, rayEndX, rayEndY);
+
     let forwardAlignment = 0;
     if (actor) {
       const dxFromActor = futureX - actor.x;
       const dyFromActor = futureY - actor.y;
       const dFromActor = Math.hypot(dxFromActor, dyFromActor) || 1;
       forwardAlignment = (dxFromActor / dFromActor) * dirX + (dyFromActor / dFromActor) * dirY;
-      if (forwardAlignment < -0.25 && distToTarget > 320) continue;
+      if (forwardAlignment < -0.25 && distToTarget > 280) continue;
     }
 
-    // Bonus if the through-ball target is ahead of the teammate in the attacking direction (ideal for running onto the ball)
     const attackDir = mate.team === 'YOU' ? 1 : -1;
     const leadDeltaX = (targetX - mate.x) * attackDir;
-    const runOntoBonus = leadDeltaX > -40 && leadDeltaX < 520 ? 110 : 0;
-    const runnerBonus = mate.commandedRunTimer && mate.commandedRunTimer > 0 ? 150 : 0;
-    const score = forwardAlignment * 280 - distToTarget * 0.92 + runOntoBonus + runnerBonus;
+    const runOntoBonus = leadDeltaX > -60 && leadDeltaX < 540 ? 95 : 0;
+    const runnerBonus = mate.commandedRunTimer && mate.commandedRunTimer > 0 ? 120 : 0;
+    const score =
+      forwardAlignment * 340 -
+      distToPassRay * 1.35 -
+      distToTarget * 0.75 +
+      runOntoBonus +
+      runnerBonus;
     if (score > bestScore) {
       bestScore = score;
       best = mate;
@@ -404,8 +416,8 @@ export function findBestReceiverForBall<P extends PlayerStateSnapshot>(
 
 /**
  * Seamlessly selects the best teammate to control when a pass or through-ball is in flight.
- * Includes hysteresis (`currentTarget`) and only excludes the original passer (`excludePasser`),
- * NEVER the currently controlled receiver, preventing 2-player control oscillation.
+ * Evaluates both proximity to the ball's path segment and direct distance to the ball/landing spot,
+ * with responsive hysteresis so the player near or receiving the pass is immediately selected.
  */
 export function findBestReceiverForLooseBall<P extends PlayerStateSnapshot>(
   ballState: {
@@ -426,23 +438,36 @@ export function findBestReceiverForLooseBall<P extends PlayerStateSnapshot>(
   }
 
   const spd = Math.hypot(ballState.vx, ballState.vy);
-  const lookAheadFrames = spd > 3 ? 20 : 6;
-  const projBallX = Math.max(60, Math.min(PITCH.width - 60, ballState.x + ballState.vx * lookAheadFrames));
-  const projBallY = Math.max(60, Math.min(PITCH.height - 60, ballState.y + ballState.y * 0 + ballState.vy * lookAheadFrames));
+  const lookAheadFrames = spd > 2.5 ? 22 : 6;
+  const projBallX = Math.max(50, Math.min(PITCH.width - 50, ballState.x + ballState.vx * lookAheadFrames));
+  const projBallY = Math.max(50, Math.min(PITCH.height - 50, ballState.y + ballState.vy * lookAheadFrames));
 
   let bestPlayer: P | null = null;
   let bestScore = Infinity;
   let currentTargetScore = Infinity;
 
   for (const p of candidates) {
-    const pFutureX = p.x + (p.vx || 0) * 10;
-    const pFutureY = p.y + (p.vy || 0) * 10;
+    const pFutureX = p.x + (p.vx || 0) * 8;
+    const pFutureY = p.y + (p.vy || 0) * 8;
+    const distNow = Math.hypot(p.x - ballState.x, p.y - ballState.y);
     const distToProjected = Math.hypot(pFutureX - projBallX, pFutureY - projBallY);
     const distToSeg =
-      spd > 3
+      spd > 2.5
         ? pointToSegmentDistance(pFutureX, pFutureY, ballState.x, ballState.y, projBallX, projBallY)
-        : distToProjected;
-    const score = distToSeg * 0.65 + distToProjected * 0.35;
+        : distNow;
+
+    // Check if the ball is moving generally toward this player
+    let towardBonus = 0;
+    if (spd > 2.5 && distNow > 20) {
+      const toPx = (pFutureX - ballState.x) / distNow;
+      const toPy = (pFutureY - ballState.y) / distNow;
+      const dot = (ballState.vx / spd) * toPx + (ballState.vy / spd) * toPy;
+      if (dot > 0.5) {
+        towardBonus = dot * 75;
+      }
+    }
+
+    const score = distToSeg * 0.55 + Math.min(distNow, distToProjected) * 0.45 - towardBonus;
     if (p === currentTarget) {
       currentTargetScore = score;
     }
@@ -452,12 +477,12 @@ export function findBestReceiverForLooseBall<P extends PlayerStateSnapshot>(
     }
   }
 
-  // Hysteresis lock: keep the current target receiver unless another teammate is >85px better
+  // Responsive hysteresis: switch immediately when another teammate is clearly better positioned (>38px score advantage)
   if (
     currentTarget &&
     currentTarget.team === 'YOU' &&
     currentTarget !== excludePasser &&
-    currentTargetScore <= bestScore + 85
+    currentTargetScore <= bestScore + 38
   ) {
     return currentTarget;
   }
@@ -621,12 +646,12 @@ export function evaluateKickDecisionPure<
     // If aiming at a wall rebound that is closer than the teammate and cursor isn't directly on the teammate, skip lock
     const wallCloserThanMate =
       wallBouncePoint !== null &&
-      Math.hypot(wallBouncePoint.x - actor.x, wallBouncePoint.y - actor.y) < dist * 0.95 &&
-      mouseDist >= 72;
+      Math.hypot(wallBouncePoint.x - actor.x, wallBouncePoint.y - actor.y) < dist * 0.92 &&
+      mouseDist >= 78;
 
-    const lockDotThreshold = isYou ? 0.978 : 0.90;
-    if (!wallCloserThanMate && !aimingThroughBallPastMate && (mouseDist < 76 || dot > lockDotThreshold)) {
-      const score = dot * 3.0 + (mouseDist < 76 ? 2.5 : 0) - dist / 4500;
+    const lockDotThreshold = isYou ? (pointerWorld.active ? 0.92 : 0.84) : 0.90;
+    if (!wallCloserThanMate && !aimingThroughBallPastMate && (mouseDist < 84 || dot > lockDotThreshold)) {
+      const score = dot * 3.2 + (mouseDist < 84 ? 2.5 : 0) - dist / 4200;
       if (score > bestMateScore) {
         bestMateScore = score;
         bestMate = mate;
