@@ -37,8 +37,12 @@ import {
   buildGoalCelebrationMessage,
   RANK_TIERS,
   SLOT_SPIN_COST,
+  SLOT_BET_OPTIONS,
   INITIAL_PLAYER_BALANCE,
   BASE_JACKPOT_POOL,
+  POKIE_MACHINES,
+  POKIE_MACHINE_LIST,
+  getMachineEffectiveJackpot,
   POKIE_SYMBOLS,
   POKIE_PAYLINES,
   VIRTUAL_REEL_STRIPS,
@@ -46,6 +50,11 @@ import {
   redeemCouponCode,
   spinPokieReels,
   getPokieGridFromStops,
+  createHoldAndSpinSession,
+  stepHoldAndSpinSession,
+  type PokieMachineId,
+  type PokieBetAmount,
+  type HoldAndSpinSessionState,
   type PokieSymbolId,
   type PokieEvaluationResult,
   type GoalCelebrationSpec,
@@ -2098,6 +2107,7 @@ export default function App() {
       hasEditedProfile: boolean;
       balance: number;
       jackpotPool: number;
+      machineJackpots: Record<PokieMachineId, number>;
     }
 
     const PRESET_ICONS: { id: string; label: string; html: string }[] = [
@@ -2109,6 +2119,9 @@ export default function App() {
       { id: 'TROPHY', label: 'Champion', html: '<i class="fa-solid fa-trophy text-amber-300 text-sm"></i>' },
     ];
 
+    let selectedPokieMachine: PokieMachineId = 'CHAMPIONS_GOLD';
+    let selectedPokieBet: PokieBetAmount = 10;
+
     let userProfile: UserProfile = {
       name: 'Player',
       iconType: 'preset',
@@ -2119,6 +2132,11 @@ export default function App() {
       hasEditedProfile: false,
       balance: INITIAL_PLAYER_BALANCE,
       jackpotPool: BASE_JACKPOT_POOL,
+      machineJackpots: {
+        CHAMPIONS_GOLD: POKIE_MACHINES.CHAMPIONS_GOLD.baseJackpot10,
+        COSMIC_NEON: POKIE_MACHINES.COSMIC_NEON.baseJackpot10,
+        VOLCANO_INFERNO: POKIE_MACHINES.VOLCANO_INFERNO.baseJackpot10,
+      },
     };
 
     try {
@@ -2126,6 +2144,7 @@ export default function App() {
       if (saved) {
         const parsed = JSON.parse(saved);
         if (parsed && typeof parsed.name === 'string') {
+          const parsedMj = parsed.machineJackpots || {};
           userProfile = {
             name: parsed.name.trim().slice(0, 16) || 'Player',
             iconType: parsed.iconType === 'photo' && parsed.photoDataUrl ? 'photo' : 'preset',
@@ -2142,6 +2161,20 @@ export default function App() {
               typeof parsed.jackpotPool === 'number' && Number.isFinite(parsed.jackpotPool) && parsed.jackpotPool >= BASE_JACKPOT_POOL
                 ? Math.floor(parsed.jackpotPool)
                 : BASE_JACKPOT_POOL,
+            machineJackpots: {
+              CHAMPIONS_GOLD:
+                typeof parsedMj.CHAMPIONS_GOLD === 'number' && parsedMj.CHAMPIONS_GOLD >= POKIE_MACHINES.CHAMPIONS_GOLD.baseJackpot10
+                  ? Math.floor(parsedMj.CHAMPIONS_GOLD)
+                  : POKIE_MACHINES.CHAMPIONS_GOLD.baseJackpot10,
+              COSMIC_NEON:
+                typeof parsedMj.COSMIC_NEON === 'number' && parsedMj.COSMIC_NEON >= POKIE_MACHINES.COSMIC_NEON.baseJackpot10
+                  ? Math.floor(parsedMj.COSMIC_NEON)
+                  : POKIE_MACHINES.COSMIC_NEON.baseJackpot10,
+              VOLCANO_INFERNO:
+                typeof parsedMj.VOLCANO_INFERNO === 'number' && parsedMj.VOLCANO_INFERNO >= POKIE_MACHINES.VOLCANO_INFERNO.baseJackpot10
+                  ? Math.floor(parsedMj.VOLCANO_INFERNO)
+                  : POKIE_MACHINES.VOLCANO_INFERNO.baseJackpot10,
+            },
           };
         }
       }
@@ -2529,12 +2562,21 @@ export default function App() {
       const ovName = document.getElementById('overviewProfileName');
       const ovRankBadge = document.getElementById('overviewRankBadge');
       const ovBalanceBadge = document.getElementById('overviewBalanceBadge');
+      const menuBalanceTextEl = document.getElementById('menuBalanceText');
       const ovWinsText = document.getElementById('overviewRankedWinsText');
       const ovNextRankText = document.getElementById('overviewNextRankText');
       const ovProgressBar = document.getElementById('overviewRankProgressBar');
       const slotBalEl = document.getElementById('slotBalanceDisplay');
       const slotJackpotEl = document.getElementById('slotJackpotDisplay');
       const slotSpinsLeftEl = document.getElementById('slotSpinsLeftDisplay');
+
+      if (!userProfile.machineJackpots) {
+        userProfile.machineJackpots = {
+          CHAMPIONS_GOLD: POKIE_MACHINES.CHAMPIONS_GOLD.baseJackpot10,
+          COSMIC_NEON: POKIE_MACHINES.COSMIC_NEON.baseJackpot10,
+          VOLCANO_INFERNO: POKIE_MACHINES.VOLCANO_INFERNO.baseJackpot10,
+        };
+      }
 
       if (ovAvatarBox) {
         applyRankOutlineStyle(ovAvatarBox);
@@ -2557,17 +2599,35 @@ export default function App() {
         ovRankBadge.style.color = rankInfo.badgeTextHex;
         ovRankBadge.style.borderColor = rankInfo.borderHex;
       }
+      if (menuBalanceTextEl) {
+        menuBalanceTextEl.innerText = `$${userProfile.balance.toLocaleString()}`;
+      }
       if (ovBalanceBadge) {
-        ovBalanceBadge.innerText = `$${userProfile.balance}`;
+        ovBalanceBadge.innerText = `$${userProfile.balance.toLocaleString()}`;
       }
       if (slotBalEl) {
-        slotBalEl.innerText = `$${userProfile.balance}`;
+        slotBalEl.innerText = `$${userProfile.balance.toLocaleString()}`;
       }
+
+      const activeEffectiveJackpot = getMachineEffectiveJackpot(
+        selectedPokieMachine,
+        selectedPokieBet,
+        userProfile.machineJackpots[selectedPokieMachine]
+      );
+      userProfile.jackpotPool = activeEffectiveJackpot;
+
       if (slotJackpotEl) {
-        slotJackpotEl.innerText = `$${userProfile.jackpotPool.toLocaleString()}`;
+        slotJackpotEl.innerText = `$${activeEffectiveJackpot.toLocaleString()}`;
+      }
+      for (const m of POKIE_MACHINE_LIST) {
+        const mJpEl = document.getElementById(`slotMachineJackpot_${m.id}`);
+        if (mJpEl) {
+          const eff = getMachineEffectiveJackpot(m.id, selectedPokieBet, userProfile.machineJackpots[m.id]);
+          mJpEl.innerText = `$${eff.toLocaleString()}`;
+        }
       }
       if (slotSpinsLeftEl) {
-        const spinsAvailable = Math.floor(userProfile.balance / SLOT_SPIN_COST);
+        const spinsAvailable = Math.floor(userProfile.balance / selectedPokieBet);
         slotSpinsLeftEl.innerText = `${spinsAvailable} ${spinsAvailable === 1 ? 'SPIN' : 'SPINS'} READY`;
       }
       if (ovWinsText) {
@@ -7417,6 +7477,18 @@ export default function App() {
       }
     }
 
+    function resetCouponInputUI() {
+      const cInput = document.getElementById('couponCodeInput') as HTMLInputElement | null;
+      const cFeedback = document.getElementById('couponFeedbackText');
+      if (cInput) {
+        cInput.value = '';
+      }
+      if (cFeedback) {
+        cFeedback.innerText = '';
+        cFeedback.className = 'hidden';
+      }
+    }
+
     function openEditProfileModal() {
       sound.init();
       sound.playSwitch();
@@ -7428,6 +7500,7 @@ export default function App() {
         cameraStatusText.innerText = '';
         cameraStatusText.classList.add('hidden');
       }
+      resetCouponInputUI();
       syncProfileUI();
       renderModalAvatarPreview(pendingAvatarDataUrl);
       switchProfileModalView('overview');
@@ -7440,6 +7513,7 @@ export default function App() {
 
     function closeEditProfileModal() {
       stopProfileCameraStream();
+      resetCouponInputUI();
       if (editProfileModal) {
         editProfileModal.classList.add('hidden');
       }
@@ -7594,7 +7668,7 @@ export default function App() {
       });
     }
 
-    // --- REMATCH JACKPOT POKIES (Arcade Slot Machine with Real Virtual-Reel & 5-Payline Maths) ---
+    // --- REMATCH POKIES (3 Stadium Machines, $10/$100 Bet Choice & Hold & Spin Bonus Screen) ---
     const openSlotMachineBtn = document.getElementById('openSlotMachineBtn');
     const slotMachineModal = document.getElementById('slotMachineModal');
     const closeSlotModalBtn = document.getElementById('closeSlotModalBtn');
@@ -7603,10 +7677,17 @@ export default function App() {
     const slotStatusBanner = document.getElementById('slotStatusBanner');
     const slotWinAmountBadge = document.getElementById('slotWinAmountBadge');
     const slotBalanceDeltaBadge = document.getElementById('slotBalanceDeltaBadge');
+    const slotMainGameScreen = document.getElementById('slotMainGameScreen');
+    const slotHoldAndSpinScreen = document.getElementById('slotHoldAndSpinScreen');
+    const holdSpinActionBtn = document.getElementById('holdSpinActionBtn') as HTMLButtonElement | null;
+    const holdSpinActionBtnLabel = document.getElementById('holdSpinActionBtnLabel');
+    const holdSpinStatusBanner = document.getElementById('holdSpinStatusBanner');
     let isSlotSpinning = false;
     let slotSpinTimeouts: ReturnType<typeof setTimeout>[] = [];
     let matchCashAnimInterval: ReturnType<typeof setInterval> | null = null;
     let currentPokieGrid = getPokieGridFromStops([0, 2, 1]);
+    let activeHoldAndSpinSession: HoldAndSpinSessionState | null = null;
+    let isHoldSpinStepAnimating = false;
 
     function clearSlotTimers() {
       slotSpinTimeouts.forEach((t) => clearTimeout(t));
@@ -7616,6 +7697,7 @@ export default function App() {
         matchCashAnimInterval = null;
       }
       isSlotSpinning = false;
+      isHoldSpinStepAnimating = false;
     }
 
     function triggerMatchCashRewardAnimation(targetReward: number) {
@@ -7826,8 +7908,8 @@ export default function App() {
           tileBg: 'linear-gradient(180deg, #fef3c7 0%, #f472b6 100%)',
           pillBg: '#0f172a',
           pillText: '#fde047',
-          shortTag: 'SCATTER',
-          multTag: '15X ANY',
+          shortTag: 'CROWN ORB',
+          multTag: 'HOLD&SPIN',
         },
       };
 
@@ -7893,7 +7975,7 @@ export default function App() {
             ? 'linear-gradient(180deg, #ffffff 0%, #fef08a 45%, #facc15 100%)'
             : vis.tileBg;
           cellEl.style.borderColor = '#0f172a';
-          cellEl.className = `slot-symbol-cell relative rounded-2xl border-[2.5px] p-1 sm:p-1.5 flex flex-col items-center justify-center text-center transition-all duration-150 select-none min-h-[60px] sm:min-h-[66px] ${
+          cellEl.className = `slot-symbol-cell relative rounded-2xl border-[2.5px] p-1 sm:p-1.5 flex flex-col items-center justify-center text-center transition-all duration-150 select-none min-h-[58px] sm:min-h-[64px] ${
             isWinner
               ? 'slot-cell-winner z-10'
               : isCenterRow
@@ -7903,12 +7985,403 @@ export default function App() {
           cellEl.innerHTML = `
             <span class="absolute top-1 right-1 px-1 py-0.2 rounded text-[7px] font-mono-num font-black uppercase tracking-tighter border border-slate-900/30" style="background:${
               isWinner ? '#dc2626' : 'rgba(255,255,255,0.88)'
-            };color:${isWinner ? '#ffffff' : '#0f172a'}">${ isWinner ? 'WIN!' : vis.multTag }</span>
+            };color:${isWinner ? '#ffffff' : '#0f172a'}">${isWinner ? 'WIN!' : vis.multTag}</span>
             <div class="my-0.5 flex items-center justify-center">${vis.svg}</div>
             <span class="text-[8px] sm:text-[9px] font-black uppercase tracking-wider mt-0.5 px-2 py-0.2 rounded-full border border-slate-900 whitespace-nowrap" style="background:${vis.pillBg};color:${vis.pillText}">${vis.shortTag}</span>
           `;
         }
       }
+    }
+
+    function syncPokieMachineThemeAndBetUI() {
+      const machine = POKIE_MACHINES[selectedPokieMachine] || POKIE_MACHINES.CHAMPIONS_GOLD;
+      const cabinetCard = document.getElementById('slotCabinetCard');
+      const cabinetHeader = document.getElementById('slotCabinetHeader');
+      const cabinetTagline = document.getElementById('slotCabinetTagline');
+      const cabinetTitle = document.getElementById('slotCabinetTitle');
+      const reelHousing = document.getElementById('slotReelHousing');
+
+      if (cabinetCard) {
+        cabinetCard.style.background = machine.cabinetBg;
+        cabinetCard.style.borderColor = '#0f172a';
+      }
+      if (cabinetHeader) {
+        cabinetHeader.style.background = machine.headerGradient;
+        cabinetHeader.style.borderColor = machine.cabinetBorderHex;
+      }
+      if (cabinetTagline) {
+        cabinetTagline.innerText = `${machine.stadiumName.toUpperCase()} • ${machine.tagline}`;
+        cabinetTagline.style.color = machine.accentHex;
+      }
+      if (cabinetTitle) {
+        cabinetTitle.innerText = `${machine.shortName.toUpperCase()} POKIES`;
+      }
+      if (reelHousing) {
+        reelHousing.style.backgroundColor = machine.reelHousingBg;
+        reelHousing.style.borderColor = machine.reelBorderHex;
+      }
+
+      // Update marquee bulbs with machine-specific stadium colors
+      const bulbs = document.querySelectorAll('.slot-bulb-dot') as NodeListOf<HTMLElement>;
+      bulbs.forEach((b, idx) => {
+        b.style.backgroundColor = machine.bulbColors[idx % machine.bulbColors.length];
+      });
+
+      // Highlight active machine card in the 3-machine selector bar
+      for (const m of POKIE_MACHINE_LIST) {
+        const btn = document.getElementById(`slotMachineBtn_${m.id}`);
+        if (!btn) continue;
+        const isSelected = m.id === selectedPokieMachine;
+        btn.className = isSelected
+          ? 'slot-machine-select-btn p-2 rounded-2xl border-[2.5px] border-slate-900 shadow-[0_3px_0_#0f172a] text-left transition-all cursor-pointer relative overflow-hidden scale-[1.02]'
+          : 'slot-machine-select-btn p-2 rounded-2xl border-2 border-slate-300 bg-white/85 hover:bg-white text-left transition-all cursor-pointer opacity-80 hover:opacity-100';
+        btn.style.background = isSelected ? m.headerGradient : '#ffffff';
+        const nameEl = document.getElementById(`slotMachineName_${m.id}`);
+        const subEl = document.getElementById(`slotMachineSub_${m.id}`);
+        const jpEl = document.getElementById(`slotMachineJackpot_${m.id}`);
+        if (nameEl) nameEl.style.color = isSelected ? '#ffffff' : '#0f172a';
+        if (subEl) subEl.style.color = isSelected ? m.accentHex : '#64748b';
+        if (jpEl) {
+          jpEl.style.backgroundColor = isSelected ? m.accentHex : '#f1f5f9';
+          jpEl.style.color = '#0f172a';
+        }
+      }
+
+      // Highlight active bet button ($10 vs $100)
+      const bet10Btn = document.getElementById('slotBet10Btn');
+      const bet100Btn = document.getElementById('slotBet100Btn');
+      if (bet10Btn && bet100Btn) {
+        const is10 = selectedPokieBet === 10;
+        bet10Btn.className = is10
+          ? 'py-1.5 px-3 rounded-xl font-mono-num text-xs font-black bg-amber-300 text-slate-900 border-2 border-slate-900 shadow-[0_2px_0_#0f172a] cursor-pointer transition-all'
+          : 'py-1.5 px-3 rounded-xl font-mono-num text-xs font-extrabold bg-slate-100 text-slate-600 hover:text-slate-900 border border-slate-300 cursor-pointer transition-all';
+        bet100Btn.className = !is10
+          ? 'py-1.5 px-3 rounded-xl font-mono-num text-xs font-black bg-gradient-to-r from-amber-300 via-yellow-300 to-orange-300 text-slate-900 border-2 border-slate-900 shadow-[0_2px_0_#0f172a] cursor-pointer transition-all'
+          : 'py-1.5 px-3 rounded-xl font-mono-num text-xs font-extrabold bg-slate-100 text-slate-600 hover:text-slate-900 border border-slate-300 cursor-pointer transition-all';
+      }
+
+      if (slotSpinBtnLabel && !isSlotSpinning) {
+        slotSpinBtnLabel.innerText = `SPIN REELS • $${selectedPokieBet}`;
+      }
+
+      // Dynamically update bottom paytable & Hold & Spin guide values for $10 vs $100
+      const activeJp = getMachineEffectiveJackpot(
+        selectedPokieMachine,
+        selectedPokieBet,
+        userProfile.machineJackpots[selectedPokieMachine]
+      );
+      const ptBetBadge = document.getElementById('slotPaytableBetBadge');
+      const ptJackpotVal = document.getElementById('slotPtJackpotVal');
+      const ptHoldVal = document.getElementById('slotPtHoldVal');
+      const ptWildVal = document.getElementById('slotPtWildVal');
+      const ptLineVal = document.getElementById('slotPtLineVal');
+
+      if (ptBetBadge) ptBetBadge.innerText = `$${selectedPokieBet} BET`;
+      if (ptJackpotVal) ptJackpotVal.innerText = `$${activeJp.toLocaleString()}`;
+      if (ptHoldVal) ptHoldVal.innerText = `+$${(selectedPokieBet * 15).toLocaleString()} + 3 RESPINS`;
+      if (ptWildVal) ptWildVal.innerText = `2X LINE (3x = $${(selectedPokieBet * 40).toLocaleString()})`;
+      if (ptLineVal) ptLineVal.innerText = `$${selectedPokieBet} – $${(selectedPokieBet * 20).toLocaleString()}`;
+
+      syncProfileUI();
+    }
+
+    function selectPokieMachine(machineId: PokieMachineId) {
+      if (isSlotSpinning || isHoldSpinStepAnimating || activeHoldAndSpinSession) return;
+      if (!POKIE_MACHINES[machineId]) return;
+      sound.init();
+      sound.playUiSelect();
+      selectedPokieMachine = machineId;
+      syncPokieMachineThemeAndBetUI();
+      renderPokieGridDOM(currentPokieGrid);
+      const machine = POKIE_MACHINES[machineId];
+      if (slotStatusBanner) {
+        slotStatusBanner.innerText = `${machine.name.toUpperCase()} READY • SPIN FOR $${selectedPokieBet} OR LAND 3+ ORBS FOR HOLD & SPIN!`;
+        slotStatusBanner.className =
+          'p-2 rounded-2xl bg-slate-100 border-2 border-slate-900 text-slate-800 font-black text-[11px] uppercase tracking-wide text-center mb-2 shadow-[0_2px_0_#0f172a]';
+      }
+    }
+
+    function selectPokieBet(betAmount: PokieBetAmount) {
+      if (isSlotSpinning || isHoldSpinStepAnimating || activeHoldAndSpinSession) return;
+      if (betAmount !== 10 && betAmount !== 100) return;
+      sound.init();
+      sound.playUiSelect();
+      selectedPokieBet = betAmount;
+      syncPokieMachineThemeAndBetUI();
+      renderPokieGridDOM(currentPokieGrid);
+      if (slotStatusBanner) {
+        slotStatusBanner.innerText =
+          betAmount === 100
+            ? '🔥 $100 HIGH-ROLLER STAKES ACTIVE! 10X PAYOUTS & 10X GRAND JACKPOT! 🔥'
+            : '⚡ $10 STANDARD SPIN ACTIVE • LAND 3+ CROWN ORBS FOR HOLD & SPIN! ⚡';
+        slotStatusBanner.className =
+          betAmount === 100
+            ? 'p-2 rounded-2xl bg-amber-200 border-2 border-slate-900 text-slate-950 font-black text-[11px] uppercase tracking-wide text-center mb-2 shadow-[0_2px_0_#0f172a]'
+            : 'p-2 rounded-2xl bg-slate-100 border-2 border-slate-900 text-slate-800 font-black text-[11px] uppercase tracking-wide text-center mb-2 shadow-[0_2px_0_#0f172a]';
+      }
+    }
+
+    function renderHoldAndSpinDOM(session: HoldAndSpinSessionState, spinningUnlocked = false) {
+      const machine = POKIE_MACHINES[session.machineId] || POKIE_MACHINES.CHAMPIONS_GOLD;
+      const titleEl = document.getElementById('holdSpinArenaTitle');
+      const respinsTextEl = document.getElementById('holdSpinRespinsText');
+      const lockedTextEl = document.getElementById('holdSpinLockedText');
+      const potTextEl = document.getElementById('holdSpinPotText');
+      const grandBannerValEl = document.getElementById('holdSpinGrandTargetVal');
+
+      if (titleEl) {
+        titleEl.innerText = `${machine.shortName.toUpperCase()} • HOLD & SPIN`;
+      }
+      if (respinsTextEl) {
+        respinsTextEl.innerText = `${session.respinsRemaining}`;
+      }
+      for (let d = 1; d <= 3; d++) {
+        const dotEl = document.getElementById(`holdSpinLifeDot_${d}`);
+        if (dotEl) {
+          const active = d <= session.respinsRemaining;
+          dotEl.className = active
+            ? 'w-3 h-3 rounded-full bg-amber-300 border-2 border-slate-950 shadow-[0_0_8px_#fde047] transition-all scale-110'
+            : 'w-3 h-3 rounded-full bg-slate-700 border border-slate-950 opacity-45 transition-all';
+        }
+      }
+      if (lockedTextEl) {
+        lockedTextEl.innerText = `${session.lockedCount} / 9 LOCKED`;
+      }
+      if (potTextEl) {
+        potTextEl.innerText = `$${session.totalBonusWin.toLocaleString()}`;
+      }
+      if (grandBannerValEl) {
+        grandBannerValEl.innerText = `$${session.grandJackpotPool.toLocaleString()}`;
+      }
+
+      for (let r = 0; r < 3; r++) {
+        for (let row = 0; row < 3; row++) {
+          const cellEl = document.getElementById(`holdSpinCell_${r}_${row}`);
+          if (!cellEl) continue;
+          const orb = session.cells[r]?.[row];
+          if (orb) {
+            const tierBadgeBg =
+              orb.tier === 'MEGA'
+                ? '#dc2626'
+                : orb.tier === 'MAJOR'
+                  ? '#9333ea'
+                  : orb.tier === 'MINI'
+                    ? '#0284c7'
+                    : '#0f172a';
+            cellEl.style.background = machine.orbGradient;
+            cellEl.style.borderColor = machine.orbBorderHex;
+            cellEl.className = `rounded-2xl border-[2.5px] p-1.5 flex flex-col items-center justify-center text-center relative select-none min-h-[62px] sm:min-h-[68px] ${
+              orb.isNew ? 'hold-orb-locked-new' : 'hold-orb-locked-idle'
+            }`;
+            cellEl.innerHTML = `
+              <span class="px-1.5 py-0.2 rounded-full text-[8px] font-black uppercase tracking-wider text-white border border-slate-950" style="background:${tierBadgeBg}">
+                ${orb.tier === 'CASH' ? machine.orbName : `${orb.tier} ORB`}
+              </span>
+              <div class="font-mono-num text-sm sm:text-base font-black text-slate-950 drop-shadow-[0_1px_0_rgba(255,255,255,0.85)] mt-0.5">
+                +$${orb.cashValue.toLocaleString()}
+              </div>
+              <span class="text-[7.5px] font-black uppercase tracking-widest text-slate-900 bg-white/80 px-1.5 rounded border border-slate-900/40 mt-0.5">
+                LOCKED
+              </span>
+            `;
+          } else {
+            cellEl.style.background = spinningUnlocked
+              ? 'linear-gradient(180deg, #1e293b 0%, #0f172a 100%)'
+              : 'rgba(15, 23, 42, 0.78)';
+            cellEl.style.borderColor = spinningUnlocked ? machine.accentHex : '#334155';
+            cellEl.className = `rounded-2xl border-2 border-dashed p-1.5 flex flex-col items-center justify-center text-center select-none min-h-[62px] sm:min-h-[68px] ${
+              spinningUnlocked ? 'slot-reel-spinning' : 'opacity-75'
+            }`;
+            cellEl.innerHTML = spinningUnlocked
+              ? `
+                <div class="w-6 h-6 rounded-full border-2 border-amber-300 bg-amber-400/30 animate-ping"></div>
+                <span class="text-[8px] font-black uppercase tracking-widest text-amber-300 mt-1">SPINNING</span>
+              `
+              : `
+                <div class="w-5 h-5 rounded-full border border-slate-600 bg-slate-800/80 flex items-center justify-center text-[9px] text-slate-400 font-black">?</div>
+                <span class="text-[8px] font-extrabold uppercase tracking-wider text-slate-400 mt-1">OPEN SLOT</span>
+              `;
+          }
+        }
+      }
+
+      if (holdSpinActionBtn && holdSpinActionBtnLabel) {
+        if (session.isComplete) {
+          holdSpinActionBtn.disabled = false;
+          holdSpinActionBtn.className =
+            'indie-cta-btn w-full min-h-[46px] py-2.5 px-5 rounded-2xl bg-gradient-to-r from-amber-300 via-yellow-300 to-emerald-300 hover:from-amber-200 hover:to-emerald-200 text-slate-950 font-black text-xs sm:text-sm uppercase tracking-wider cursor-pointer flex items-center justify-center gap-2';
+          holdSpinActionBtnLabel.innerText = `COLLECT +$${session.totalBonusWin.toLocaleString()} & RETURN TO REELS`;
+        } else {
+          holdSpinActionBtn.disabled = isHoldSpinStepAnimating;
+          holdSpinActionBtn.className =
+            'indie-cta-btn w-full min-h-[46px] py-2.5 px-5 rounded-2xl bg-gradient-to-r from-amber-400 via-orange-300 to-yellow-300 hover:from-amber-300 hover:to-yellow-200 disabled:opacity-60 text-slate-950 font-black text-xs sm:text-sm uppercase tracking-wider cursor-pointer flex items-center justify-center gap-2';
+          holdSpinActionBtnLabel.innerText = isHoldSpinStepAnimating
+            ? 'SPINNING OPEN ORB SLOTS...'
+            : `LAUNCH RESPIN (${session.respinsRemaining} ${session.respinsRemaining === 1 ? 'RESPIN' : 'RESPINS'} LEFT)`;
+        }
+      }
+    }
+
+    function triggerHoldAndSpinBonus(triggerPositions?: { reel: number; row: number }[]) {
+      sound.init();
+      sound.playHoldAndSpinTrigger();
+      setPokieMarqueeFast(true);
+      const grandPool = getMachineEffectiveJackpot(
+        selectedPokieMachine,
+        selectedPokieBet,
+        userProfile.machineJackpots[selectedPokieMachine]
+      );
+      activeHoldAndSpinSession = createHoldAndSpinSession({
+        machineId: selectedPokieMachine,
+        betAmount: selectedPokieBet,
+        grandJackpotPool: grandPool,
+        triggerPositions,
+      });
+
+      if (slotMainGameScreen) slotMainGameScreen.classList.add('hidden');
+      if (slotHoldAndSpinScreen) slotHoldAndSpinScreen.classList.remove('hidden');
+
+      renderHoldAndSpinDOM(activeHoldAndSpinSession, false);
+      if (holdSpinStatusBanner) {
+        holdSpinStatusBanner.innerText = `👑 ${activeHoldAndSpinSession.lockedCount} BONUS ORBS LOCKED! EACH NEW ORB RESETS RESPINS TO 3!`;
+        holdSpinStatusBanner.className =
+          'p-2 rounded-2xl bg-amber-300 border-2 border-slate-950 text-slate-950 font-black text-[11px] uppercase tracking-wide text-center mb-2 shadow-[0_3px_0_#000000]';
+      }
+      return activeHoldAndSpinSession;
+    }
+
+    function finishAndCollectHoldAndSpin() {
+      if (!activeHoldAndSpinSession) return;
+      sound.init();
+      const bonusWin = activeHoldAndSpinSession.totalBonusWin;
+      const wonGrand = activeHoldAndSpinSession.grandJackpotWon;
+      const startBal = userProfile.balance;
+      const endBal = startBal + bonusWin;
+      userProfile.balance = endBal;
+      if (wonGrand) {
+        userProfile.machineJackpots[selectedPokieMachine] =
+          POKIE_MACHINES[selectedPokieMachine].baseJackpot10;
+      }
+      saveUserProfileToStorage();
+      syncPokieMachineThemeAndBetUI();
+
+      activeHoldAndSpinSession = null;
+      isHoldSpinStepAnimating = false;
+      setPokieMarqueeFast(false);
+
+      if (slotHoldAndSpinScreen) slotHoldAndSpinScreen.classList.add('hidden');
+      if (slotMainGameScreen) slotMainGameScreen.classList.remove('hidden');
+
+      if (slotWinAmountBadge) {
+        slotWinAmountBadge.innerText = `+$${bonusWin.toLocaleString()}`;
+        slotWinAmountBadge.className =
+          'font-mono-num text-sm sm:text-base font-black text-amber-600 animate-bounce mt-0.5';
+      }
+      if (slotBalanceDeltaBadge) {
+        slotBalanceDeltaBadge.innerText = `+$${bonusWin.toLocaleString()}`;
+        slotBalanceDeltaBadge.classList.remove('hidden');
+      }
+      if (slotStatusBanner) {
+        slotStatusBanner.innerText = wonGrand
+          ? `🏆 9/9 FULL GRID GRAND JACKPOT! +$${bonusWin.toLocaleString()} COLLECTED! 🏆`
+          : `👑 HOLD & SPIN COMPLETE! +$${bonusWin.toLocaleString()} ADDED TO BANKROLL! 👑`;
+        slotStatusBanner.className =
+          'p-2 rounded-2xl bg-gradient-to-r from-amber-300 via-yellow-200 to-emerald-300 border-2 border-slate-900 text-slate-950 font-black text-[11px] uppercase tracking-wide text-center mb-2 shadow-[0_3px_0_#0f172a]';
+      }
+
+      const slotBalEl = document.getElementById('slotBalanceDisplay');
+      const totalSteps = 8;
+      let step = 0;
+      const collectInterval = setInterval(() => {
+        step++;
+        sound.playCoinTick(step - 1, totalSteps);
+        const curBal =
+          step >= totalSteps ? endBal : Math.round(startBal + ((endBal - startBal) * step) / totalSteps);
+        if (slotBalEl) slotBalEl.innerText = `$${curBal.toLocaleString()}`;
+        if (step >= totalSteps) {
+          clearInterval(collectInterval);
+        }
+      }, 45);
+      slotSpinTimeouts.push(collectInterval as unknown as ReturnType<typeof setTimeout>);
+    }
+
+    function handleHoldAndSpinRespinStep(forceFillAll = false) {
+      if (!activeHoldAndSpinSession || isHoldSpinStepAnimating) return null;
+      if (activeHoldAndSpinSession.isComplete) {
+        finishAndCollectHoldAndSpin();
+        return null;
+      }
+
+      sound.init();
+      sound.playSlotSpin();
+      isHoldSpinStepAnimating = true;
+      renderHoldAndSpinDOM(activeHoldAndSpinSession, true);
+
+      if (holdSpinStatusBanner) {
+        holdSpinStatusBanner.innerText = '⚡ SPINNING OPEN CELLS FOR GOLDEN BONUS ORBS... ⚡';
+        holdSpinStatusBanner.className =
+          'p-2 rounded-2xl bg-sky-200 border-2 border-slate-950 text-slate-950 font-black text-[11px] uppercase tracking-wide text-center mb-2 shadow-[0_2px_0_#000000]';
+      }
+
+      const nextState = stepHoldAndSpinSession(activeHoldAndSpinSession, Math.random, forceFillAll);
+
+      if (forceFillAll) {
+        // Immediate deterministic update for test hook
+        activeHoldAndSpinSession = nextState;
+        isHoldSpinStepAnimating = false;
+        sound.playHoldAndSpinComplete(nextState.grandJackpotWon);
+        renderHoldAndSpinDOM(nextState, false);
+        if (holdSpinStatusBanner) {
+          holdSpinStatusBanner.innerText = `🏆 FULL 9/9 ORB GRID! GRAND JACKPOT +$${nextState.totalBonusWin.toLocaleString()} WON! 🏆`;
+          holdSpinStatusBanner.className =
+            'p-2 rounded-2xl bg-amber-300 border-2 border-slate-950 text-slate-950 font-black text-[11px] uppercase tracking-wide text-center mb-2 shadow-[0_3px_0_#000000] animate-bounce';
+        }
+        return nextState;
+      }
+
+      const stepTimeout = setTimeout(() => {
+        activeHoldAndSpinSession = nextState;
+        isHoldSpinStepAnimating = false;
+        renderHoldAndSpinDOM(nextState, false);
+
+        if (nextState.grandJackpotWon) {
+          sound.playHoldAndSpinComplete(true);
+          if (holdSpinStatusBanner) {
+            holdSpinStatusBanner.innerText = `🏆 9/9 FULL SCREEN! GRAND JACKPOT +$${nextState.totalBonusWin.toLocaleString()} WON! 🏆`;
+            holdSpinStatusBanner.className =
+              'p-2 rounded-2xl bg-gradient-to-r from-amber-300 via-yellow-200 to-amber-300 border-2 border-slate-950 text-slate-950 font-black text-[11px] uppercase tracking-wide text-center mb-2 shadow-[0_3px_0_#000000]';
+          }
+        } else if (nextState.isComplete) {
+          sound.playHoldAndSpinComplete(false);
+          if (holdSpinStatusBanner) {
+            holdSpinStatusBanner.innerText = `🎉 BONUS COMPLETE! ${nextState.lockedCount} ORBS LOCKED FOR +$${nextState.totalBonusWin.toLocaleString()}! 🎉`;
+            holdSpinStatusBanner.className =
+              'p-2 rounded-2xl bg-emerald-300 border-2 border-slate-950 text-slate-950 font-black text-[11px] uppercase tracking-wide text-center mb-2 shadow-[0_3px_0_#000000]';
+          }
+        } else if (nextState.lastStepNewOrbs.length > 0) {
+          sound.playHoldOrbLock(nextState.lockedCount);
+          const addedVal = nextState.lastStepNewOrbs.reduce((s, o) => s + o.cashValue, 0);
+          if (holdSpinStatusBanner) {
+            holdSpinStatusBanner.innerText = `🔥 +${nextState.lastStepNewOrbs.length} NEW ORB${
+              nextState.lastStepNewOrbs.length > 1 ? 'S' : ''
+            } LOCKED (+$${addedVal.toLocaleString()})! RESPINS RESET TO 3! 🔥`;
+            holdSpinStatusBanner.className =
+              'p-2 rounded-2xl bg-amber-300 border-2 border-slate-950 text-slate-950 font-black text-[11px] uppercase tracking-wide text-center mb-2 shadow-[0_3px_0_#000000]';
+          }
+        } else {
+          sound.playSlotReelStop(1, false);
+          if (holdSpinStatusBanner) {
+            holdSpinStatusBanner.innerText = `NO NEW ORB • ${nextState.respinsRemaining} ${
+              nextState.respinsRemaining === 1 ? 'RESPIN' : 'RESPINS'
+            } REMAINING!`;
+            holdSpinStatusBanner.className =
+              'p-2 rounded-2xl bg-slate-200 border-2 border-slate-950 text-slate-800 font-extrabold text-[11px] uppercase tracking-wide text-center mb-2';
+          }
+        }
+      }, 460);
+      slotSpinTimeouts.push(stepTimeout);
+
+      return nextState;
     }
 
     function openSlotMachineModal() {
@@ -7917,7 +8390,12 @@ export default function App() {
       if (editProfileModal && !editProfileModal.classList.contains('hidden')) {
         closeEditProfileModal();
       }
-      syncProfileUI();
+      activeHoldAndSpinSession = null;
+      isHoldSpinStepAnimating = false;
+      if (slotHoldAndSpinScreen) slotHoldAndSpinScreen.classList.add('hidden');
+      if (slotMainGameScreen) slotMainGameScreen.classList.remove('hidden');
+
+      syncPokieMachineThemeAndBetUI();
       highlightActivePaylineBadges([]);
       setPokieMarqueeFast(false);
       renderPokieGridDOM(currentPokieGrid);
@@ -7927,8 +8405,16 @@ export default function App() {
     }
 
     function closeSlotMachineModal() {
+      if (activeHoldAndSpinSession && activeHoldAndSpinSession.totalBonusWin > 0) {
+        // Ensure any uncollected Hold & Spin winnings are safely credited if closed early
+        userProfile.balance += activeHoldAndSpinSession.totalBonusWin;
+        saveUserProfileToStorage();
+      }
+      activeHoldAndSpinSession = null;
       clearSlotTimers();
       setPokieMarqueeFast(false);
+      if (slotHoldAndSpinScreen) slotHoldAndSpinScreen.classList.add('hidden');
+      if (slotMainGameScreen) slotMainGameScreen.classList.remove('hidden');
       if (slotMachineModal) {
         slotMachineModal.classList.add('hidden');
       }
@@ -7936,41 +8422,57 @@ export default function App() {
         slotSpinBtn.disabled = false;
       }
       if (slotSpinBtnLabel) {
-        slotSpinBtnLabel.innerText = `SPIN REELS • $${SLOT_SPIN_COST}`;
+        slotSpinBtnLabel.innerText = `SPIN REELS • $${selectedPokieBet}`;
       }
+      syncProfileUI();
     }
 
     function handleSpinSlotMachine(forcedStops?: [number, number, number]) {
       sound.init();
-      if (isSlotSpinning) return null;
+      if (isSlotSpinning || activeHoldAndSpinSession) return null;
 
       userProfile.balance = Number.isFinite(userProfile.balance)
         ? Math.max(0, Math.floor(userProfile.balance))
         : INITIAL_PLAYER_BALANCE;
 
-      if (userProfile.balance < SLOT_SPIN_COST) {
+      const spinCost = selectedPokieBet;
+
+      if (userProfile.balance < spinCost) {
         sound.playUiBack();
         if (slotStatusBanner) {
-          slotStatusBanner.innerText = `NEED $${SLOT_SPIN_COST} TO SPIN! PLAY A MATCH OR REDEEM COUPON 'HACK' IN PROFILE!`;
+          slotStatusBanner.innerText =
+            spinCost === 100 && userProfile.balance >= 10
+              ? 'NEED $100 FOR HIGH-ROLLER SPIN! SWITCH TO $10 BET OR REDEEM COUPON "HACK" IN PROFILE!'
+              : `NEED $${spinCost} TO SPIN! PLAY A MATCH OR REDEEM COUPON "HACK" IN PROFILE!`;
           slotStatusBanner.className =
-            'p-2.5 rounded-2xl bg-rose-200 border-2 border-slate-900 text-rose-950 font-black text-xs uppercase tracking-wide text-center shadow-[0_3px_0_#0f172a]';
+            'p-2 rounded-2xl bg-rose-200 border-2 border-slate-900 text-rose-950 font-black text-[11px] uppercase tracking-wide text-center mb-2 shadow-[0_3px_0_#0f172a]';
         }
         return null;
       }
 
       const balanceBeforeSpin = userProfile.balance;
-      const finalResult = spinPokieReels(
-        SLOT_SPIN_COST,
-        userProfile.jackpotPool,
-        Math.random,
-        forcedStops
+      const currentMachinePool10 =
+        userProfile.machineJackpots[selectedPokieMachine] ||
+        POKIE_MACHINES[selectedPokieMachine].baseJackpot10;
+      const effectivePoolBefore = getMachineEffectiveJackpot(
+        selectedPokieMachine,
+        spinCost,
+        currentMachinePool10
       );
 
-      // Deduct spin cost immediately & increment progressive jackpot pool while spinning
-      userProfile.balance = Math.max(0, balanceBeforeSpin - SLOT_SPIN_COST);
-      userProfile.jackpotPool = Math.round(userProfile.jackpotPool + SLOT_SPIN_COST * 0.2);
+      const finalResult = spinPokieReels(
+        spinCost,
+        effectivePoolBefore,
+        Math.random,
+        forcedStops,
+        selectedPokieMachine
+      );
+
+      // Deduct spin cost immediately & increment machine's progressive jackpot pool while spinning
+      userProfile.balance = Math.max(0, balanceBeforeSpin - spinCost);
+      userProfile.machineJackpots[selectedPokieMachine] = Math.round(currentMachinePool10 + 2);
       saveUserProfileToStorage();
-      syncProfileUI();
+      syncPokieMachineThemeAndBetUI();
 
       isSlotSpinning = true;
       setPokieMarqueeFast(true);
@@ -7980,29 +8482,28 @@ export default function App() {
         slotSpinBtn.disabled = true;
       }
       if (slotSpinBtnLabel) {
-        slotSpinBtnLabel.innerText = 'SPINNING REELS...';
+        slotSpinBtnLabel.innerText = `SPINNING • $${spinCost}...`;
       }
       if (slotBalanceDeltaBadge) {
         slotBalanceDeltaBadge.classList.add('hidden');
       }
       if (slotWinAmountBadge) {
         slotWinAmountBadge.innerText = '$0';
-        slotWinAmountBadge.className = 'font-mono-num text-sm sm:text-lg font-black text-slate-500 mt-0.5';
+        slotWinAmountBadge.className = 'font-mono-num text-sm sm:text-base font-black text-slate-500 mt-0.5';
       }
       if (slotStatusBanner) {
-        slotStatusBanner.innerText = '⚡ REELS SPINNING • WATCH THE 5 PAYLINES! ⚡';
+        slotStatusBanner.innerText = `⚡ SPINNING ${POKIE_MACHINES[selectedPokieMachine].shortName.toUpperCase()} ($${spinCost} BET)... ⚡`;
         slotStatusBanner.className =
-          'p-2.5 rounded-2xl bg-sky-200 border-2 border-slate-900 text-slate-900 font-black text-xs uppercase tracking-wide text-center shadow-[0_3px_0_#0f172a]';
+          'p-2 rounded-2xl bg-sky-200 border-2 border-slate-900 text-slate-900 font-black text-[11px] uppercase tracking-wide text-center mb-2 shadow-[0_2px_0_#0f172a]';
       }
 
       sound.playSlotSpin();
       const isTeaser = finalResult.isTeaserTwoReels;
 
-      // Rapid visual symbol cycling while reels are in motion
       const spinStart = performance.now();
-      const stopReel0Ms = 420;
-      const stopReel1Ms = 780;
-      const stopReel2Ms = isTeaser ? 1320 : 1080;
+      const stopReel0Ms = 400;
+      const stopReel1Ms = 750;
+      const stopReel2Ms = isTeaser ? 1240 : 1020;
 
       const tickInterval = setInterval(() => {
         const elapsed = performance.now() - spinStart;
@@ -8030,35 +8531,35 @@ export default function App() {
       }, 72);
       slotSpinTimeouts.push(tickInterval as unknown as ReturnType<typeof setTimeout>);
 
-      // Stop Reel 1
       slotSpinTimeouts.push(
         setTimeout(() => {
           sound.playSlotReelStop(0, false);
         }, stopReel0Ms)
       );
 
-      // Stop Reel 2
       slotSpinTimeouts.push(
         setTimeout(() => {
           sound.playSlotReelStop(1, isTeaser);
           if (isTeaser && slotStatusBanner) {
-            slotStatusBanner.innerText = '🔥 2-REEL TEASER! REEL 3 WINDING UP FOR BIG WIN... 🔥';
+            slotStatusBanner.innerText = '🔥 2-REEL TEASER! REEL 3 WINDING UP FOR JACKPOT / HOLD & SPIN... 🔥';
             slotStatusBanner.className =
-              'p-2.5 rounded-2xl bg-amber-300 border-2 border-slate-900 text-slate-950 font-black text-xs uppercase tracking-wide text-center shadow-[0_3px_0_#0f172a] animate-pulse';
+              'p-2 rounded-2xl bg-amber-300 border-2 border-slate-900 text-slate-950 font-black text-[11px] uppercase tracking-wide text-center mb-2 shadow-[0_2px_0_#0f172a] animate-pulse';
           }
         }, stopReel1Ms)
       );
 
-      // Stop Reel 3 & Evaluate Win
       slotSpinTimeouts.push(
         setTimeout(() => {
           clearInterval(tickInterval);
           sound.playSlotReelStop(2, false);
           currentPokieGrid = finalResult.grid;
-          userProfile.balance = Math.max(0, balanceBeforeSpin - SLOT_SPIN_COST + finalResult.totalPayout);
-          userProfile.jackpotPool = finalResult.updatedJackpotPool;
+          userProfile.balance = Math.max(0, balanceBeforeSpin - spinCost + finalResult.totalPayout);
+          if (finalResult.isJackpot) {
+            userProfile.machineJackpots[selectedPokieMachine] =
+              POKIE_MACHINES[selectedPokieMachine].baseJackpot10;
+          }
           saveUserProfileToStorage();
-          syncProfileUI();
+          syncPokieMachineThemeAndBetUI();
 
           const winCells = new Set<string>();
           const hitLineIds: number[] = [];
@@ -8081,19 +8582,18 @@ export default function App() {
             sound.playSlotWin(finalResult.winTier === 'NONE' ? 'SMALL' : finalResult.winTier);
             setPokieMarqueeFast(true);
             if (slotBalanceDeltaBadge) {
-              slotBalanceDeltaBadge.innerText = `+$${finalResult.totalPayout}`;
+              slotBalanceDeltaBadge.innerText = `+$${finalResult.totalPayout.toLocaleString()}`;
               slotBalanceDeltaBadge.classList.remove('hidden');
             }
             if (slotWinAmountBadge) {
-              slotWinAmountBadge.innerText = `+$${finalResult.totalPayout}`;
+              slotWinAmountBadge.innerText = `+$${finalResult.totalPayout.toLocaleString()}`;
               slotWinAmountBadge.className =
                 finalResult.winTier === 'JACKPOT' || finalResult.winTier === 'MEGA'
-                  ? 'font-mono-num text-base sm:text-lg font-black text-amber-600 animate-bounce mt-0.5'
-                  : 'font-mono-num text-sm sm:text-lg font-black text-emerald-700 mt-0.5';
+                  ? 'font-mono-num text-sm sm:text-base font-black text-amber-600 animate-bounce mt-0.5'
+                  : 'font-mono-num text-sm sm:text-base font-black text-emerald-700 mt-0.5';
             }
 
-            // Animate payout & bankroll count-up with coin clink SFX
-            const startBal = Math.max(0, balanceBeforeSpin - SLOT_SPIN_COST);
+            const startBal = Math.max(0, balanceBeforeSpin - spinCost);
             const endBal = userProfile.balance;
             const slotBalEl = document.getElementById('slotBalanceDisplay');
             const countSteps = 8;
@@ -8109,8 +8609,8 @@ export default function App() {
                 cStep >= countSteps
                   ? endBal
                   : Math.round(startBal + ((endBal - startBal) * cStep) / countSteps);
-              if (slotWinAmountBadge) slotWinAmountBadge.innerText = `+$${curWin}`;
-              if (slotBalEl) slotBalEl.innerText = `$${curBal}`;
+              if (slotWinAmountBadge) slotWinAmountBadge.innerText = `+$${curWin.toLocaleString()}`;
+              if (slotBalEl) slotBalEl.innerText = `$${curBal.toLocaleString()}`;
               if (cStep >= countSteps) {
                 clearInterval(winCountInterval);
               }
@@ -8124,22 +8624,22 @@ export default function App() {
                       .map((l) => `${l.lineName}${l.hasWildMultiplier ? ' (2X WILD!)' : ''}`)
                       .join(' + ')
                   : finalResult.scatterCount >= 2
-                    ? `${finalResult.scatterCount}X CROWN SCATTERS`
+                    ? `${finalResult.scatterCount}X BONUS ORBS`
                     : '';
               slotStatusBanner.innerText = lineSummary
                 ? `${finalResult.headline} • ${lineSummary}`
                 : finalResult.headline;
               slotStatusBanner.className =
-                finalResult.winTier === 'JACKPOT'
-                  ? 'p-2.5 rounded-2xl bg-gradient-to-r from-amber-300 via-yellow-200 to-amber-300 border-2 border-slate-900 text-slate-900 font-black text-xs sm:text-sm uppercase tracking-wide text-center shadow-[0_4px_0_#0f172a]'
-                  : 'p-2.5 rounded-2xl bg-emerald-300 border-2 border-slate-900 text-slate-950 font-black text-xs uppercase tracking-wide text-center shadow-[0_3px_0_#0f172a]';
+                finalResult.winTier === 'JACKPOT' || finalResult.triggersHoldAndSpin
+                  ? 'p-2 rounded-2xl bg-gradient-to-r from-amber-300 via-yellow-200 to-amber-300 border-2 border-slate-900 text-slate-900 font-black text-[11px] uppercase tracking-wide text-center mb-2 shadow-[0_3px_0_#0f172a]'
+                  : 'p-2 rounded-2xl bg-emerald-300 border-2 border-slate-900 text-slate-950 font-black text-[11px] uppercase tracking-wide text-center mb-2 shadow-[0_2px_0_#0f172a]';
             }
           } else {
             setPokieMarqueeFast(false);
             if (slotStatusBanner) {
               slotStatusBanner.innerText = finalResult.headline;
               slotStatusBanner.className =
-                'p-2.5 rounded-2xl bg-slate-100 border-2 border-slate-900 text-slate-700 font-extrabold text-xs uppercase tracking-wide text-center shadow-[0_2px_0_#0f172a]';
+                'p-2 rounded-2xl bg-slate-100 border-2 border-slate-900 text-slate-700 font-extrabold text-[11px] uppercase tracking-wide text-center mb-2 shadow-[0_2px_0_#0f172a]';
             }
           }
 
@@ -8148,12 +8648,40 @@ export default function App() {
             slotSpinBtn.disabled = false;
           }
           if (slotSpinBtnLabel) {
-            slotSpinBtnLabel.innerText = `SPIN REELS • $${SLOT_SPIN_COST}`;
+            slotSpinBtnLabel.innerText = `SPIN REELS • $${selectedPokieBet}`;
+          }
+
+          // Transition into the separate HOLD & SPIN screen if 3+ Bonus Orbs landed!
+          if (finalResult.triggersHoldAndSpin) {
+            const enterBonusTimer = setTimeout(() => {
+              triggerHoldAndSpinBonus(finalResult.scatterPositions);
+            }, 620);
+            slotSpinTimeouts.push(enterBonusTimer);
           }
         }, stopReel2Ms)
       );
 
       return finalResult;
+    }
+
+    for (const m of POKIE_MACHINE_LIST) {
+      const mBtn = document.getElementById(`slotMachineBtn_${m.id}`);
+      if (mBtn) {
+        mBtn.addEventListener('click', () => selectPokieMachine(m.id));
+      }
+    }
+    const slotBet10Btn = document.getElementById('slotBet10Btn');
+    const slotBet100Btn = document.getElementById('slotBet100Btn');
+    if (slotBet10Btn) {
+      slotBet10Btn.addEventListener('click', () => selectPokieBet(10));
+    }
+    if (slotBet100Btn) {
+      slotBet100Btn.addEventListener('click', () => selectPokieBet(100));
+    }
+    if (holdSpinActionBtn) {
+      holdSpinActionBtn.addEventListener('click', () => {
+        handleHoldAndSpinRespinStep(false);
+      });
     }
 
     if (openSlotMachineBtn) {
@@ -9195,11 +9723,31 @@ export default function App() {
         if (splashEl) splashEl.classList.add('hidden');
         openSlotMachineModal();
       },
+      selectPokieMachine(machineId: PokieMachineId) {
+        selectPokieMachine(machineId);
+      },
+      selectPokieBet(betAmount: PokieBetAmount) {
+        selectPokieBet(betAmount);
+      },
       spinSlotMachine(forcedStops?: [number, number, number]) {
         return handleSpinSlotMachine(forcedStops);
       },
+      triggerHoldAndSpin() {
+        return triggerHoldAndSpinBonus();
+      },
+      stepHoldAndSpin(forceFillAll = false) {
+        return handleHoldAndSpinRespinStep(forceFillAll);
+      },
+      collectHoldAndSpin() {
+        finishAndCollectHoldAndSpin();
+      },
       getProfileState() {
-        return { ...userProfile };
+        return {
+          ...userProfile,
+          selectedPokieMachine,
+          selectedPokieBet,
+          activeHoldAndSpinSession,
+        };
       },
     };
 
@@ -9881,8 +10429,22 @@ export default function App() {
               </h1>
             </div>
 
-            {/* Clickable Player Profile Card (No money amount displayed on Main Menu) */}
+            {/* Home Menu Money Display + Clickable Player Profile Card */}
             <div id="menuProfileBar" className="flex flex-wrap items-center justify-center gap-2 sm:gap-2.5 relative">
+              <div
+                id="menuWalletBadge"
+                title="Club Bankroll (Earned from Matches & Pokies)"
+                className="flex items-center gap-1.5 px-3 py-1.5 sm:px-3.5 sm:py-2 rounded-2xl bg-gradient-to-b from-amber-200 via-yellow-200 to-amber-300 border-[2.5px] border-slate-900 shadow-[0_3px_0_#0f172a] select-none"
+              >
+                <PixelGoldCoinIcon className="w-4 h-4 sm:w-5 sm:h-5 shrink-0 coin-bob" />
+                <span
+                  id="menuBalanceText"
+                  className="font-mono-num text-xs sm:text-sm font-black text-slate-900 tracking-tight"
+                >
+                  $30
+                </span>
+              </div>
+
               <button
                 id="editProfileBtn"
                 type="button"
@@ -10215,11 +10777,11 @@ export default function App() {
               <button
                 id="openSlotMachineBtn"
                 type="button"
-                aria-label="Open Rematch Jackpot Pokie Machine"
-                className="indie-cta-btn w-full sm:w-auto sm:min-w-[205px] sm:max-w-[270px] min-h-[46px] sm:min-h-[50px] py-2.5 sm:py-3 px-5 rounded-2xl bg-gradient-to-r from-amber-300 via-yellow-300 to-amber-400 hover:from-amber-200 hover:to-yellow-200 text-slate-900 font-black text-xs sm:text-sm tracking-wide cursor-pointer flex items-center justify-center space-x-2.5"
+                aria-label="Open Pokies Lounge"
+                className="indie-cta-btn w-full sm:w-auto sm:min-w-[165px] sm:max-w-[230px] min-h-[46px] sm:min-h-[50px] py-2.5 sm:py-3 px-5 rounded-2xl bg-gradient-to-r from-amber-300 via-yellow-300 to-amber-400 hover:from-amber-200 hover:to-yellow-200 text-slate-900 font-black text-xs sm:text-sm tracking-wide cursor-pointer flex items-center justify-center space-x-2.5"
               >
                 <PixelSlotMachineIcon className="w-5 h-5 shrink-0" />
-                <span className="truncate">JACKPOT POKIES</span>
+                <span className="truncate">POKIES</span>
               </button>
 
               <button
@@ -10531,7 +11093,7 @@ export default function App() {
               <span>Edit Name &amp; Avatar</span>
             </button>
 
-            {/* Coupon Code Redemption Section at the Bottom of Player Profile UI (Enter HACK for +$100 / 10 Spins) */}
+            {/* Coupon Code Redemption Section at the Bottom of Player Profile UI (Extra text only pops up after code entry, resets on close) */}
             <div
               id="profileCouponSection"
               className="p-3.5 rounded-2xl bg-amber-50/90 border-2 border-slate-900 shadow-[0_3px_0_#0f172a]"
@@ -10544,9 +11106,6 @@ export default function App() {
                   <i className="fa-solid fa-ticket text-amber-500" />
                   <span>Redeem Promo Coupon</span>
                 </label>
-                <span className="text-[10px] font-extrabold text-amber-800 bg-amber-200 px-2 py-0.5 rounded-full border border-amber-400">
-                  $10 / Spin
-                </span>
               </div>
               <div className="flex items-center gap-2">
                 <input
@@ -10662,38 +11221,47 @@ export default function App() {
         </div>
       </div>
 
-      {/* REMATCH JACKPOT POKIES — Neo-Brutalist 16-Bit Sports Arcade Cabinet Modal */}
+      {/* REMATCH POKIES LOUNGE — 3 Stadium Machines, $10/$100 Stakes & Separate Hold & Spin Bonus Screen */}
       <div
         id="slotMachineModal"
-        className="hidden fixed inset-0 z-50 bg-slate-950/80 flex items-center justify-center p-2.5 sm:p-4 overflow-y-auto"
+        className="hidden fixed inset-0 z-50 bg-slate-950/82 flex items-center justify-center p-2 sm:p-3.5 overflow-y-auto"
       >
-        <div className="glass-modal screen-enter rounded-[28px] sm:rounded-[30px] max-w-xl w-full p-3.5 sm:p-4 text-left relative my-auto border-3 border-slate-900 shadow-[0_10px_0_#0f172a] bg-gradient-to-b from-white via-slate-50 to-amber-50/40">
+        <div
+          id="slotCabinetCard"
+          className="glass-modal screen-enter rounded-[26px] sm:rounded-[30px] max-w-xl w-full p-3 sm:p-4 text-left relative my-auto border-3 border-slate-900 shadow-[0_10px_0_#0f172a]"
+        >
           {/* Top Arcade Marquee Header with Chasing Stadium Floodlight Bulbs */}
-          <div className="p-2.5 sm:p-3 rounded-2xl bg-slate-900 border-2 border-slate-950 shadow-[0_4px_0_#0f172a] mb-2.5 relative overflow-hidden">
-            {/* Chasing Bulb Strip */}
-            <div id="slotMarqueeBar" className="flex items-center justify-between px-1 mb-1.5">
+          <div
+            id="slotCabinetHeader"
+            className="p-2.5 rounded-2xl bg-slate-900 border-2 border-amber-400 shadow-[0_4px_0_#0f172a] mb-2 relative overflow-hidden"
+          >
+            <div id="slotMarqueeBar" className="flex items-center justify-between px-1 mb-1">
               {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11].map((idx) => (
                 <span
                   key={idx}
                   style={{ animationDelay: `${idx * 90}ms` }}
-                  className={`slot-bulb-dot slot-marquee-bulb w-2 h-2 rounded-full border border-slate-950 ${
-                    idx % 3 === 0 ? 'bg-amber-300' : idx % 3 === 1 ? 'bg-sky-400' : 'bg-emerald-400'
-                  }`}
+                  className="slot-bulb-dot slot-marquee-bulb w-2 h-2 rounded-full border border-slate-950 bg-amber-300"
                 />
               ))}
             </div>
 
             <div className="flex items-center justify-between gap-2">
               <div className="flex items-center space-x-2.5 min-w-0">
-                <div className="w-10 h-10 rounded-2xl bg-gradient-to-b from-amber-300 to-amber-400 border-2 border-slate-950 shadow-[0_3px_0_#000000] flex items-center justify-center shrink-0">
-                  <PixelSlotMachineIcon className="w-6 h-6" />
+                <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-2xl bg-gradient-to-b from-amber-300 to-amber-400 border-2 border-slate-950 shadow-[0_3px_0_#000000] flex items-center justify-center shrink-0">
+                  <PixelSlotMachineIcon className="w-5 h-5 sm:w-6 sm:h-6" />
                 </div>
                 <div className="min-w-0">
-                  <div className="text-[9px] font-black uppercase tracking-widest text-amber-300 truncate">
-                    CLUB ARCADE LOUNGE • 5 PAYLINES + 2X WILD STAR
+                  <div
+                    id="slotCabinetTagline"
+                    className="text-[8.5px] sm:text-[9px] font-black uppercase tracking-widest text-amber-300 truncate"
+                  >
+                    CHAMPIONS CATHEDRAL • ROYAL EMERALD &amp; GOLD ARENA
                   </div>
-                  <h2 className="text-base sm:text-lg font-black text-white tracking-tight truncate">
-                    REMATCH JACKPOT POKIES
+                  <h2
+                    id="slotCabinetTitle"
+                    className="text-sm sm:text-lg font-black text-white tracking-tight truncate"
+                  >
+                    CHAMPIONS GOLD POKIES
                   </h2>
                 </div>
               </div>
@@ -10701,7 +11269,7 @@ export default function App() {
                 id="closeSlotModalBtn"
                 type="button"
                 aria-label="Close Pokie Machine"
-                className="btn-clean w-9 h-9 rounded-xl bg-slate-800 hover:bg-rose-500 border-2 border-slate-950 text-white font-black text-sm flex items-center justify-center cursor-pointer shrink-0 shadow-[0_2px_0_#000000]"
+                className="btn-clean w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-slate-800 hover:bg-rose-500 border-2 border-slate-950 text-white font-black text-sm flex items-center justify-center cursor-pointer shrink-0 shadow-[0_2px_0_#000000]"
               >
                 <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
                   <line x1="18" y1="6" x2="6" y2="18" />
@@ -10711,214 +11279,395 @@ export default function App() {
             </div>
           </div>
 
-          {/* Progressive Grand Jackpot, Club Gold Coin Wallet & Last Win Readout */}
-          <div className="grid grid-cols-3 gap-2 mb-2.5">
-            <div className="p-2 rounded-2xl bg-gradient-to-b from-amber-200 via-yellow-200 to-amber-300 border-2 border-slate-900 shadow-[0_3px_0_#0f172a] text-center relative overflow-hidden">
-              <div className="text-[8.5px] sm:text-[9px] font-black uppercase tracking-wider text-amber-950 flex items-center justify-center gap-1">
-                <span>🏆 GRAND JACKPOT</span>
+          {/* 3-Machine Stadium Selector Bar (Each with Distinct Aesthetic & Progressive Jackpot) */}
+          <div id="slotMachineSelectorBar" className="grid grid-cols-3 gap-1.5 sm:gap-2 mb-2">
+            {POKIE_MACHINE_LIST.map((m) => (
+              <button
+                key={m.id}
+                id={`slotMachineBtn_${m.id}`}
+                type="button"
+                data-machine-id={m.id}
+                className="slot-machine-select-btn p-2 rounded-2xl border-2 border-slate-900 bg-white text-left transition-all cursor-pointer"
+              >
+                <div className="flex items-center justify-between gap-1">
+                  <span
+                    id={`slotMachineName_${m.id}`}
+                    className="text-[9.5px] sm:text-[11px] font-black uppercase tracking-tight truncate"
+                  >
+                    {m.shortName}
+                  </span>
+                </div>
+                <div
+                  id={`slotMachineSub_${m.id}`}
+                  className="text-[7.5px] sm:text-[8.5px] font-extrabold uppercase tracking-wider truncate mt-0.5"
+                >
+                  {m.stadiumName}
+                </div>
+                <div className="mt-1 flex items-center justify-between">
+                  <span className="text-[7.5px] font-black uppercase text-amber-400">JACKPOT</span>
+                  <span
+                    id={`slotMachineJackpot_${m.id}`}
+                    className="font-mono-num text-[9px] sm:text-[10px] font-black px-1.5 py-0.2 rounded bg-amber-300 text-slate-950 border border-slate-950"
+                  >
+                    ${m.baseJackpot10}
+                  </span>
+                </div>
+              </button>
+            ))}
+          </div>
+
+          {/* Progressive Grand Jackpot, Bankroll, Last Payout & $10 / $100 Bet Selector */}
+          <div className="grid grid-cols-12 gap-1.5 sm:gap-2 mb-2 items-stretch">
+            <div className="col-span-4 p-1.5 sm:p-2 rounded-2xl bg-gradient-to-b from-amber-200 via-yellow-200 to-amber-300 border-2 border-slate-900 shadow-[0_3px_0_#0f172a] text-center flex flex-col justify-center">
+              <div className="text-[8px] sm:text-[8.5px] font-black uppercase tracking-wider text-amber-950">
+                🏆 GRAND JACKPOT
               </div>
               <div
                 id="slotJackpotDisplay"
-                className="font-mono-num text-sm sm:text-base font-black text-slate-900 mt-0.5"
+                className="font-mono-num text-xs sm:text-base font-black text-slate-900 mt-0.5"
               >
                 $500
               </div>
             </div>
 
-            <div className="p-2 rounded-2xl bg-emerald-100 border-2 border-slate-900 shadow-[0_3px_0_#0f172a] text-center relative">
-              <div className="text-[8.5px] sm:text-[9px] font-black uppercase tracking-wider text-emerald-950 flex items-center justify-center gap-1">
-                <PixelGoldCoinIcon className="w-3.5 h-3.5 shrink-0" />
-                <span>YOUR BANKROLL</span>
+            <div className="col-span-4 p-1.5 sm:p-2 rounded-2xl bg-emerald-100 border-2 border-slate-900 shadow-[0_3px_0_#0f172a] text-center flex flex-col justify-center">
+              <div className="text-[8px] sm:text-[8.5px] font-black uppercase tracking-wider text-emerald-950 flex items-center justify-center gap-1">
+                <PixelGoldCoinIcon className="w-3 h-3 sm:w-3.5 sm:h-3.5 shrink-0" />
+                <span>BANKROLL</span>
               </div>
               <div className="flex items-center justify-center gap-1 mt-0.5">
                 <span
                   id="slotBalanceDisplay"
-                  className="font-mono-num text-sm sm:text-base font-black text-emerald-900"
+                  className="font-mono-num text-xs sm:text-base font-black text-emerald-900"
                 >
                   $30
                 </span>
                 <span
                   id="slotBalanceDeltaBadge"
-                  className="hidden font-mono-num text-[9px] font-black px-1.5 py-0.2 rounded-full bg-amber-300 border border-slate-900 text-slate-900 animate-bounce"
+                  className="hidden font-mono-num text-[8.5px] font-black px-1.5 py-0.2 rounded-full bg-amber-300 border border-slate-900 text-slate-900 animate-bounce"
                 >
                   +$20
                 </span>
               </div>
             </div>
 
-            <div className="p-2 rounded-2xl bg-sky-100 border-2 border-slate-900 shadow-[0_3px_0_#0f172a] text-center">
-              <div className="text-[8.5px] sm:text-[9px] font-black uppercase tracking-wider text-sky-950">
-                ⚡ LAST PAYOUT
+            <div className="col-span-4 p-1.5 sm:p-2 rounded-2xl bg-sky-100 border-2 border-slate-900 shadow-[0_3px_0_#0f172a] text-center flex flex-col justify-center">
+              <div className="text-[8px] sm:text-[8.5px] font-black uppercase tracking-wider text-sky-950">
+                ⚡ LAST WIN
               </div>
               <div
                 id="slotWinAmountBadge"
-                className="font-mono-num text-sm sm:text-base font-black text-slate-600 mt-0.5"
+                className="font-mono-num text-xs sm:text-base font-black text-slate-600 mt-0.5"
               >
                 $0
               </div>
             </div>
           </div>
 
-          {/* 3x3 Arcade Pokie Reel Cabinet with Left & Right Payline Indicators */}
-          <div className="p-2.5 sm:p-3 rounded-3xl bg-slate-900 border-3 border-slate-950 shadow-[0_4px_0_#0f172a,inset_0_4px_12px_rgba(0,0,0,0.65)] mb-2.5 relative">
-            <div className="flex items-center justify-between text-[9px] font-black uppercase tracking-widest text-amber-300 mb-1.5 px-1">
-              <span className="flex items-center gap-1.5">
-                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-                <span>5 ACTIVE PAYLINES (MID • TOP • BOT • ↘ • ↗)</span>
-              </span>
-              <span id="slotSpinsLeftDisplay" className="text-emerald-300 font-mono-num">
-                3 SPINS READY
-              </span>
+          {/* Bet Stakes Selector Bar ($10 Standard vs $100 High-Roller) */}
+          <div className="flex items-center justify-between gap-2 p-1.5 sm:p-2 rounded-2xl bg-white border-2 border-slate-900 shadow-[0_2px_0_#0f172a] mb-2">
+            <div className="flex items-center gap-1.5 pl-1">
+              <PixelGoldCoinIcon className="w-4 h-4 shrink-0" />
+              <div>
+                <div className="text-[9px] sm:text-[10px] font-black uppercase tracking-wider text-slate-900 leading-tight">
+                  CHOOSE SPIN STAKES
+                </div>
+                <div className="text-[8px] font-bold text-slate-500 leading-tight">
+                  $100 Bet = 10x Line Wins &amp; 10x Jackpot!
+                </div>
+              </div>
             </div>
+            <div className="flex items-center gap-1.5 shrink-0">
+              <button
+                id="slotBet10Btn"
+                type="button"
+                className="py-1.5 px-3 rounded-xl font-mono-num text-xs font-black bg-amber-300 text-slate-900 border-2 border-slate-900 shadow-[0_2px_0_#0f172a] cursor-pointer transition-all"
+              >
+                $10 SPIN
+              </button>
+              <button
+                id="slotBet100Btn"
+                type="button"
+                className="py-1.5 px-3 rounded-xl font-mono-num text-xs font-extrabold bg-slate-100 text-slate-600 hover:text-slate-900 border border-slate-300 cursor-pointer transition-all"
+              >
+                $100 SPIN
+              </button>
+            </div>
+          </div>
 
-            <div className="flex items-stretch gap-1.5 sm:gap-2">
-              {/* Left Payline Anchor Pills */}
-              <div className="flex flex-col justify-around py-1.5 shrink-0 select-none">
-                <span
-                  id="slotPaylineLeft_4"
-                  title="Payline 4: Diagonal Down"
-                  className="px-1.5 py-0.5 rounded-md bg-emerald-400 text-slate-950 font-mono-num text-[8px] font-black border border-slate-950 transition-all"
-                >
-                  4↘
+          {/* =================================================================== */}
+          {/* SCREEN MODE 1: MAIN 3x3 5-PAYLINE REEL CABINET                      */}
+          {/* =================================================================== */}
+          <div id="slotMainGameScreen">
+            <div
+              id="slotReelHousing"
+              className="p-2 sm:p-2.5 rounded-3xl bg-slate-900 border-3 border-amber-400 shadow-[0_4px_0_#0f172a,inset_0_4px_12px_rgba(0,0,0,0.65)] mb-2 relative"
+            >
+              <div className="flex items-center justify-between text-[8.5px] sm:text-[9px] font-black uppercase tracking-widest text-amber-300 mb-1.5 px-1">
+                <span className="flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+                  <span>5 PAYLINES • 3+ CROWN ORBS = HOLD &amp; SPIN</span>
                 </span>
-                <span
-                  id="slotPaylineLeft_2"
-                  title="Payline 2: Top Row"
-                  className="px-1.5 py-0.5 rounded-md bg-sky-400 text-slate-950 font-mono-num text-[8px] font-black border border-slate-950 transition-all"
-                >
-                  2─
-                </span>
-                <span
-                  id="slotPaylineLeft_1"
-                  title="Payline 1: Center Row"
-                  className="px-1.5 py-0.5 rounded-md bg-amber-300 text-slate-950 font-mono-num text-[8px] font-black border border-slate-950 transition-all"
-                >
-                  1═
-                </span>
-                <span
-                  id="slotPaylineLeft_3"
-                  title="Payline 3: Bottom Row"
-                  className="px-1.5 py-0.5 rounded-md bg-rose-400 text-slate-950 font-mono-num text-[8px] font-black border border-slate-950 transition-all"
-                >
-                  3─
-                </span>
-                <span
-                  id="slotPaylineLeft_5"
-                  title="Payline 5: Diagonal Up"
-                  className="px-1.5 py-0.5 rounded-md bg-fuchsia-400 text-slate-950 font-mono-num text-[8px] font-black border border-slate-950 transition-all"
-                >
-                  5↗
+                <span id="slotSpinsLeftDisplay" className="text-emerald-300 font-mono-num">
+                  3 SPINS READY
                 </span>
               </div>
 
-              {/* 3x3 Reel Window */}
-              <div className="flex-1 grid grid-cols-3 gap-2 bg-slate-950 p-2 rounded-2xl border-2 border-slate-700 overflow-hidden relative">
-                {[0, 1, 2].map((col) => (
-                  <div
-                    key={col}
-                    id={`slotReelCol${col}`}
-                    className="flex flex-col gap-1.5 transition-transform duration-100"
+              <div className="flex items-stretch gap-1.5 sm:gap-2">
+                {/* Left Payline Anchor Pills */}
+                <div className="flex flex-col justify-around py-1 shrink-0 select-none">
+                  <span
+                    id="slotPaylineLeft_4"
+                    title="Payline 4: Diagonal Down"
+                    className="px-1.5 py-0.5 rounded-md bg-emerald-400 text-slate-950 font-mono-num text-[8px] font-black border border-slate-950 transition-all"
                   >
+                    4↘
+                  </span>
+                  <span
+                    id="slotPaylineLeft_2"
+                    title="Payline 2: Top Row"
+                    className="px-1.5 py-0.5 rounded-md bg-sky-400 text-slate-950 font-mono-num text-[8px] font-black border border-slate-950 transition-all"
+                  >
+                    2─
+                  </span>
+                  <span
+                    id="slotPaylineLeft_1"
+                    title="Payline 1: Center Row"
+                    className="px-1.5 py-0.5 rounded-md bg-amber-300 text-slate-950 font-mono-num text-[8px] font-black border border-slate-950 transition-all"
+                  >
+                    1═
+                  </span>
+                  <span
+                    id="slotPaylineLeft_3"
+                    title="Payline 3: Bottom Row"
+                    className="px-1.5 py-0.5 rounded-md bg-rose-400 text-slate-950 font-mono-num text-[8px] font-black border border-slate-950 transition-all"
+                  >
+                    3─
+                  </span>
+                  <span
+                    id="slotPaylineLeft_5"
+                    title="Payline 5: Diagonal Up"
+                    className="px-1.5 py-0.5 rounded-md bg-fuchsia-400 text-slate-950 font-mono-num text-[8px] font-black border border-slate-950 transition-all"
+                  >
+                    5↗
+                  </span>
+                </div>
+
+                {/* 3x3 Reel Window */}
+                <div className="flex-1 grid grid-cols-3 gap-1.5 sm:gap-2 bg-slate-950 p-1.5 sm:p-2 rounded-2xl border-2 border-slate-700 overflow-hidden relative">
+                  {[0, 1, 2].map((col) => (
+                    <div
+                      key={col}
+                      id={`slotReelCol${col}`}
+                      className="flex flex-col gap-1.5 transition-transform duration-100"
+                    >
+                      {[0, 1, 2].map((row) => (
+                        <div
+                          key={row}
+                          id={`slotCell_${col}_${row}`}
+                          className="slot-symbol-cell rounded-2xl border-[2.5px] border-slate-900 bg-white p-1 sm:p-1.5 flex flex-col items-center justify-center text-center shadow-[0_3px_0_#0f172a] min-h-[58px] sm:min-h-[64px]"
+                        >
+                          <span className="text-xl sm:text-2xl leading-none">⚽</span>
+                          <span className="text-[8px] sm:text-[9px] font-black uppercase mt-1">GOLD BALL</span>
+                        </div>
+                      ))}
+                    </div>
+                  ))}
+                </div>
+
+                {/* Right Payline Anchor Pills */}
+                <div className="flex flex-col justify-around py-1 shrink-0 select-none">
+                  <span
+                    id="slotPaylineRight_5"
+                    className="px-1.5 py-0.5 rounded-md bg-fuchsia-400 text-slate-950 font-mono-num text-[8px] font-black border border-slate-950 transition-all"
+                  >
+                    ↗5
+                  </span>
+                  <span
+                    id="slotPaylineRight_2"
+                    className="px-1.5 py-0.5 rounded-md bg-sky-400 text-slate-950 font-mono-num text-[8px] font-black border border-slate-950 transition-all"
+                  >
+                    ─2
+                  </span>
+                  <span
+                    id="slotPaylineRight_1"
+                    className="px-1.5 py-0.5 rounded-md bg-amber-300 text-slate-950 font-mono-num text-[8px] font-black border border-slate-950 transition-all"
+                  >
+                    ═1
+                  </span>
+                  <span
+                    id="slotPaylineRight_3"
+                    className="px-1.5 py-0.5 rounded-md bg-rose-400 text-slate-950 font-mono-num text-[8px] font-black border border-slate-950 transition-all"
+                  >
+                    ─3
+                  </span>
+                  <span
+                    id="slotPaylineRight_4"
+                    className="px-1.5 py-0.5 rounded-md bg-emerald-400 text-slate-950 font-mono-num text-[8px] font-black border border-slate-950 transition-all"
+                  >
+                    ↘4
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Live Pokie Status & Win Callout Banner */}
+            <div
+              id="slotStatusBanner"
+              className="p-2 rounded-2xl bg-slate-100 border-2 border-slate-900 text-slate-800 font-black text-[11px] uppercase tracking-wide text-center mb-2 shadow-[0_2px_0_#0f172a]"
+            >
+              CHOOSE YOUR MACHINE &amp; BET • LAND 3+ CROWN ORBS FOR HOLD &amp; SPIN!
+            </div>
+
+            {/* Primary Arcade Spin Lever Button */}
+            <button
+              id="slotSpinBtn"
+              type="button"
+              className="indie-cta-btn w-full min-h-[46px] py-2.5 px-6 rounded-2xl bg-gradient-to-r from-emerald-400 via-teal-300 to-sky-400 hover:from-emerald-300 hover:to-sky-300 disabled:opacity-60 text-slate-900 font-black text-sm sm:text-base uppercase tracking-wider cursor-pointer flex items-center justify-center space-x-2.5 mb-2"
+            >
+              <PixelGoldCoinIcon className="w-5 h-5 sm:w-6 sm:h-6 shrink-0" />
+              <span id="slotSpinBtnLabel">SPIN REELS • $10</span>
+            </button>
+
+            {/* Clean, Structured Bottom Pokie Guide & Dynamic Paytable Footer */}
+            <div
+              id="slotPaytableFooter"
+              className="p-2.5 rounded-2xl bg-white border-2 border-slate-900 shadow-[0_3px_0_#0f172a] space-y-2"
+            >
+              <div className="flex items-center justify-between gap-2 border-b border-slate-200 pb-1.5">
+                <span className="text-[9.5px] font-black uppercase tracking-wider text-slate-800">
+                  HOW TO WIN &amp; PAYOUT GUIDE
+                </span>
+                <span
+                  id="slotPaytableBetBadge"
+                  className="px-2 py-0.5 rounded-full bg-slate-900 text-amber-300 font-mono-num text-[8.5px] font-black uppercase"
+                >
+                  $10 BET
+                </span>
+              </div>
+
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
+                <div className="p-1.5 rounded-xl bg-amber-100 border border-slate-900 text-left">
+                  <div className="text-[8px] font-black uppercase text-amber-900">🏆 3x GRAND CUP</div>
+                  <div id="slotPtJackpotVal" className="font-mono-num text-[10px] font-black text-slate-950 mt-0.5">
+                    $500
+                  </div>
+                </div>
+                <div className="p-1.5 rounded-xl bg-pink-100 border border-slate-900 text-left">
+                  <div className="text-[8px] font-black uppercase text-pink-900">👑 3+ CROWN ORBS</div>
+                  <div id="slotPtHoldVal" className="font-mono-num text-[9.5px] font-black text-slate-950 mt-0.5">
+                    +$150 + 3 RESPINS
+                  </div>
+                </div>
+                <div className="p-1.5 rounded-xl bg-sky-100 border border-slate-900 text-left">
+                  <div className="text-[8px] font-black uppercase text-sky-900">⭐ WILD STAR</div>
+                  <div id="slotPtWildVal" className="font-mono-num text-[9.5px] font-black text-slate-950 mt-0.5">
+                    2X LINE (3x = $400)
+                  </div>
+                </div>
+                <div className="p-1.5 rounded-xl bg-emerald-100 border border-slate-900 text-left">
+                  <div className="text-[8px] font-black uppercase text-emerald-900">⚽/👟/🔥/🍒 LINES</div>
+                  <div id="slotPtLineVal" className="font-mono-num text-[9.5px] font-black text-slate-950 mt-0.5">
+                    $10 – $200
+                  </div>
+                </div>
+              </div>
+
+              <div className="text-[9.5px] font-bold text-slate-600 leading-snug bg-slate-50 px-2.5 py-1.5 rounded-xl border border-slate-200">
+                <strong className="text-slate-900">HOLD &amp; SPIN FEATURE:</strong> Land <strong>3+ Crown Orbs</strong> anywhere to enter the bonus arena with <strong>3 Respins</strong>. Every new Orb locks cash/jackpot prizes and resets respins to 3 — fill all <strong>9/9 slots</strong> to win the <strong>Grand Jackpot</strong>!
+              </div>
+            </div>
+          </div>
+
+          {/* =================================================================== */}
+          {/* SCREEN MODE 2: SEPARATE HOLD & SPIN (HOLD & WIN) BONUS ARENA        */}
+          {/* =================================================================== */}
+          <div id="slotHoldAndSpinScreen" className="hidden">
+            <div className="p-2.5 sm:p-3 rounded-3xl bg-gradient-to-b from-slate-900 via-slate-950 to-indigo-950 border-3 border-amber-400 shadow-[0_6px_0_#0f172a] mb-2 text-white">
+              {/* Bonus Mode Header & Live Counters */}
+              <div className="flex flex-wrap items-center justify-between gap-2 pb-2 mb-2 border-b border-slate-800">
+                <div>
+                  <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-300 text-slate-950 text-[8.5px] font-black uppercase tracking-widest">
+                    <span>👑 SPECIAL BONUS ARENA</span>
+                  </div>
+                  <h3 id="holdSpinArenaTitle" className="text-sm sm:text-base font-black text-white mt-0.5">
+                    CHAMPIONS GOLD • HOLD &amp; SPIN
+                  </h3>
+                </div>
+
+                {/* 3 Respins Counter & Life Orbs */}
+                <div className="flex items-center gap-2 bg-slate-800/90 px-3 py-1.5 rounded-2xl border-2 border-amber-400">
+                  <div className="flex items-center gap-1">
+                    {[1, 2, 3].map((d) => (
+                      <span
+                        key={d}
+                        id={`holdSpinLifeDot_${d}`}
+                        className="w-3 h-3 rounded-full bg-amber-300 border-2 border-slate-950 shadow-[0_0_8px_#fde047]"
+                      />
+                    ))}
+                  </div>
+                  <div className="text-right">
+                    <div className="text-[7.5px] font-black uppercase text-amber-300 leading-none">RESPINS</div>
+                    <div id="holdSpinRespinsText" className="font-mono-num text-sm font-black text-white leading-tight">
+                      3
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Progress Bar: Locked Orbs & Total Bonus Pot */}
+              <div className="grid grid-cols-3 gap-1.5 mb-2 text-center">
+                <div className="p-1.5 rounded-xl bg-slate-800/90 border border-slate-700">
+                  <div className="text-[8px] font-black uppercase text-slate-400">LOCKED ORBS</div>
+                  <div id="holdSpinLockedText" className="font-mono-num text-xs sm:text-sm font-black text-amber-300">
+                    3 / 9 LOCKED
+                  </div>
+                </div>
+                <div className="p-1.5 rounded-xl bg-emerald-950/90 border border-emerald-500/60">
+                  <div className="text-[8px] font-black uppercase text-emerald-300">BONUS POT</div>
+                  <div id="holdSpinPotText" className="font-mono-num text-xs sm:text-sm font-black text-emerald-300">
+                    $150
+                  </div>
+                </div>
+                <div className="p-1.5 rounded-xl bg-amber-950/90 border border-amber-400/70">
+                  <div className="text-[8px] font-black uppercase text-amber-300">9/9 FULL GRID</div>
+                  <div id="holdSpinGrandTargetVal" className="font-mono-num text-xs sm:text-sm font-black text-fde047 text-amber-200">
+                    $500
+                  </div>
+                </div>
+              </div>
+
+              {/* 3x3 Hold & Spin Orb Lock Grid */}
+              <div id="holdSpinGrid" className="grid grid-cols-3 gap-2 bg-slate-950 p-2 rounded-2xl border-2 border-amber-400/60">
+                {[0, 1, 2].map((col) => (
+                  <div key={col} className="flex flex-col gap-2">
                     {[0, 1, 2].map((row) => (
                       <div
                         key={row}
-                        id={`slotCell_${col}_${row}`}
-                        className="slot-symbol-cell rounded-2xl border-[2.5px] border-slate-900 bg-white p-1 sm:p-1.5 flex flex-col items-center justify-center text-center shadow-[0_3px_0_#0f172a] min-h-[60px] sm:min-h-[66px]"
-                      >
-                        <span className="text-xl sm:text-2xl leading-none">⚽</span>
-                        <span className="text-[8px] sm:text-[9px] font-black uppercase mt-1">GOLD BALL</span>
-                      </div>
+                        id={`holdSpinCell_${col}_${row}`}
+                        className="rounded-2xl border-2 border-slate-700 bg-slate-900 p-1.5 flex flex-col items-center justify-center text-center min-h-[62px] sm:min-h-[68px]"
+                      />
                     ))}
                   </div>
                 ))}
               </div>
-
-              {/* Right Payline Anchor Pills */}
-              <div className="flex flex-col justify-around py-1.5 shrink-0 select-none">
-                <span
-                  id="slotPaylineRight_5"
-                  className="px-1.5 py-0.5 rounded-md bg-fuchsia-400 text-slate-950 font-mono-num text-[8px] font-black border border-slate-950 transition-all"
-                >
-                  ↗5
-                </span>
-                <span
-                  id="slotPaylineRight_2"
-                  className="px-1.5 py-0.5 rounded-md bg-sky-400 text-slate-950 font-mono-num text-[8px] font-black border border-slate-950 transition-all"
-                >
-                  ─2
-                </span>
-                <span
-                  id="slotPaylineRight_1"
-                  className="px-1.5 py-0.5 rounded-md bg-amber-300 text-slate-950 font-mono-num text-[8px] font-black border border-slate-950 transition-all"
-                >
-                  ═1
-                </span>
-                <span
-                  id="slotPaylineRight_3"
-                  className="px-1.5 py-0.5 rounded-md bg-rose-400 text-slate-950 font-mono-num text-[8px] font-black border border-slate-950 transition-all"
-                >
-                  ─3
-                </span>
-                <span
-                  id="slotPaylineRight_4"
-                  className="px-1.5 py-0.5 rounded-md bg-emerald-400 text-slate-950 font-mono-num text-[8px] font-black border border-slate-950 transition-all"
-                >
-                  ↘4
-                </span>
-              </div>
             </div>
-          </div>
 
-          {/* Live Pokie Status & Win Callout Banner */}
-          <div
-            id="slotStatusBanner"
-            className="p-2 rounded-2xl bg-slate-100 border-2 border-slate-900 text-slate-800 font-black text-xs uppercase tracking-wide text-center mb-2.5 shadow-[0_2px_0_#0f172a]"
-          >
-            SPIN FOR $10 • 3X GRAND CUP = JACKPOT • ⭐ 2X WILD DOUBLES ANY LINE!
-          </div>
-
-          {/* Primary Arcade Spin Lever Button */}
-          <button
-            id="slotSpinBtn"
-            type="button"
-            className="indie-cta-btn w-full min-h-[48px] py-3 px-6 rounded-2xl bg-gradient-to-r from-emerald-400 via-teal-300 to-sky-400 hover:from-emerald-300 hover:to-sky-300 disabled:opacity-60 text-slate-900 font-black text-sm sm:text-base uppercase tracking-wider cursor-pointer flex items-center justify-center space-x-2.5 mb-2.5"
-          >
-            <PixelGoldCoinIcon className="w-5 h-5 sm:w-6 sm:h-6 shrink-0" />
-            <span id="slotSpinBtnLabel">SPIN REELS • $10</span>
-          </button>
-
-          {/* Compact Neo-Brutalist Paytable Legend */}
-          <div className="p-2.5 rounded-2xl bg-white border-2 border-slate-900 shadow-[0_3px_0_#0f172a] text-[10px] font-extrabold text-slate-700">
-            <div className="text-[9px] font-black uppercase tracking-wider text-slate-500 mb-1.5 flex flex-wrap items-center justify-between gap-1">
-              <span>OFFICIAL 5-LINE PAYTABLE ($10 SPIN)</span>
-              <span className="text-sky-700">⭐ WILD = 2X LINE PAYOUT • 👑 2+ SCATTERS PAY ANYWHERE</span>
+            <div
+              id="holdSpinStatusBanner"
+              className="p-2 rounded-2xl bg-amber-300 border-2 border-slate-950 text-slate-950 font-black text-[11px] uppercase tracking-wide text-center mb-2 shadow-[0_3px_0_#000000]"
+            >
+              👑 3 BONUS ORBS LOCKED! EACH NEW ORB RESETS RESPINS TO 3!
             </div>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 text-center">
-              <div className="px-2 py-1 rounded-lg bg-amber-200 border border-slate-900 text-slate-900 font-black">
-                🏆 3x CUP: JACKPOT
-              </div>
-              <div className="px-2 py-1 rounded-lg bg-sky-200 border border-slate-900 text-slate-900 font-black">
-                ⭐ 3x WILD: $400
-              </div>
-              <div className="px-2 py-1 rounded-lg bg-slate-200 border border-slate-900 text-slate-900 font-black">
-                ⚽ 3x BALL: $200
-              </div>
-              <div className="px-2 py-1 rounded-lg bg-pink-200 border border-slate-900 text-slate-900 font-black">
-                👑 3x SCATTER: $150
-              </div>
-              <div className="px-2 py-1 rounded-lg bg-orange-200 border border-slate-900 text-slate-900 font-black">
-                👟 3x BOOT: $120
-              </div>
-              <div className="px-2 py-1 rounded-lg bg-rose-200 border border-slate-900 text-slate-900 font-black">
-                🔥 3x FIRE: $60
-              </div>
-              <div className="px-2 py-1 rounded-lg bg-emerald-200 border border-slate-900 text-slate-900 font-black">
-                📯 3x WHISTLE: $30
-              </div>
-              <div className="px-2 py-1 rounded-lg bg-purple-200 border border-slate-900 text-slate-900 font-black">
-                🍒 CHERRY: $20 / $10
-              </div>
-            </div>
+
+            <button
+              id="holdSpinActionBtn"
+              type="button"
+              className="indie-cta-btn w-full min-h-[46px] py-2.5 px-5 rounded-2xl bg-gradient-to-r from-amber-400 via-orange-300 to-yellow-300 hover:from-amber-300 hover:to-yellow-200 text-slate-950 font-black text-xs sm:text-sm uppercase tracking-wider cursor-pointer flex items-center justify-center gap-2"
+            >
+              <PixelGoldCoinIcon className="w-5 h-5 shrink-0" />
+              <span id="holdSpinActionBtnLabel">LAUNCH RESPIN (3 RESPINS LEFT)</span>
+            </button>
           </div>
         </div>
       </div>

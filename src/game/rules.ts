@@ -1707,11 +1707,140 @@ export function buildGoalCelebrationMessage(input: GoalCelebrationInput): GoalCe
 // ============================================================================
 
 export const SLOT_SPIN_COST = 10;
+export const SLOT_BET_OPTIONS = [10, 100] as const;
+export type PokieBetAmount = (typeof SLOT_BET_OPTIONS)[number];
 export const INITIAL_PLAYER_BALANCE = 30;
 export const BASE_JACKPOT_POOL = 1000;
 export const COUPON_HACK_CODE = 'HACK';
 export const COUPON_HACK_SPINS = 10;
-export const COUPON_HACK_REWARD = SLOT_SPIN_COST * COUPON_HACK_SPINS; // $100 (10 spins)
+export const COUPON_HACK_REWARD = SLOT_SPIN_COST * COUPON_HACK_SPINS; // $100 (10 spins at $10)
+
+export type PokieMachineId = 'CHAMPIONS_GOLD' | 'COSMIC_NEON' | 'VOLCANO_INFERNO';
+
+export interface PokieMachineConfig {
+  id: PokieMachineId;
+  name: string;
+  shortName: string;
+  stadiumName: string;
+  pitchThemeId: PitchThemeId;
+  tagline: string;
+  /** Base Grand Jackpot at $10 bet (scales 10x for $100 bet) */
+  baseJackpot10: number;
+  /** Multiplier on bet for 3x MEGA_TROPHY */
+  jackpotMultiplier: number;
+  headerGradient: string;
+  cabinetBg: string;
+  cabinetBorderHex: string;
+  reelHousingBg: string;
+  reelBorderHex: string;
+  accentHex: string;
+  secondaryHex: string;
+  badgeBgHex: string;
+  badgeTextHex: string;
+  bulbColors: [string, string, string];
+  orbName: string;
+  orbGradient: string;
+  orbBorderHex: string;
+  orbGlowRgba: string;
+}
+
+export const POKIE_MACHINES: Record<PokieMachineId, PokieMachineConfig> = {
+  CHAMPIONS_GOLD: {
+    id: 'CHAMPIONS_GOLD',
+    name: 'Champions Cathedral',
+    shortName: 'Champions Gold',
+    stadiumName: 'Champions Cathedral',
+    pitchThemeId: 'TURF_CHAMPIONS',
+    tagline: 'ROYAL EMERALD & GOLD ARENA',
+    baseJackpot10: 500,
+    jackpotMultiplier: 50,
+    headerGradient: 'linear-gradient(135deg, #064e3b 0%, #0f172a 55%, #713f12 100%)',
+    cabinetBg: 'linear-gradient(180deg, #ffffff 0%, #f0fdf4 55%, #fef9c3 100%)',
+    cabinetBorderHex: '#facc15',
+    reelHousingBg: '#064e3b',
+    reelBorderHex: '#facc15',
+    accentHex: '#facc15',
+    secondaryHex: '#34d399',
+    badgeBgHex: '#fef08a',
+    badgeTextHex: '#422006',
+    bulbColors: ['#fde047', '#34d399', '#ffffff'],
+    orbName: 'CROWN ORB',
+    orbGradient: 'linear-gradient(180deg, #fef08a 0%, #f59e0b 55%, #b45309 100%)',
+    orbBorderHex: '#fde047',
+    orbGlowRgba: 'rgba(250, 204, 21, 0.9)',
+  },
+  COSMIC_NEON: {
+    id: 'COSMIC_NEON',
+    name: 'Cosmic Orbit',
+    shortName: 'Cosmic Supernova',
+    stadiumName: 'Cosmic Orbit',
+    pitchThemeId: 'COSMIC_SPACE',
+    tagline: 'ZERO-G CYBER SUPERNOVA',
+    baseJackpot10: 750,
+    jackpotMultiplier: 75,
+    headerGradient: 'linear-gradient(135deg, #090d16 0%, #1e1b4b 52%, #4a044e 100%)',
+    cabinetBg: 'linear-gradient(180deg, #f8fafc 0%, #e0f2fe 55%, #fae8ff 100%)',
+    cabinetBorderHex: '#38bdf8',
+    reelHousingBg: '#1e1b4b',
+    reelBorderHex: '#38bdf8',
+    accentHex: '#38bdf8',
+    secondaryHex: '#e879f9',
+    badgeBgHex: '#e0f2fe',
+    badgeTextHex: '#0c4a6e',
+    bulbColors: ['#38bdf8', '#e879f9', '#818cf8'],
+    orbName: 'PLASMA ORB',
+    orbGradient: 'linear-gradient(180deg, #e0f2fe 0%, #38bdf8 50%, #7e22ce 100%)',
+    orbBorderHex: '#38bdf8',
+    orbGlowRgba: 'rgba(56, 189, 248, 0.9)',
+  },
+  VOLCANO_INFERNO: {
+    id: 'VOLCANO_INFERNO',
+    name: 'Magma Caldera',
+    shortName: 'Magma Inferno',
+    stadiumName: 'Magma Caldera',
+    pitchThemeId: 'VOLCANO_FORGE',
+    tagline: 'MOLTEN OBSIDIAN MEGA-JACKPOT',
+    baseJackpot10: 1000,
+    jackpotMultiplier: 100,
+    headerGradient: 'linear-gradient(135deg, #1c0a0a 0%, #450a0a 52%, #7c2d12 100%)',
+    cabinetBg: 'linear-gradient(180deg, #fff7ed 0%, #ffedd5 55%, #ffe4e6 100%)',
+    cabinetBorderHex: '#fb923c',
+    reelHousingBg: '#450a0a',
+    reelBorderHex: '#fb923c',
+    accentHex: '#fb923c',
+    secondaryHex: '#f43f5e',
+    badgeBgHex: '#ffedd5',
+    badgeTextHex: '#7c2d12',
+    bulbColors: ['#fb923c', '#f43f5e', '#fde047'],
+    orbName: 'MAGMA ORB',
+    orbGradient: 'linear-gradient(180deg, #fef08a 0%, #f97316 50%, #dc2626 100%)',
+    orbBorderHex: '#fb923c',
+    orbGlowRgba: 'rgba(249, 115, 22, 0.92)',
+  },
+};
+
+export const POKIE_MACHINE_LIST: PokieMachineConfig[] = [
+  POKIE_MACHINES.CHAMPIONS_GOLD,
+  POKIE_MACHINES.COSMIC_NEON,
+  POKIE_MACHINES.VOLCANO_INFERNO,
+];
+
+/**
+ * Computes the active Grand Jackpot for a given machine and bet amount ($10 or $100).
+ * Switching from $10 to $100 scales the base jackpot 10x while preserving progressive contributions.
+ */
+export function getMachineEffectiveJackpot(
+  machineId: PokieMachineId,
+  betAmount: number,
+  storedPoolAt10?: number
+): number {
+  const machine = POKIE_MACHINES[machineId] || POKIE_MACHINES.CHAMPIONS_GOLD;
+  const base10 = machine.baseJackpot10;
+  const pool10 = typeof storedPoolAt10 === 'number' && storedPoolAt10 >= base10 ? storedPoolAt10 : base10;
+  const progressiveDelta10 = Math.max(0, pool10 - base10);
+  const betScale = Math.max(1, betAmount / 10);
+  return Math.round(base10 * betScale + progressiveDelta10 * betScale);
+}
 
 export interface MatchMoneyRewardInput {
   gameMode: 'CASUAL' | 'RANKED' | 'TOURNAMENT';
@@ -1827,7 +1956,7 @@ export function redeemCouponCode(rawCode: string, currentBalance: number): Coupo
       rewardAmount,
       spinsGranted: COUPON_HACK_SPINS,
       newBalance,
-      message: `COUPON "HACK" APPLIED! +$${rewardAmount} (${COUPON_HACK_SPINS} FREE SPINS) ADDED!`,
+      message: `COUPON "HACK" APPLIED! +$${rewardAmount} (${COUPON_HACK_SPINS} SPINS) ADDED!`,
     };
   }
   return {
@@ -1939,12 +2068,12 @@ export const POKIE_SYMBOLS: Record<PokieSymbolId, PokieSymbolSpec> = {
   },
   SCATTER_CROWN: {
     id: 'SCATTER_CROWN',
-    name: 'CROWN SCATTER',
+    name: 'HOLD & SPIN ORB',
     icon: '👑',
     color: '#fcd34d',
     bgHex: '#311042',
     borderHex: '#f472b6',
-    payout3x: 15, // 3 anywhere on the 3x3 window pays 15x bet
+    payout3x: 15, // 3+ anywhere pays 15x bet AND triggers Hold & Spin Feature!
     payout2x: 1,  // 2 anywhere on the 3x3 window pays 1x bet
     isScatter: true,
   },
@@ -1952,27 +2081,27 @@ export const POKIE_SYMBOLS: Record<PokieSymbolId, PokieSymbolSpec> = {
 
 /**
  * Real PAR-sheet weighted virtual reel strips (24 stops per reel).
- * High-frequency low symbols keep hit rate ~34%, while rare Trophy & Wild Star stops create authentic high-volatility jackpot spikes.
+ * High-frequency low symbols keep hit rate ~36%, while 3+ SCATTER_CROWN orbs trigger Hold & Spin Bonus Mode.
  */
 export const VIRTUAL_REEL_STRIPS: [PokieSymbolId[], PokieSymbolId[], PokieSymbolId[]] = [
   // Reel 1 (Left)
   [
     'CHERRY_CARD', 'WHISTLE', 'FIRE_FLAME', 'CHERRY_CARD', 'GOLD_BOOT', 'WHISTLE',
-    'SCATTER_CROWN', 'CHERRY_CARD', 'FIRE_FLAME', 'DIAMOND_BALL', 'WHISTLE', 'CHERRY_CARD',
+    'SCATTER_CROWN', 'CHERRY_CARD', 'FIRE_FLAME', 'DIAMOND_BALL', 'WHISTLE', 'SCATTER_CROWN',
     'WILD_STAR', 'FIRE_FLAME', 'CHERRY_CARD', 'WHISTLE', 'GOLD_BOOT', 'CHERRY_CARD',
     'MEGA_TROPHY', 'WHISTLE', 'FIRE_FLAME', 'SCATTER_CROWN', 'DIAMOND_BALL', 'CHERRY_CARD',
   ],
   // Reel 2 (Center)
   [
     'WHISTLE', 'CHERRY_CARD', 'FIRE_FLAME', 'GOLD_BOOT', 'CHERRY_CARD', 'SCATTER_CROWN',
-    'WHISTLE', 'DIAMOND_BALL', 'CHERRY_CARD', 'FIRE_FLAME', 'WHISTLE', 'WILD_STAR',
+    'WHISTLE', 'DIAMOND_BALL', 'CHERRY_CARD', 'FIRE_FLAME', 'SCATTER_CROWN', 'WILD_STAR',
     'CHERRY_CARD', 'GOLD_BOOT', 'WHISTLE', 'FIRE_FLAME', 'CHERRY_CARD', 'MEGA_TROPHY',
     'WHISTLE', 'SCATTER_CROWN', 'CHERRY_CARD', 'DIAMOND_BALL', 'FIRE_FLAME', 'WHISTLE',
   ],
   // Reel 3 (Right)
   [
     'FIRE_FLAME', 'CHERRY_CARD', 'WHISTLE', 'GOLD_BOOT', 'CHERRY_CARD', 'WHISTLE',
-    'SCATTER_CROWN', 'FIRE_FLAME', 'CHERRY_CARD', 'DIAMOND_BALL', 'WHISTLE', 'CHERRY_CARD',
+    'SCATTER_CROWN', 'FIRE_FLAME', 'CHERRY_CARD', 'DIAMOND_BALL', 'WHISTLE', 'SCATTER_CROWN',
     'FIRE_FLAME', 'WILD_STAR', 'WHISTLE', 'CHERRY_CARD', 'GOLD_BOOT', 'FIRE_FLAME',
     'MEGA_TROPHY', 'CHERRY_CARD', 'WHISTLE', 'SCATTER_CROWN', 'DIAMOND_BALL', 'WHISTLE',
   ],
@@ -2015,11 +2144,13 @@ export interface PokieEvaluationResult {
     [PokieSymbolId, PokieSymbolId, PokieSymbolId]
   ];
   stopIndices: [number, number, number];
+  machineId: PokieMachineId;
   betAmount: number;
   totalPayout: number;
   netProfit: number;
   winTier: PokieWinTier;
   isJackpot: boolean;
+  triggersHoldAndSpin: boolean;
   winningLines: PokieWinningLine[];
   scatterCount: number;
   scatterPayout: number;
@@ -2056,7 +2187,7 @@ export function getPokieGridFromStops(
 }
 
 /**
- * Evaluates a 3x3 pokie symbol grid using authentic 5-payline + Scatter + 2x Wild Star + Progressive Grand Jackpot math.
+ * Evaluates a 3x3 pokie symbol grid using authentic 5-payline + Scatter + 2x Wild Star + Progressive Grand Jackpot + Hold & Spin trigger math.
  */
 export function evaluatePokieGrid(
   grid: [
@@ -2066,8 +2197,10 @@ export function evaluatePokieGrid(
   ],
   betAmount = SLOT_SPIN_COST,
   currentJackpotPool = BASE_JACKPOT_POOL,
-  stopIndices: [number, number, number] = [0, 0, 0]
+  stopIndices: [number, number, number] = [0, 0, 0],
+  machineId: PokieMachineId = 'VOLCANO_INFERNO'
 ): PokieEvaluationResult {
+  const machine = POKIE_MACHINES[machineId] || POKIE_MACHINES.VOLCANO_INFERNO;
   const winningLines: PokieWinningLine[] = [];
   let totalPayout = 0;
   let isJackpot = false;
@@ -2114,7 +2247,7 @@ export function evaluatePokieGrid(
     if (s0 === 'MEGA_TROPHY' && s1 === 'MEGA_TROPHY' && s2 === 'MEGA_TROPHY') {
       // Pure 3x Trophy hits the progressive Grand Jackpot!
       isJackpot = true;
-      const jpWin = Math.max(betAmount * spec.payout3x, updatedJackpotPool);
+      const jpWin = Math.max(betAmount * machine.jackpotMultiplier, updatedJackpotPool);
       totalPayout += jpWin;
       winningLines.push({
         lineId: line.id,
@@ -2160,7 +2293,7 @@ export function evaluatePokieGrid(
     }
   }
 
-  // 2. Evaluate Anywhere Crown Scatters across all 9 cells
+  // 2. Evaluate Anywhere Crown Scatters (Hold & Spin Bonus Orbs) across all 9 cells
   const scatterPositions: { reel: number; row: number }[] = [];
   for (let r = 0; r < 3; r++) {
     for (let row = 0; row < 3; row++) {
@@ -2179,6 +2312,9 @@ export function evaluatePokieGrid(
   }
   totalPayout += scatterPayout;
 
+  // 3+ Scatter Crown Orbs anywhere triggers the dedicated HOLD & SPIN Bonus Screen!
+  const triggersHoldAndSpin = scatterCount >= 3;
+
   // Check if reels 1 & 2 have 2 scatters (teaser for 3rd scatter!)
   const scattersInFirstTwoReels = scatterPositions.filter((p) => p.reel < 2).length;
   if (scattersInFirstTwoReels >= 2) {
@@ -2186,13 +2322,14 @@ export function evaluatePokieGrid(
   }
 
   if (isJackpot) {
-    updatedJackpotPool = BASE_JACKPOT_POOL;
+    const betScale = Math.max(1, betAmount / 10);
+    updatedJackpotPool = Math.round(machine.baseJackpot10 * betScale);
   }
 
   const mult = betAmount > 0 ? totalPayout / betAmount : 0;
   const winTier: PokieWinTier = isJackpot
     ? 'JACKPOT'
-    : mult >= 20
+    : triggersHoldAndSpin || mult >= 20
       ? 'MEGA'
       : mult >= 6
         ? 'BIG'
@@ -2201,25 +2338,29 @@ export function evaluatePokieGrid(
           : 'NONE';
 
   const headline = isJackpot
-    ? `🏆 GRAND JACKPOT! +$${totalPayout}! 🏆`
-    : winTier === 'MEGA'
-      ? `🔥 MEGA PAYDAY! +$${totalPayout}! 🔥`
-      : winTier === 'BIG'
-        ? `⚡ BIG WIN! +$${totalPayout}! ⚡`
-        : winTier === 'SMALL'
-          ? `💰 WINNER! +$${totalPayout}`
-          : isTeaserTwoReels
-            ? 'SO CLOSE! SPIN AGAIN!'
-            : 'NO WIN • TRY AGAIN!';
+    ? `🏆 GRAND JACKPOT! +$${totalPayout.toLocaleString()}! 🏆`
+    : triggersHoldAndSpin
+      ? `👑 HOLD & SPIN TRIGGERED! +$${totalPayout.toLocaleString()} + 3 RESPINS! 👑`
+      : winTier === 'MEGA'
+        ? `🔥 MEGA PAYDAY! +$${totalPayout.toLocaleString()}! 🔥`
+        : winTier === 'BIG'
+          ? `⚡ BIG WIN! +$${totalPayout.toLocaleString()}! ⚡`
+          : winTier === 'SMALL'
+            ? `💰 WINNER! +$${totalPayout.toLocaleString()}`
+            : isTeaserTwoReels
+              ? 'SO CLOSE! SPIN AGAIN!'
+              : 'NO WIN • TRY AGAIN!';
 
   return {
     grid,
     stopIndices,
+    machineId,
     betAmount,
     totalPayout,
     netProfit: totalPayout - betAmount,
     winTier,
     isJackpot,
+    triggersHoldAndSpin,
     winningLines,
     scatterCount,
     scatterPayout,
@@ -2237,7 +2378,8 @@ export function spinPokieReels(
   betAmount = SLOT_SPIN_COST,
   currentJackpotPool = BASE_JACKPOT_POOL,
   rng: () => number = Math.random,
-  forcedStops?: [number, number, number]
+  forcedStops?: [number, number, number],
+  machineId: PokieMachineId = 'VOLCANO_INFERNO'
 ): PokieEvaluationResult {
   const stops: [number, number, number] = forcedStops
     ? [forcedStops[0], forcedStops[1], forcedStops[2]]
@@ -2247,8 +2389,220 @@ export function spinPokieReels(
         Math.floor(rng() * VIRTUAL_REEL_STRIPS[2].length),
       ];
   const grid = getPokieGridFromStops(stops);
-  return evaluatePokieGrid(grid, betAmount, currentJackpotPool, stops);
+  return evaluatePokieGrid(grid, betAmount, currentJackpotPool, stops, machineId);
 }
+
+// ============================================================================
+// HOLD & SPIN (HOLD & WIN) BONUS FEATURE STATE MACHINE
+// ============================================================================
+
+export type HoldOrbTier = 'CASH' | 'MINI' | 'MAJOR' | 'MEGA';
+
+export interface HoldAndSpinOrb {
+  reel: number;
+  row: number;
+  tier: HoldOrbTier;
+  label: string;
+  multiplier: number;
+  cashValue: number;
+  isNew?: boolean;
+}
+
+export interface HoldAndSpinSessionState {
+  machineId: PokieMachineId;
+  betAmount: number;
+  grandJackpotPool: number;
+  respinsRemaining: number;
+  maxRespins: number;
+  totalRespinsPlayed: number;
+  /** 3x3 matrix indexed as cells[reel][row] */
+  cells: (HoldAndSpinOrb | null)[][];
+  lockedCount: number;
+  orbsTotalValue: number;
+  grandJackpotWon: boolean;
+  totalBonusWin: number;
+  isComplete: boolean;
+  lastStepNewOrbs: HoldAndSpinOrb[];
+}
+
+const HOLD_ORB_WEIGHTED_TABLE: { tier: HoldOrbTier; label: string; multiplier: number; weight: number }[] = [
+  { tier: 'CASH', label: '1X CASH', multiplier: 1, weight: 28 },
+  { tier: 'CASH', label: '2X CASH', multiplier: 2, weight: 25 },
+  { tier: 'CASH', label: '3X CASH', multiplier: 3, weight: 18 },
+  { tier: 'CASH', label: '5X CASH', multiplier: 5, weight: 12 },
+  { tier: 'CASH', label: '8X CASH', multiplier: 8, weight: 7 },
+  { tier: 'MINI', label: 'MINI 15X', multiplier: 15, weight: 6 },
+  { tier: 'MAJOR', label: 'MAJOR 30X', multiplier: 30, weight: 3 },
+  { tier: 'MEGA', label: 'MEGA 50X', multiplier: 50, weight: 1 },
+];
+
+export function rollHoldAndSpinOrb(
+  reel: number,
+  row: number,
+  betAmount: number,
+  rng: () => number = Math.random
+): HoldAndSpinOrb {
+  const totalWeight = HOLD_ORB_WEIGHTED_TABLE.reduce((acc, item) => acc + item.weight, 0);
+  let pick = rng() * totalWeight;
+  let chosen = HOLD_ORB_WEIGHTED_TABLE[0];
+  for (const entry of HOLD_ORB_WEIGHTED_TABLE) {
+    if (pick < entry.weight) {
+      chosen = entry;
+      break;
+    }
+    pick -= entry.weight;
+  }
+  return {
+    reel,
+    row,
+    tier: chosen.tier,
+    label: chosen.label,
+    multiplier: chosen.multiplier,
+    cashValue: Math.round(betAmount * chosen.multiplier),
+    isNew: true,
+  };
+}
+
+/**
+ * Initializes a Hold & Spin (Hold & Win) bonus session from triggering orb positions (minimum 3 orbs).
+ */
+export function createHoldAndSpinSession(opts: {
+  machineId: PokieMachineId;
+  betAmount: number;
+  grandJackpotPool: number;
+  triggerPositions?: { reel: number; row: number }[];
+  rng?: () => number;
+}): HoldAndSpinSessionState {
+  const {
+    machineId,
+    betAmount,
+    grandJackpotPool,
+    triggerPositions,
+    rng = Math.random,
+  } = opts;
+
+  const cells: (HoldAndSpinOrb | null)[][] = [
+    [null, null, null],
+    [null, null, null],
+    [null, null, null],
+  ];
+
+  const defaultPositions =
+    triggerPositions && triggerPositions.length >= 3
+      ? triggerPositions
+      : [
+          { reel: 0, row: 1 },
+          { reel: 1, row: 1 },
+          { reel: 2, row: 1 },
+        ];
+
+  let lockedCount = 0;
+  let orbsTotalValue = 0;
+  const initialOrbs: HoldAndSpinOrb[] = [];
+
+  for (const pos of defaultPositions) {
+    const r = Math.max(0, Math.min(2, pos.reel));
+    const row = Math.max(0, Math.min(2, pos.row));
+    if (!cells[r][row]) {
+      const orb = rollHoldAndSpinOrb(r, row, betAmount, rng);
+      cells[r][row] = orb;
+      initialOrbs.push(orb);
+      lockedCount++;
+      orbsTotalValue += orb.cashValue;
+    }
+  }
+
+  const grandJackpotWon = lockedCount >= 9;
+  const totalBonusWin = orbsTotalValue + (grandJackpotWon ? grandJackpotPool : 0);
+
+  return {
+    machineId,
+    betAmount,
+    grandJackpotPool,
+    respinsRemaining: 3,
+    maxRespins: 3,
+    totalRespinsPlayed: 0,
+    cells,
+    lockedCount,
+    orbsTotalValue,
+    grandJackpotWon,
+    totalBonusWin,
+    isComplete: grandJackpotWon,
+    lastStepNewOrbs: initialOrbs,
+  };
+}
+
+/**
+ * Executes a single Respin in the Hold & Spin bonus mode.
+ * Each unlocked cell has a chance to land a new Bonus Orb.
+ * If 1+ new orbs land, they lock in place and `respinsRemaining` resets to 3!
+ * If all 9 cells lock, the player wins the Grand Progressive Jackpot on top of all orb prizes!
+ */
+export function stepHoldAndSpinSession(
+  session: HoldAndSpinSessionState,
+  rng: () => number = Math.random,
+  forceFillAll = false
+): HoldAndSpinSessionState {
+  if (session.isComplete || session.respinsRemaining <= 0) {
+    return session;
+  }
+
+  const nextCells: (HoldAndSpinOrb | null)[][] = session.cells.map((col) =>
+    col.map((cell) => (cell ? { ...cell, isNew: false } : null))
+  );
+
+  const newOrbs: HoldAndSpinOrb[] = [];
+  // Per-empty-cell hit probability (~26% per empty cell gives realistic ~65% chance of resetting on 3-4 empty cells)
+  const cellHitProb = 0.26;
+
+  for (let r = 0; r < 3; r++) {
+    for (let row = 0; row < 3; row++) {
+      if (!nextCells[r][row]) {
+        if (forceFillAll || rng() < cellHitProb) {
+          const orb = rollHoldAndSpinOrb(r, row, session.betAmount, rng);
+          nextCells[r][row] = orb;
+          newOrbs.push(orb);
+        }
+      }
+    }
+  }
+
+  let lockedCount = 0;
+  let orbsTotalValue = 0;
+  for (let r = 0; r < 3; r++) {
+    for (let row = 0; row < 3; row++) {
+      const c = nextCells[r][row];
+      if (c) {
+        lockedCount++;
+        orbsTotalValue += c.cashValue;
+      }
+    }
+  }
+
+  const grandJackpotWon = lockedCount >= 9;
+  const respinsRemaining = grandJackpotWon
+    ? 0
+    : newOrbs.length > 0
+      ? session.maxRespins // Resets to 3 whenever a new orb locks!
+      : Math.max(0, session.respinsRemaining - 1);
+
+  const isComplete = grandJackpotWon || respinsRemaining === 0;
+  const totalBonusWin = orbsTotalValue + (grandJackpotWon ? session.grandJackpotPool : 0);
+
+  return {
+    ...session,
+    cells: nextCells,
+    respinsRemaining,
+    totalRespinsPlayed: session.totalRespinsPlayed + 1,
+    lockedCount,
+    orbsTotalValue,
+    grandJackpotWon,
+    totalBonusWin,
+    isComplete,
+    lastStepNewOrbs: newOrbs,
+  };
+}
+
 
 
 

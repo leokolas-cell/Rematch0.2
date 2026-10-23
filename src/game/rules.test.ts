@@ -32,12 +32,18 @@ import {
   buildGoalCelebrationMessage,
   RANK_TIERS,
   SLOT_SPIN_COST,
+  SLOT_BET_OPTIONS,
   COUPON_HACK_REWARD,
   BASE_JACKPOT_POOL,
+  POKIE_MACHINES,
+  POKIE_MACHINE_LIST,
+  getMachineEffectiveJackpot,
   calculateMatchMoneyReward,
   redeemCouponCode,
   evaluatePokieGrid,
   spinPokieReels,
+  createHoldAndSpinSession,
+  stepHoldAndSpinSession,
   type PlayerStateSnapshot,
   type KeeperStateSnapshot,
 } from './rules.ts';
@@ -762,7 +768,7 @@ test('evaluatePokieGrid and spinPokieReels implement authentic 5-payline, 2x Wil
   assert.equal(topLineWin?.hasWildMultiplier, true);
   assert.equal(topLineWin?.payout, SLOT_SPIN_COST * 20 * 2); // 20x base * 2x Wild = 40x ($400)
 
-  // 3. 3x SCATTER_CROWN anywhere on the 3x3 window pays 15x total bet
+  // 3. 3x SCATTER_CROWN anywhere on the 3x3 window pays 15x total bet AND triggers Hold & Spin
   const scatterEval = evaluatePokieGrid(
     [
       ['SCATTER_CROWN', 'WHISTLE', 'FIRE_FLAME'],
@@ -774,6 +780,7 @@ test('evaluatePokieGrid and spinPokieReels implement authentic 5-payline, 2x Wil
   );
   assert.equal(scatterEval.scatterCount, 3);
   assert.equal(scatterEval.scatterPayout, SLOT_SPIN_COST * 15);
+  assert.equal(scatterEval.triggersHoldAndSpin, true);
   assert.equal(scatterEval.isTeaserTwoReels, true);
 
   // 4. Deterministic forced stops on spinPokieReels (stop 18 on all 3 reels = MEGA_TROPHY on middle row!)
@@ -783,6 +790,57 @@ test('evaluatePokieGrid and spinPokieReels implement authentic 5-payline, 2x Wil
   assert.equal(forcedJackpot.grid[1][1], 'MEGA_TROPHY');
   assert.equal(forcedJackpot.grid[2][1], 'MEGA_TROPHY');
 });
+
+test('POKIE_MACHINES, $10/$100 bet scaling, and Hold & Spin (Hold & Win) bonus mode mechanics work accurately', () => {
+  assert.deepEqual(SLOT_BET_OPTIONS, [10, 100]);
+  assert.equal(POKIE_MACHINE_LIST.length, 3);
+
+  // Verify each of the 3 stadium-themed machines has distinct aesthetics and jackpots
+  const champ = POKIE_MACHINES.CHAMPIONS_GOLD;
+  const cosmic = POKIE_MACHINES.COSMIC_NEON;
+  const volcano = POKIE_MACHINES.VOLCANO_INFERNO;
+  assert.equal(champ.baseJackpot10, 500);
+  assert.equal(cosmic.baseJackpot10, 750);
+  assert.equal(volcano.baseJackpot10, 1000);
+
+  // Verify $10 vs $100 bet scaling on effective jackpot and line payouts
+  assert.equal(getMachineEffectiveJackpot('CHAMPIONS_GOLD', 10, 500), 500);
+  assert.equal(getMachineEffectiveJackpot('CHAMPIONS_GOLD', 100, 500), 5000);
+  assert.equal(getMachineEffectiveJackpot('COSMIC_NEON', 100, 760), 7600);
+  assert.equal(getMachineEffectiveJackpot('VOLCANO_INFERNO', 100, 1000), 10000);
+
+  const spin100 = spinPokieReels(100, 10000, Math.random, [6, 5, 6], 'VOLCANO_INFERNO');
+  assert.equal(spin100.triggersHoldAndSpin, true);
+  assert.equal(spin100.scatterCount, 3);
+  assert.equal(spin100.scatterPayout, 100 * 15); // $1,500 scatter win on $100 spin
+
+  // Initialize Hold & Spin bonus session with 3 locked orbs
+  const session = createHoldAndSpinSession({
+    machineId: 'COSMIC_NEON',
+    betAmount: 100,
+    grandJackpotPool: 7500,
+    triggerPositions: spin100.scatterPositions,
+    rng: () => 0.1, // Deterministic 1X CASH orbs ($100 each)
+  });
+  assert.equal(session.respinsRemaining, 3);
+  assert.equal(session.lockedCount, 3);
+  assert.equal(session.orbsTotalValue, 300);
+  assert.equal(session.isComplete, false);
+
+  // Respin with no new orbs landed -> decrements respinsRemaining from 3 to 2
+  const missStep = stepHoldAndSpinSession(session, () => 0.99);
+  assert.equal(missStep.respinsRemaining, 2);
+  assert.equal(missStep.lockedCount, 3);
+  assert.equal(missStep.lastStepNewOrbs.length, 0);
+
+  // Respin where all remaining cells lock -> resets / completes 9/9 Grand Jackpot!
+  const fullGridStep = stepHoldAndSpinSession(missStep, () => 0.1, true);
+  assert.equal(fullGridStep.lockedCount, 9);
+  assert.equal(fullGridStep.grandJackpotWon, true);
+  assert.equal(fullGridStep.isComplete, true);
+  assert.equal(fullGridStep.totalBonusWin, fullGridStep.orbsTotalValue + 7500);
+});
+
 
 
 

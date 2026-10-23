@@ -1975,6 +1975,87 @@ export class IndieSoundEngine {
       osc.stop(now + idx * 0.038 + 0.26);
     });
   }
+
+  playHoldAndSpinTrigger() {
+    this.unlock();
+    if (!this.ensureReady() || !this.ctx || !this.master) return;
+    const now = this.ctx.currentTime;
+    // Dramatic stadium bonus siren + ascending golden synth fanfare
+    const siren = this.ctx.createOscillator();
+    const sg = this.ctx.createGain();
+    siren.type = 'sawtooth';
+    siren.frequency.setValueAtTime(320, now);
+    siren.frequency.exponentialRampToValueAtTime(960, now + 0.34);
+    sg.gain.setValueAtTime(0.18, now);
+    sg.gain.exponentialRampToValueAtTime(0.0001, now + 0.38);
+    siren.connect(sg);
+    sg.connect(this.master);
+    siren.start(now);
+    siren.stop(now + 0.4);
+
+    const notes = [523.25, 659.25, 783.99, 1046.5, 1318.51, 1567.98, 2093.0];
+    notes.forEach((freq, idx) => {
+      if (!this.ctx || !this.master) return;
+      const osc = this.ctx.createOscillator();
+      const g = this.ctx.createGain();
+      osc.type = 'triangle';
+      const t0 = now + 0.08 + idx * 0.055;
+      osc.frequency.setValueAtTime(freq, t0);
+      g.gain.setValueAtTime(0.0001, t0);
+      g.gain.linearRampToValueAtTime(0.28, t0 + 0.01);
+      g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.32);
+      osc.connect(g);
+      g.connect(this.master);
+      osc.start(t0);
+      osc.stop(t0 + 0.34);
+    });
+    this.playNoiseBurst(0.45, 2100, 0.24, 1.3);
+  }
+
+  playHoldOrbLock(lockedCount = 3) {
+    this.unlock();
+    if (!this.ensureReady() || !this.ctx || !this.master) return;
+    const now = this.ctx.currentTime;
+    // Heavy sub-bass magnetic lock thump + rising crystal bell pitched to lockedCount (3..9)
+    const thump = this.ctx.createOscillator();
+    const tg = this.ctx.createGain();
+    thump.type = 'triangle';
+    thump.frequency.setValueAtTime(190, now);
+    thump.frequency.exponentialRampToValueAtTime(52, now + 0.11);
+    tg.gain.setValueAtTime(0.35, now);
+    tg.gain.exponentialRampToValueAtTime(0.0001, now + 0.13);
+    thump.connect(tg);
+    tg.connect(this.master);
+    thump.start(now);
+    thump.stop(now + 0.14);
+
+    const scaleNotes = [523.25, 587.33, 659.25, 783.99, 880.0, 1046.5, 1174.66, 1318.51, 1567.98];
+    const baseNote = scaleNotes[Math.max(0, Math.min(scaleNotes.length - 1, lockedCount - 1))] || 783.99;
+
+    [baseNote, baseNote * 1.5].forEach((freq, idx) => {
+      if (!this.ctx || !this.master) return;
+      const bell = this.ctx.createOscillator();
+      const bg = this.ctx.createGain();
+      bell.type = 'sine';
+      bell.frequency.setValueAtTime(freq, now + idx * 0.035);
+      bg.gain.setValueAtTime(0.24, now + idx * 0.035);
+      bg.gain.exponentialRampToValueAtTime(0.0001, now + idx * 0.035 + 0.24);
+      bell.connect(bg);
+      bg.connect(this.master);
+      bell.start(now + idx * 0.035);
+      bell.stop(now + idx * 0.035 + 0.26);
+    });
+  }
+
+  playHoldAndSpinComplete(isGrandJackpot = false) {
+    this.unlock();
+    if (!this.ensureReady() || !this.ctx || !this.master) return;
+    if (isGrandJackpot) {
+      this.playSlotWin('JACKPOT');
+    } else {
+      this.playSlotWin('MEGA');
+    }
+  }
 }
 
 /**
