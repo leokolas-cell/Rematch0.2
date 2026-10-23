@@ -36,6 +36,18 @@ import {
   computeRankProgressSummary,
   buildGoalCelebrationMessage,
   RANK_TIERS,
+  SLOT_SPIN_COST,
+  INITIAL_PLAYER_BALANCE,
+  BASE_JACKPOT_POOL,
+  POKIE_SYMBOLS,
+  POKIE_PAYLINES,
+  VIRTUAL_REEL_STRIPS,
+  calculateMatchMoneyReward,
+  redeemCouponCode,
+  spinPokieReels,
+  getPokieGridFromStops,
+  type PokieSymbolId,
+  type PokieEvaluationResult,
   type GoalCelebrationSpec,
 } from './game/rules';
 import {
@@ -63,6 +75,8 @@ import {
   PixelMouseRightIcon,
   PixelSoundOnIcon,
   PixelPauseIcon,
+  PixelGoldCoinIcon,
+  PixelSlotMachineIcon,
 } from './game/PixelIcons';
 
 declare global {
@@ -96,8 +110,8 @@ export default function App() {
 
     // Offscreen static 16-bit pixel stadium complex, park trees, stone concourse, floodlight towers, bleachers, turf & chalk line cache
     // Eliminates hundreds of per-frame fillRect calls for locked 60-144Hz butter-smooth performance
-    const CACHE_PAD_X = 860;
-    const CACHE_PAD_Y = 540;
+    const CACHE_PAD_X = 1100;
+    const CACHE_PAD_Y = 1480;
     const pitchCacheCanvas = document.createElement('canvas');
     pitchCacheCanvas.width = PITCH.width + CACHE_PAD_X * 2;
     pitchCacheCanvas.height = PITCH.height + CACHE_PAD_Y * 2;
@@ -570,6 +584,16 @@ export default function App() {
       pitchCacheCtx.save();
       pitchCacheCtx.translate(CACHE_PAD_X, CACHE_PAD_Y);
 
+      // Architectural Zoning Constants:
+      // - Pitch & Cage: [0..w, 0..h]
+      // - Stadium Bowl (Concourse, 2-Tier Grandstands, Crowd & Corner Floodlights): [-STADIUM_BOWL_PAD .. w+STADIUM_BOWL_PAD, -STADIUM_BOWL_PAD .. h+STADIUM_BOWL_PAD]
+      // - Outside World Scenery: Strictly outside [-OUTER_WORLD_START .. w+OUTER_WORLD_START, -OUTER_WORLD_START .. h+OUTER_WORLD_START]
+      const STADIUM_BOWL_PAD = 162;
+      const OUTER_WORLD_START = 220;
+
+      // ======================================================================
+      // STEP 1: OUTSIDE WORLD BACKGROUND & THEMED SCENERY (STRICTLY OUTSIDE STADIUM BOWL)
+      // ======================================================================
       if (selectedPitchTheme === 'COSMIC_SPACE') {
         // === 1. COSMIC SPACE ORBITAL ARENA BACKGROUND ===
         pitchCacheCtx.fillStyle = '#060818';
@@ -582,10 +606,10 @@ export default function App() {
         }
 
         const nebulas = [
-          { x: 180, y: -115, r: 340, c1: 'rgba(139, 92, 246, 0.36)', c2: 'rgba(217, 70, 239, 0.16)' },
-          { x: w - 180, y: h + 115, r: 360, c1: 'rgba(56, 189, 248, 0.32)', c2: 'rgba(99, 102, 241, 0.15)' },
-          { x: -135, y: h * 0.5, r: 310, c1: 'rgba(236, 72, 153, 0.28)', c2: 'rgba(124, 58, 237, 0.12)' },
-          { x: w + 135, y: h * 0.35, r: 330, c1: 'rgba(45, 212, 191, 0.28)', c2: 'rgba(56, 189, 248, 0.12)' },
+          { x: 260, y: -320, r: 340, c1: 'rgba(139, 92, 246, 0.36)', c2: 'rgba(217, 70, 239, 0.16)' },
+          { x: w - 260, y: h + 320, r: 360, c1: 'rgba(56, 189, 248, 0.32)', c2: 'rgba(99, 102, 241, 0.15)' },
+          { x: -340, y: h * 0.5, r: 310, c1: 'rgba(236, 72, 153, 0.28)', c2: 'rgba(124, 58, 237, 0.12)' },
+          { x: w + 340, y: h * 0.35, r: 330, c1: 'rgba(45, 212, 191, 0.28)', c2: 'rgba(56, 189, 248, 0.12)' },
         ];
         for (const neb of nebulas) {
           const nGrad = pitchCacheCtx.createRadialGradient(neb.x, neb.y, 20, neb.x, neb.y, neb.r);
@@ -599,10 +623,10 @@ export default function App() {
         }
 
         const starColors = ['#ffffff', '#e0f2fe', '#fef08a', '#f5d0fe', '#bae6fd', '#c4b5fd'];
-        for (let i = 0; i < 240; i++) {
+        for (let i = 0; i < 260; i++) {
           const sx = -CACHE_PAD_X + 20 + ((i * 193) % (w + CACHE_PAD_X * 2 - 40));
           const sy = -CACHE_PAD_Y + 20 + ((i * 271) % (h + CACHE_PAD_Y * 2 - 40));
-          if (sx > -30 && sx < w + 30 && sy > -30 && sy < h + 30) continue;
+          if (sx > -STADIUM_BOWL_PAD - 20 && sx < w + STADIUM_BOWL_PAD + 20 && sy > -STADIUM_BOWL_PAD - 20 && sy < h + STADIUM_BOWL_PAD + 20) continue;
           const col = starColors[i % starColors.length];
           const sz = i % 7 === 0 ? px * 2 : px;
           fillPxRect(pitchCacheCtx, sx, sy, sz, sz, col, px);
@@ -612,13 +636,16 @@ export default function App() {
           }
         }
 
-        drawRingedPlanet(pitchCacheCtx, 235, -108, 46, px);
-        drawRingedPlanet(pitchCacheCtx, w + 125, h * 0.24, 52, px);
-        drawRingedPlanet(pitchCacheCtx, -230, -140, 68, px);
+        // Outer Space Ringed Planets & Cratered Moons (Strictly outside the Stadium Bowl!)
+        drawRingedPlanet(pitchCacheCtx, 340, -295, 48, px);
+        drawRingedPlanet(pitchCacheCtx, w + 310, h * 0.24, 54, px);
+        drawRingedPlanet(pitchCacheCtx, -310, -280, 64, px);
+        drawRingedPlanet(pitchCacheCtx, w - 340, h + 295, 50, px);
 
         for (const mPos of [
-          { x: w - 245, y: -104, r: 34 },
-          { x: -118, y: h * 0.76, r: 38 },
+          { x: w - 360, y: -285, r: 34 },
+          { x: -305, y: h * 0.76, r: 38 },
+          { x: 360, y: h + 285, r: 34 },
         ]) {
           fillPxRect(pitchCacheCtx, mPos.x - mPos.r - 3, mPos.y - mPos.r - 3, (mPos.r + 3) * 2, (mPos.r + 3) * 2, outline, px);
           fillPxRect(pitchCacheCtx, mPos.x - mPos.r, mPos.y - mPos.r, mPos.r * 2, mPos.r * 2, '#94a3b8', px);
@@ -627,52 +654,23 @@ export default function App() {
           fillPxRect(pitchCacheCtx, mPos.x + 8, mPos.y + 6, 9, 9, '#64748b', px);
         }
 
-        // Left & Right Orbital Solar Array Wings & Docking Pods
-        for (const sideX of [-130, w + 48]) {
-          fillPxRect(pitchCacheCtx, sideX - 3, h * 0.16 - 3, 88, 126, outline, px);
-          fillPxRect(pitchCacheCtx, sideX, h * 0.16, 82, 120, '#1e3a8a', px);
+        // Left & Right Outer Orbital Solar Array Wings (Outside Stadium Wall at x = -295 and w + 210)
+        for (const sideX of [-296, w + 214]) {
+          fillPxRect(pitchCacheCtx, sideX - 3, h * 0.32 - 3, 88, 146, outline, px);
+          fillPxRect(pitchCacheCtx, sideX, h * 0.32, 82, 140, '#1e3a8a', px);
           pitchCacheCtx.strokeStyle = '#38bdf8';
           pitchCacheCtx.lineWidth = 2;
-          for (let sy = h * 0.16 + 20; sy < h * 0.16 + 115; sy += 24) {
+          for (let sy = h * 0.32 + 20; sy < h * 0.32 + 135; sy += 24) {
             pitchCacheCtx.beginPath();
             pitchCacheCtx.moveTo(sideX + 4, sy);
             pitchCacheCtx.lineTo(sideX + 78, sy);
             pitchCacheCtx.stroke();
           }
           pitchCacheCtx.beginPath();
-          pitchCacheCtx.moveTo(sideX + 41, h * 0.16 + 4);
-          pitchCacheCtx.lineTo(sideX + 41, h * 0.16 + 116);
+          pitchCacheCtx.moveTo(sideX + 41, h * 0.32 + 4);
+          pitchCacheCtx.lineTo(sideX + 41, h * 0.32 + 136);
           pitchCacheCtx.stroke();
         }
-
-        // Orbital Space Station Metallic Deck Collar with Cyan Conduit Strips & Docking Bay Chevrons
-        const stationPad = 42;
-        fillPxRect(pitchCacheCtx, -stationPad - 4, -stationPad - 4, w + (stationPad + 4) * 2, h + (stationPad + 4) * 2, outline, px);
-        fillPxRect(pitchCacheCtx, -stationPad, -stationPad, w + stationPad * 2, h + stationPad * 2, '#1e1b4b', px);
-        fillPxRect(pitchCacheCtx, -stationPad + 8, -stationPad + 8, w + (stationPad - 8) * 2, h + (stationPad - 8) * 2, '#312e81', px);
-        for (let hx = 60; hx < w - 60; hx += 120) {
-          fillPxRect(pitchCacheCtx, hx, -stationPad + 6, 36, 10, '#38bdf8', px);
-          fillPxRect(pitchCacheCtx, hx + 10, -stationPad + 9, 16, 4, '#e0f2fe', px);
-          fillPxRect(pitchCacheCtx, hx, h + stationPad - 16, 36, 10, '#38bdf8', px);
-          fillPxRect(pitchCacheCtx, hx + 10, h + stationPad - 13, 16, 4, '#e0f2fe', px);
-        }
-        // Subtle Deep-Space Telemetry Radar Dishes on Top & Bottom Orbital Deck
-        for (const rx of [w * 0.14, w * 0.86]) {
-          for (const ry of [-84, h + 84]) {
-            fillPxRect(pitchCacheCtx, rx - 14, ry - 14, 28, 28, outline, px);
-            fillPxRect(pitchCacheCtx, rx - 10, ry - 10, 20, 20, '#334155', px);
-            fillPxRect(pitchCacheCtx, rx - 6, ry - 6, 12, 12, '#38bdf8', px);
-            fillPxRect(pitchCacheCtx, rx - 2, ry - 2, 4, 4, '#ffffff', px);
-          }
-        }
-        pitchCacheCtx.strokeStyle = 'rgba(56, 189, 248, 0.85)';
-        pitchCacheCtx.lineWidth = 3;
-        pitchCacheCtx.strokeRect(-stationPad + 18, -stationPad + 18, w + (stationPad - 18) * 2, h + (stationPad - 18) * 2);
-
-        drawCornerFloodlightTower(pitchCacheCtx, -112, -98, 1, 1, px);
-        drawCornerFloodlightTower(pitchCacheCtx, w + 112, -98, -1, 1, px);
-        drawCornerFloodlightTower(pitchCacheCtx, -112, h + 98, 1, -1, px);
-        drawCornerFloodlightTower(pitchCacheCtx, w + 112, h + 98, -1, -1, px);
       } else if (selectedPitchTheme === 'URBAN_CONCRETE') {
         // === 2. URBAN STREET CONCRETE: DOWNTOWN METRO BLOCK PARTY & ASPHALT AVENUE ===
         pitchCacheCtx.fillStyle = '#1e293b';
@@ -683,28 +681,22 @@ export default function App() {
           pitchCacheCtx.fillRect(bx, -CACHE_PAD_Y, 90, h + CACHE_PAD_Y * 2);
         }
 
-        for (const roadY of [-132, h + 64]) {
+        // Outer City Asphalt Roads & Crosswalks (Strictly outside Stadium Bowl at y = -280 and y = h + 212)
+        for (const roadY of [-280, h + 212]) {
           fillPxRect(pitchCacheCtx, -CACHE_PAD_X, roadY - 4, w + CACHE_PAD_X * 2, 76, outline, px);
           fillPxRect(pitchCacheCtx, -CACHE_PAD_X, roadY, w + CACHE_PAD_X * 2, 68, '#0f172a', px);
           for (let rx = -CACHE_PAD_X + 20; rx < w + CACHE_PAD_X; rx += 64) {
             fillPxRect(pitchCacheCtx, rx, roadY + 31, 34, 6, '#facc15', px);
           }
-          for (const cwX of [140, w * 0.5 - 36, w - 210]) {
+          for (const cwX of [180, w * 0.5 - 36, w - 230]) {
             for (let stripe = 0; stripe < 5; stripe++) {
               fillPxRect(pitchCacheCtx, cwX, roadY + 6 + stripe * 12, 54, 7, '#f8fafc', px);
             }
           }
         }
 
-        // Subtle Warm Streetlight Posts & Graffiti Stencil Murals Along Sidewalk
-        for (const lampX of [250, w - 250]) {
-          for (const lampY of [-56, h + 56]) {
-            fillPxRect(pitchCacheCtx, lampX - 8, lampY - 8, 16, 16, outline, px);
-            fillPxRect(pitchCacheCtx, lampX - 5, lampY - 5, 10, 10, '#fde047', px);
-          }
-        }
-
-        for (const sideX of [-126, w + 46]) {
+        // Left & Right Outer Streetball Half-Courts & Boombox Plazas (Outside Stadium Wall at x = -296 and w + 216)
+        for (const sideX of [-296, w + 216]) {
           fillPxRect(pitchCacheCtx, sideX - 3, h * 0.24 - 3, 86, h * 0.52 + 6, outline, px);
           fillPxRect(pitchCacheCtx, sideX, h * 0.24, 80, h * 0.52, '#475569', px);
           fillPxRect(pitchCacheCtx, sideX + 8, h * 0.36, 64, h * 0.28, '#f97316', px);
@@ -725,122 +717,92 @@ export default function App() {
           fillPxRect(pitchCacheCtx, sideX + 16, h - 144, 16, 16, '#0f172a', px);
           fillPxRect(pitchCacheCtx, sideX + 48, h - 144, 16, 16, '#0f172a', px);
         }
-
-        const curbPad = 42;
-        fillPxRect(pitchCacheCtx, -curbPad - 4, -curbPad - 4, w + (curbPad + 4) * 2, h + (curbPad + 4) * 2, outline, px);
-        fillPxRect(pitchCacheCtx, -curbPad, -curbPad, w + curbPad * 2, h + curbPad * 2, '#334155', px);
-        for (let hx = -curbPad; hx < w + curbPad; hx += 48) {
-          fillPxRect(pitchCacheCtx, hx, -curbPad, 24, 10, '#facc15', px);
-          fillPxRect(pitchCacheCtx, hx, h + curbPad - 10, 24, 10, '#facc15', px);
-        }
-
-        drawCornerFloodlightTower(pitchCacheCtx, -108, -96, 1, 1, px);
-        drawCornerFloodlightTower(pitchCacheCtx, w + 108, -96, -1, 1, px);
-        drawCornerFloodlightTower(pitchCacheCtx, -108, h + 96, 1, -1, px);
-        drawCornerFloodlightTower(pitchCacheCtx, w + 108, h + 96, -1, -1, px);
       } else if (selectedPitchTheme === 'RIO_CLAY') {
         // === 3. RIO CLAY: COPACABANA TROPICAL BEACHFRONT, OCEAN SURF & PALM BOARDWALK ===
         pitchCacheCtx.fillStyle = '#0284c7';
         pitchCacheCtx.fillRect(-CACHE_PAD_X, -CACHE_PAD_Y, w + CACHE_PAD_X * 2, h + CACHE_PAD_Y * 2);
 
-        fillPxRect(pitchCacheCtx, -245, -175, w + 490, h + 350, '#0ea5e9', px);
-        fillPxRect(pitchCacheCtx, -210, -148, w + 420, h + 296, '#38bdf8', px);
-        fillPxRect(pitchCacheCtx, -182, -132, w + 364, h + 264, '#e0f2fe', px);
+        // Ocean Surf & Golden Copacabana Sand Island Surrounding the Stadium Bowl
+        fillPxRect(pitchCacheCtx, -380, -310, w + 760, h + 620, '#0ea5e9', px);
+        fillPxRect(pitchCacheCtx, -345, -280, w + 690, h + 560, '#38bdf8', px);
+        fillPxRect(pitchCacheCtx, -318, -256, w + 636, h + 512, '#e0f2fe', px);
+        fillPxRect(pitchCacheCtx, -298, -238, w + 596, h + 476, '#fcd34d', px);
+        fillPxRect(pitchCacheCtx, -270, -216, w + 540, h + 432, '#fde68a', px);
 
-        fillPxRect(pitchCacheCtx, -168, -120, w + 336, h + 240, '#fcd34d', px);
-        fillPxRect(pitchCacheCtx, -148, -104, w + 296, h + 208, '#fde68a', px);
-
-        // Sideline Beach Volleyball Sand Courts & Nets on Left & Right
-        for (const vx of [-124, w + 54]) {
+        // Outer Beach Volleyball Sand Courts on Left & Right Beach (Outside Stadium Wall)
+        for (const vx of [-262, w + 192]) {
           pitchCacheCtx.strokeStyle = '#f97316';
           pitchCacheCtx.lineWidth = 2.5;
-          pitchCacheCtx.strokeRect(vx, h * 0.28, 70, h * 0.44);
-          fillPxRect(pitchCacheCtx, vx - 3, h * 0.5 - 3, 76, 6, '#ffffff', px);
+          pitchCacheCtx.strokeRect(vx, h * 0.28, 66, h * 0.44);
+          fillPxRect(pitchCacheCtx, vx - 3, h * 0.5 - 3, 72, 6, '#ffffff', px);
           fillPxRect(pitchCacheCtx, vx - 4, h * 0.5 - 6, 6, 12, outline, px);
-          fillPxRect(pitchCacheCtx, vx + 68, h * 0.5 - 6, 6, 12, outline, px);
+          fillPxRect(pitchCacheCtx, vx + 64, h * 0.5 - 6, 6, 12, outline, px);
         }
 
-        // Colorful Tropical Surfboards Planted in the Copacabana Sand
+        // Colorful Tropical Surfboards, Beach Umbrellas & Palms on Outer Sand (Strictly outside ±215px)
         for (const sb of [
-          { x: 245, y: -76, col: '#f43f5e', stripe: '#fde047' },
-          { x: w - 245, y: -76, col: '#06b6d4', stripe: '#ffffff' },
-          { x: 245, y: h + 76, col: '#10b981', stripe: '#fef08a' },
-          { x: w - 245, y: h + 76, col: '#f97316', stripe: '#ffffff' },
+          { x: 265, y: -212, col: '#f43f5e', stripe: '#fde047' },
+          { x: w - 265, y: -212, col: '#06b6d4', stripe: '#ffffff' },
+          { x: 265, y: h + 212, col: '#10b981', stripe: '#fef08a' },
+          { x: w - 265, y: h + 212, col: '#f97316', stripe: '#ffffff' },
         ]) {
           fillPxRect(pitchCacheCtx, sb.x - 14, sb.y - 7, 28, 14, outline, px);
           fillPxRect(pitchCacheCtx, sb.x - 11, sb.y - 4, 22, 8, sb.col, px);
           fillPxRect(pitchCacheCtx, sb.x - 6, sb.y - 2, 12, 4, sb.stripe, px);
         }
 
-        // Iconic Copacabana Wave-Mosaic & Teak Boardwalk Collar
-        const walkPad = 42;
-        fillPxRect(pitchCacheCtx, -walkPad - 4, -walkPad - 4, w + (walkPad + 4) * 2, h + (walkPad + 4) * 2, outline, px);
-        fillPxRect(pitchCacheCtx, -walkPad, -walkPad, w + walkPad * 2, h + walkPad * 2, '#92400e', px);
-        fillPxRect(pitchCacheCtx, -walkPad + 8, -walkPad + 8, w + (walkPad - 8) * 2, h + (walkPad - 8) * 2, '#b45309', px);
-        for (let mx = -walkPad + 12; mx < w + walkPad - 20; mx += 36) {
-          const waveOffset = (Math.floor(mx / 36) % 2) * 3;
-          fillPxRect(pitchCacheCtx, mx, -walkPad + 2 + waveOffset, 18, 5, '#fef3c7', px);
-          fillPxRect(pitchCacheCtx, mx, h + walkPad - 9 + waveOffset, 18, 5, '#fef3c7', px);
-        }
-
         const umbrellas = [
-          { x: 170, y: -88, c1: '#f43f5e', c2: '#ffffff' },
-          { x: 460, y: -92, c1: '#0ea5e9', c2: '#fef08a' },
-          { x: w - 460, y: -92, c1: '#ec4899', c2: '#ffffff' },
-          { x: w - 170, y: -88, c1: '#10b981', c2: '#fef08a' },
-          { x: 170, y: h + 88, c1: '#8b5cf6', c2: '#ffffff' },
-          { x: 460, y: h + 92, c1: '#f97316', c2: '#fef08a' },
-          { x: w - 460, y: h + 92, c1: '#06b6d4', c2: '#ffffff' },
-          { x: w - 170, y: h + 88, c1: '#f43f5e', c2: '#fef08a' },
-          { x: -112, y: 170, c1: '#f43f5e', c2: '#ffffff' },
-          { x: -112, y: h - 170, c1: '#0ea5e9', c2: '#fef08a' },
-          { x: w + 112, y: 170, c1: '#10b981', c2: '#ffffff' },
-          { x: w + 112, y: h - 170, c1: '#ec4899', c2: '#fef08a' },
+          { x: 170, y: -222, c1: '#f43f5e', c2: '#ffffff' },
+          { x: 480, y: -224, c1: '#0ea5e9', c2: '#fef08a' },
+          { x: w - 480, y: -224, c1: '#ec4899', c2: '#ffffff' },
+          { x: w - 170, y: -222, c1: '#10b981', c2: '#fef08a' },
+          { x: 170, y: h + 222, c1: '#8b5cf6', c2: '#ffffff' },
+          { x: 480, y: h + 224, c1: '#f97316', c2: '#fef08a' },
+          { x: w - 480, y: h + 224, c1: '#06b6d4', c2: '#ffffff' },
+          { x: w - 170, y: h + 222, c1: '#f43f5e', c2: '#fef08a' },
+          { x: -236, y: 150, c1: '#f43f5e', c2: '#ffffff' },
+          { x: -236, y: h - 150, c1: '#0ea5e9', c2: '#fef08a' },
+          { x: w + 236, y: 150, c1: '#10b981', c2: '#ffffff' },
+          { x: w + 236, y: h - 150, c1: '#ec4899', c2: '#fef08a' },
         ];
         for (const umb of umbrellas) {
           drawBeachUmbrella(pitchCacheCtx, umb.x, umb.y, umb.c1, umb.c2, px);
         }
 
         const palmPositions = [
-          { x: 310, y: -86 },
-          { x: w - 310, y: -86 },
-          { x: 310, y: h + 92 },
-          { x: w - 310, y: h + 92 },
-          { x: -115, y: 92 },
-          { x: -115, y: h - 92 },
-          { x: w + 115, y: 92 },
-          { x: w + 115, y: h - 92 },
+          { x: 330, y: -220 },
+          { x: w - 330, y: -220 },
+          { x: 330, y: h + 224 },
+          { x: w - 330, y: h + 224 },
+          { x: -242, y: 78 },
+          { x: -242, y: h - 78 },
+          { x: w + 242, y: 78 },
+          { x: w + 242, y: h - 78 },
         ];
         for (const pm of palmPositions) {
           drawPixelPalmTree(pitchCacheCtx, pm.x, pm.y, px);
         }
-
-        drawCornerFloodlightTower(pitchCacheCtx, -108, -96, 1, 1, px);
-        drawCornerFloodlightTower(pitchCacheCtx, w + 108, -96, -1, 1, px);
-        drawCornerFloodlightTower(pitchCacheCtx, -108, h + 96, 1, -1, px);
-        drawCornerFloodlightTower(pitchCacheCtx, w + 108, h + 96, -1, -1, px);
       } else if (selectedPitchTheme === 'TWILIGHT_SYNTH') {
         // === 4. TWILIGHT SYNTH: CYBER-SYNTHWAVES, NEON LASER GRID & SKYLINE ROOFTOP ===
         pitchCacheCtx.fillStyle = '#09051c';
         pitchCacheCtx.fillRect(-CACHE_PAD_X, -CACHE_PAD_Y, w + CACHE_PAD_X * 2, h + CACHE_PAD_Y * 2);
 
-        // Giant Retro Outrun Segmented Sunset Glow & Horizon Disc at Top Horizon
-        const sunGrad = pitchCacheCtx.createRadialGradient(w * 0.5, -135, 10, w * 0.5, -135, 290);
+        // Giant Retro Outrun Segmented Sunset Glow & Horizon Disc Above Stadium
+        const sunGrad = pitchCacheCtx.createRadialGradient(w * 0.5, -280, 10, w * 0.5, -280, 320);
         sunGrad.addColorStop(0, 'rgba(244, 114, 182, 0.52)');
         sunGrad.addColorStop(0.5, 'rgba(168, 85, 247, 0.26)');
         sunGrad.addColorStop(1, 'rgba(9, 5, 28, 0)');
         pitchCacheCtx.fillStyle = sunGrad;
         pitchCacheCtx.beginPath();
-        pitchCacheCtx.arc(w * 0.5, -135, 290, 0, Math.PI * 2);
+        pitchCacheCtx.arc(w * 0.5, -280, 320, 0, Math.PI * 2);
         pitchCacheCtx.fill();
 
-        // Segmented Outrun Sun Bars in Top Center Sky
-        fillPxRect(pitchCacheCtx, w * 0.5 - 64, -158, 128, 8, '#fde047', px);
-        fillPxRect(pitchCacheCtx, w * 0.5 - 76, -144, 152, 8, '#fb923c', px);
-        fillPxRect(pitchCacheCtx, w * 0.5 - 84, -130, 168, 8, '#f43f5e', px);
-        fillPxRect(pitchCacheCtx, w * 0.5 - 76, -116, 152, 6, '#e879f9', px);
+        fillPxRect(pitchCacheCtx, w * 0.5 - 64, -310, 128, 8, '#fde047', px);
+        fillPxRect(pitchCacheCtx, w * 0.5 - 76, -296, 152, 8, '#fb923c', px);
+        fillPxRect(pitchCacheCtx, w * 0.5 - 84, -282, 168, 8, '#f43f5e', px);
+        fillPxRect(pitchCacheCtx, w * 0.5 - 76, -268, 152, 6, '#e879f9', px);
 
-        pitchCacheCtx.strokeStyle = 'rgba(232, 121, 249, 0.36)';
+        pitchCacheCtx.strokeStyle = 'rgba(232, 121, 249, 0.34)';
         pitchCacheCtx.lineWidth = 2;
         for (let gx = -CACHE_PAD_X; gx <= w + CACHE_PAD_X; gx += 72) {
           pitchCacheCtx.beginPath();
@@ -848,7 +810,7 @@ export default function App() {
           pitchCacheCtx.lineTo(gx, h + CACHE_PAD_Y);
           pitchCacheCtx.stroke();
         }
-        pitchCacheCtx.strokeStyle = 'rgba(34, 211, 238, 0.34)';
+        pitchCacheCtx.strokeStyle = 'rgba(34, 211, 238, 0.32)';
         for (let gy = -CACHE_PAD_Y; gy <= h + CACHE_PAD_Y; gy += 64) {
           pitchCacheCtx.beginPath();
           pitchCacheCtx.moveTo(-CACHE_PAD_X, gy);
@@ -856,27 +818,27 @@ export default function App() {
           pitchCacheCtx.stroke();
         }
 
+        // Cyber-Synth Skyline Towers (Strictly outside Stadium Bowl at y <= -305, y >= h + 210, x <= -290, x >= w + 206)
         const buildings = [
-          { x: 85, y: -158, bw: 96, bh: 92, c: '#1e1b4b', win: '#fde047' },
-          { x: 195, y: -172, bw: 110, bh: 106, c: '#311042', win: '#22d3ee' },
-          { x: 320, y: -148, bw: 88, bh: 82, c: '#1e1b4b', win: '#f472b6' },
-          { x: w - 410, y: -152, bw: 92, bh: 86, c: '#311042', win: '#22d3ee' },
-          { x: w - 305, y: -174, bw: 108, bh: 108, c: '#1e1b4b', win: '#fde047' },
-          { x: w - 183, y: -156, bw: 96, bh: 90, c: '#311042', win: '#a7f3d0' },
-          { x: 95, y: h + 64, bw: 104, bh: 96, c: '#311042', win: '#22d3ee' },
-          { x: 215, y: h + 64, bw: 112, bh: 108, c: '#1e1b4b', win: '#f472b6' },
-          { x: w - 327, y: h + 64, bw: 112, bh: 108, c: '#1e1b4b', win: '#fde047' },
-          { x: w - 199, y: h + 64, bw: 104, bh: 96, c: '#311042', win: '#22d3ee' },
-          { x: -132, y: 95, bw: 84, bh: 150, c: '#1e1b4b', win: '#fde047' },
-          { x: -132, y: h - 245, bw: 84, bh: 150, c: '#311042', win: '#f472b6' },
-          { x: w + 48, y: 95, bw: 84, bh: 150, c: '#311042', win: '#22d3ee' },
-          { x: w + 48, y: h - 245, bw: 84, bh: 150, c: '#1e1b4b', win: '#fde047' },
+          { x: 85, y: -305, bw: 96, bh: 92, c: '#1e1b4b', win: '#fde047' },
+          { x: 195, y: -320, bw: 110, bh: 106, c: '#311042', win: '#22d3ee' },
+          { x: 320, y: -296, bw: 88, bh: 82, c: '#1e1b4b', win: '#f472b6' },
+          { x: w - 410, y: -300, bw: 92, bh: 86, c: '#311042', win: '#22d3ee' },
+          { x: w - 305, y: -322, bw: 108, bh: 108, c: '#1e1b4b', win: '#fde047' },
+          { x: w - 183, y: -304, bw: 96, bh: 90, c: '#311042', win: '#a7f3d0' },
+          { x: 95, y: h + 212, bw: 104, bh: 96, c: '#311042', win: '#22d3ee' },
+          { x: 215, y: h + 212, bw: 112, bh: 108, c: '#1e1b4b', win: '#f472b6' },
+          { x: w - 327, y: h + 212, bw: 112, bh: 108, c: '#1e1b4b', win: '#fde047' },
+          { x: w - 199, y: h + 212, bw: 104, bh: 96, c: '#311042', win: '#22d3ee' },
+          { x: -292, y: 95, bw: 84, bh: 150, c: '#1e1b4b', win: '#fde047' },
+          { x: -292, y: h - 245, bw: 84, bh: 150, c: '#311042', win: '#f472b6' },
+          { x: w + 208, y: 95, bw: 84, bh: 150, c: '#311042', win: '#22d3ee' },
+          { x: w + 208, y: h - 245, bw: 84, bh: 150, c: '#1e1b4b', win: '#fde047' },
         ];
         for (const b of buildings) {
           fillPxRect(pitchCacheCtx, b.x - 4, b.y - 4, b.bw + 8, b.bh + 8, outline, px);
           fillPxRect(pitchCacheCtx, b.x, b.y, b.bw, b.bh, b.c, px);
           fillPxRect(pitchCacheCtx, b.x + 6, b.y + 4, b.bw - 12, 5, '#f472b6', px);
-          // Rooftop Cyber Beacon Spires
           fillPxRect(pitchCacheCtx, b.x + b.bw * 0.5 - 3, b.y - 12, 6, 10, '#22d3ee', px);
           for (let wx = b.x + 12; wx < b.x + b.bw - 14; wx += 18) {
             for (let wy = b.y + 14; wy < b.y + b.bh - 12; wy += 16) {
@@ -886,35 +848,23 @@ export default function App() {
             }
           }
         }
-
-        const neonPad = 42;
-        fillPxRect(pitchCacheCtx, -neonPad - 4, -neonPad - 4, w + (neonPad + 4) * 2, h + (neonPad + 4) * 2, '#f472b6', px);
-        fillPxRect(pitchCacheCtx, -neonPad, -neonPad, w + neonPad * 2, h + neonPad * 2, '#1e1b4b', px);
-        pitchCacheCtx.strokeStyle = '#22d3ee';
-        pitchCacheCtx.lineWidth = 3;
-        pitchCacheCtx.strokeRect(-neonPad + 12, -neonPad + 12, w + (neonPad - 12) * 2, h + (neonPad - 12) * 2);
-
-        drawCornerFloodlightTower(pitchCacheCtx, -108, -96, 1, 1, px);
-        drawCornerFloodlightTower(pitchCacheCtx, w + 108, -96, -1, 1, px);
-        drawCornerFloodlightTower(pitchCacheCtx, -108, h + 96, 1, -1, px);
-        drawCornerFloodlightTower(pitchCacheCtx, w + 108, h + 96, -1, -1, px);
       } else if (selectedPitchTheme === 'ARCTIC_ICE') {
         // === 5. ARCTIC ICE: GLACIER FROST FJORD, SNOW PINES & ALPINE SKI LODGES ===
         pitchCacheCtx.fillStyle = '#0f172a';
         pitchCacheCtx.fillRect(-CACHE_PAD_X, -CACHE_PAD_Y, w + CACHE_PAD_X * 2, h + CACHE_PAD_Y * 2);
 
-        // Frozen Glacial Fjord Ring & Snow-Blanketed Shore
-        fillPxRect(pitchCacheCtx, -230, -165, w + 460, h + 330, '#1e3a8a', px);
-        fillPxRect(pitchCacheCtx, -195, -142, w + 390, h + 284, '#38bdf8', px);
-        fillPxRect(pitchCacheCtx, -172, -124, w + 344, h + 248, '#e2e8f0', px);
-        fillPxRect(pitchCacheCtx, -150, -108, w + 300, h + 216, '#f8fafc', px);
+        // Frozen Glacial Fjord Ring & Snow-Blanketed Shore Outside the Stadium Bowl
+        fillPxRect(pitchCacheCtx, -370, -300, w + 740, h + 600, '#1e3a8a', px);
+        fillPxRect(pitchCacheCtx, -335, -272, w + 670, h + 544, '#38bdf8', px);
+        fillPxRect(pitchCacheCtx, -305, -248, w + 610, h + 496, '#e2e8f0', px);
+        fillPxRect(pitchCacheCtx, -276, -224, w + 552, h + 448, '#f8fafc', px);
 
-        // Glowing Crystalline Ice Monoliths on Left & Right Glacial Banks
+        // Glowing Crystalline Ice Monoliths on Left & Right Glacial Banks (Outside Stadium Bowl)
         for (const ic of [
-          { x: -94, y: h * 0.5 - 52 },
-          { x: -94, y: h * 0.5 + 36 },
-          { x: w + 82, y: h * 0.5 - 52 },
-          { x: w + 82, y: h * 0.5 + 36 },
+          { x: -238, y: h * 0.5 - 64 },
+          { x: -238, y: h * 0.5 + 42 },
+          { x: w + 222, y: h * 0.5 - 64 },
+          { x: w + 222, y: h * 0.5 + 42 },
         ]) {
           fillPxRect(pitchCacheCtx, ic.x - 4, ic.y - 4, 24, 32, outline, px);
           fillPxRect(pitchCacheCtx, ic.x, ic.y, 16, 24, '#38bdf8', px);
@@ -922,126 +872,84 @@ export default function App() {
           fillPxRect(pitchCacheCtx, ic.x + 5, ic.y + 5, 5, 10, '#ffffff', px);
         }
 
-        // Cozy Alpine Timber Ski Lodges with Warm Lit Windows & Chimneys
+        // Cozy Alpine Timber Ski Lodges with Warm Lit Windows & Chimneys (Strictly outside Stadium Bowl)
         for (const lodge of [
-          { x: 140, y: -118 },
-          { x: w - 236, y: -118 },
-          { x: 140, y: h + 64 },
-          { x: w - 236, y: h + 64 },
+          { x: 140, y: -262 },
+          { x: w - 236, y: -262 },
+          { x: 140, y: h + 212 },
+          { x: w - 236, y: h + 212 },
         ]) {
-          // Chimney
           fillPxRect(pitchCacheCtx, lodge.x + 70, lodge.y - 12, 16, 20, outline, px);
           fillPxRect(pitchCacheCtx, lodge.x + 73, lodge.y - 9, 10, 14, '#64748b', px);
-          // Cabin body & snow-covered pitched roof
           fillPxRect(pitchCacheCtx, lodge.x - 4, lodge.y - 4, 104, 58, outline, px);
           fillPxRect(pitchCacheCtx, lodge.x, lodge.y, 96, 50, '#78350f', px);
           fillPxRect(pitchCacheCtx, lodge.x - 6, lodge.y - 6, 108, 18, outline, px);
           fillPxRect(pitchCacheCtx, lodge.x - 3, lodge.y - 3, 102, 12, '#ffffff', px);
-          // Glowing golden cabin windows
           fillPxRect(pitchCacheCtx, lodge.x + 14, lodge.y + 18, 20, 18, outline, px);
           fillPxRect(pitchCacheCtx, lodge.x + 17, lodge.y + 21, 14, 12, '#fde047', px);
           fillPxRect(pitchCacheCtx, lodge.x + 60, lodge.y + 18, 20, 18, outline, px);
           fillPxRect(pitchCacheCtx, lodge.x + 63, lodge.y + 21, 14, 12, '#fde047', px);
         }
 
-        // Crystalline Ice-Block Collar Around the Glacial Rink
-        const icePad = 42;
-        fillPxRect(pitchCacheCtx, -icePad - 4, -icePad - 4, w + (icePad + 4) * 2, h + (icePad + 4) * 2, outline, px);
-        fillPxRect(pitchCacheCtx, -icePad, -icePad, w + icePad * 2, h + icePad * 2, '#0284c7', px);
-        fillPxRect(pitchCacheCtx, -icePad + 8, -icePad + 8, w + (icePad - 8) * 2, h + (icePad - 8) * 2, '#7dd3fc', px);
-        for (let ix = -icePad + 16; ix < w + icePad - 24; ix += 52) {
-          fillPxRect(pitchCacheCtx, ix, -icePad + 4, 24, 6, '#ecfeff', px);
-          fillPxRect(pitchCacheCtx, ix, h + icePad - 10, 24, 6, '#ecfeff', px);
-        }
-
-        // Snow-Capped 16-Bit Pine Trees Around the Fjord
+        // Snow-Capped 16-Bit Pine Trees Around the Fjord (Outside Stadium Bowl)
         const pineCoords = [
-          { x: 310, y: -88 },
-          { x: 430, y: -94 },
-          { x: w - 430, y: -94 },
-          { x: w - 310, y: -88 },
-          { x: 310, y: h + 92 },
-          { x: 430, y: h + 96 },
-          { x: w - 430, y: h + 96 },
-          { x: w - 310, y: h + 92 },
-          { x: -102, y: 110 },
-          { x: -112, y: 240 },
-          { x: -112, y: h - 240 },
-          { x: -102, y: h - 110 },
-          { x: w + 102, y: 110 },
-          { x: w + 112, y: 240 },
-          { x: w + 112, y: h - 240 },
-          { x: w + 102, y: h - 110 },
+          { x: 320, y: -226 },
+          { x: 450, y: -232 },
+          { x: w - 450, y: -232 },
+          { x: w - 320, y: -226 },
+          { x: 320, y: h + 228 },
+          { x: 450, y: h + 234 },
+          { x: w - 450, y: h + 234 },
+          { x: w - 320, y: h + 228 },
+          { x: -236, y: 110 },
+          { x: -248, y: 240 },
+          { x: -248, y: h - 240 },
+          { x: -236, y: h - 110 },
+          { x: w + 236, y: 110 },
+          { x: w + 248, y: 240 },
+          { x: w + 248, y: h - 240 },
+          { x: w + 236, y: h - 110 },
         ];
         for (const pt of pineCoords) {
           drawSnowPineTree(pitchCacheCtx, pt.x, pt.y, px);
         }
-
-        drawCornerFloodlightTower(pitchCacheCtx, -108, -96, 1, 1, px);
-        drawCornerFloodlightTower(pitchCacheCtx, w + 108, -96, -1, 1, px);
-        drawCornerFloodlightTower(pitchCacheCtx, -108, h + 96, 1, -1, px);
-        drawCornerFloodlightTower(pitchCacheCtx, w + 108, h + 96, -1, -1, px);
       } else if (selectedPitchTheme === 'VOLCANO_FORGE') {
         // === 6. VOLCANO FORGE: MAGMA CALDERA CITADEL, LAVA RIVERS & DRAGON BRAZIERS ===
-        // Outer Molten Magma Sea
         pitchCacheCtx.fillStyle = '#7c2d12';
         pitchCacheCtx.fillRect(-CACHE_PAD_X, -CACHE_PAD_Y, w + CACHE_PAD_X * 2, h + CACHE_PAD_Y * 2);
 
-        // Bright Glowing Lava River Veins & Magma Channels
-        fillPxRect(pitchCacheCtx, -240, -170, w + 480, h + 340, '#c2410c', px);
-        fillPxRect(pitchCacheCtx, -205, -145, w + 410, h + 290, '#ea580c', px);
-        fillPxRect(pitchCacheCtx, -180, -126, w + 360, h + 252, '#f97316', px);
-        fillPxRect(pitchCacheCtx, -162, -112, w + 324, h + 224, '#facc15', px);
+        // Bright Glowing Lava River Moat Outside the Basalt Citadel
+        fillPxRect(pitchCacheCtx, -370, -300, w + 740, h + 600, '#c2410c', px);
+        fillPxRect(pitchCacheCtx, -335, -270, w + 670, h + 540, '#ea580c', px);
+        fillPxRect(pitchCacheCtx, -304, -244, w + 608, h + 488, '#f97316', px);
+        fillPxRect(pitchCacheCtx, -278, -222, w + 556, h + 444, '#facc15', px);
 
-        // Jagged Dark Basalt Citadel Island Shelf
-        fillPxRect(pitchCacheCtx, -148, -102, w + 296, h + 204, outline, px);
-        fillPxRect(pitchCacheCtx, -142, -96, w + 284, h + 192, '#18181b', px);
-        fillPxRect(pitchCacheCtx, -126, -84, w + 252, h + 168, '#27272a', px);
-
-        // Left & Right Obsidian Stone Bridges Spanning the Lava Moat + Forged Iron Anvil Pedestals
-        for (const bx of [-142, w + 42]) {
+        // Left & Right Obsidian Stone Bridges Spanning the Outer Lava Moat
+        for (const bx of [-296, w + 196]) {
           fillPxRect(pitchCacheCtx, bx, h * 0.34, 100, h * 0.32, outline, px);
           fillPxRect(pitchCacheCtx, bx + 4, h * 0.34 + 4, 92, h * 0.32 - 8, '#3f3f46', px);
           fillPxRect(pitchCacheCtx, bx + 12, h * 0.34 + 14, 76, 8, '#f97316', px);
           fillPxRect(pitchCacheCtx, bx + 12, h * 0.66 - 22, 76, 8, '#f97316', px);
-          // Glowing Golden Forge Rune Emblem on Bridge Center
           fillPxRect(pitchCacheCtx, bx + 36, h * 0.5 - 12, 28, 24, outline, px);
           fillPxRect(pitchCacheCtx, bx + 40, h * 0.5 - 8, 20, 16, '#facc15', px);
         }
 
-        // Fortress Basalt Collar with Carved Molten Gold Runes
-        const forgePad = 42;
-        fillPxRect(pitchCacheCtx, -forgePad - 4, -forgePad - 4, w + (forgePad + 4) * 2, h + (forgePad + 4) * 2, outline, px);
-        fillPxRect(pitchCacheCtx, -forgePad, -forgePad, w + forgePad * 2, h + forgePad * 2, '#450a0a', px);
-        fillPxRect(pitchCacheCtx, -forgePad + 8, -forgePad + 8, w + (forgePad - 8) * 2, h + (forgePad - 8) * 2, '#27272a', px);
-        for (let rx = 70; rx < w - 70; rx += 90) {
-          fillPxRect(pitchCacheCtx, rx, -forgePad + 12, 28, 6, '#f97316', px);
-          fillPxRect(pitchCacheCtx, rx + 8, -forgePad + 14, 12, 3, '#fde047', px);
-          fillPxRect(pitchCacheCtx, rx, h + forgePad - 18, 28, 6, '#f97316', px);
-          fillPxRect(pitchCacheCtx, rx + 8, h + forgePad - 16, 12, 3, '#fde047', px);
-        }
-
-        // 8 Ancient Obsidian Fire Brazier Pedestals Around the Perimeter
+        // 8 Ancient Obsidian Fire Brazier Pedestals Outside the Stadium Wall
         for (const bz of [
-          { x: 170, y: -76 },
-          { x: w - 170, y: -76 },
-          { x: 170, y: h + 76 },
-          { x: w - 170, y: h + 76 },
-          { x: -96, y: 155 },
-          { x: -96, y: h - 155 },
-          { x: w + 96, y: 155 },
-          { x: w + 96, y: h - 155 },
+          { x: 210, y: -214 },
+          { x: w - 210, y: -214 },
+          { x: 210, y: h + 214 },
+          { x: w - 210, y: h + 214 },
+          { x: -232, y: 155 },
+          { x: -232, y: h - 155 },
+          { x: w + 232, y: 155 },
+          { x: w + 232, y: h - 155 },
         ]) {
           fillPxRect(pitchCacheCtx, bz.x - 18, bz.y - 18, 36, 36, outline, px);
           fillPxRect(pitchCacheCtx, bz.x - 14, bz.y - 14, 28, 28, '#3f3f46', px);
           fillPxRect(pitchCacheCtx, bz.x - 10, bz.y - 10, 20, 20, '#ea580c', px);
           fillPxRect(pitchCacheCtx, bz.x - 6, bz.y - 6, 12, 12, '#fde047', px);
         }
-
-        drawCornerFloodlightTower(pitchCacheCtx, -108, -96, 1, 1, px);
-        drawCornerFloodlightTower(pitchCacheCtx, w + 108, -96, -1, 1, px);
-        drawCornerFloodlightTower(pitchCacheCtx, -108, h + 96, 1, -1, px);
-        drawCornerFloodlightTower(pitchCacheCtx, w + 108, h + 96, -1, -1, px);
       } else if (selectedPitchTheme === 'TURF_AUTUMN') {
         // === 7. AUTUMN HARVEST TURF: GOLDEN MAPLE PARK, COBBLESTONE PROMENADE & HARVEST FESTIVAL ===
         pitchCacheCtx.fillStyle = GRAPHICS_CONFIG.palette.apron.base;
@@ -1053,73 +961,47 @@ export default function App() {
           pitchCacheCtx.fillRect(bx, -CACHE_PAD_Y, bandW, h + CACHE_PAD_Y * 2);
         }
 
-        // Warm Sandstone Autumn Park Promenade Path with Cobblestone Stepping Tiles
+        // Warm Sandstone Autumn Park Promenade Path Outside Left & Right Stadium Gates
         fillPxRect(pitchCacheCtx, -CACHE_PAD_X, h * 0.5 - 54, w + CACHE_PAD_X * 2, 108, outline, px);
         fillPxRect(pitchCacheCtx, -CACHE_PAD_X, h * 0.5 - 48, w + CACHE_PAD_X * 2, 96, '#fed7aa', px);
-        for (let cx = -130; cx <= w + 100; cx += 48) {
-          if (cx > -40 && cx < w + 20) continue;
+        for (let cx = -CACHE_PAD_X + 40; cx <= w + CACHE_PAD_X - 40; cx += 52) {
+          if (cx > -STADIUM_BOWL_PAD - 20 && cx < w + STADIUM_BOWL_PAD + 20) continue;
           fillPxRect(pitchCacheCtx, cx, h * 0.5 - 36, 28, 18, '#fdba74', px);
           fillPxRect(pitchCacheCtx, cx + 14, h * 0.5 + 18, 28, 18, '#fdba74', px);
         }
 
-        // Harvest Festival Timber Market Stalls & Pumpkin Patches on Left & Right Concourse
-        for (const sx of [-114, w + 70]) {
+        // Harvest Festival Timber Market Stalls & Pumpkin Patches Outside Left & Right Concourses
+        for (const sx of [-262, w + 214]) {
           for (const sy of [h * 0.22 - 28, h * 0.78 - 28]) {
             fillPxRect(pitchCacheCtx, sx - 4, sy - 4, 52, 56, outline, px);
             fillPxRect(pitchCacheCtx, sx, sy, 44, 48, '#78350f', px);
-            // Striped Orange & Cream Harvest Awning
             for (let st = 0; st < 4; st++) {
               fillPxRect(pitchCacheCtx, sx + 2 + st * 10, sy + 2, 10, 14, st % 2 === 0 ? '#ea580c' : '#fef3c7', px);
             }
-            // Golden Hay Bales & 16-Bit Harvest Pumpkins
             fillPxRect(pitchCacheCtx, sx + 6, sy + 24, 14, 14, '#f97316', px);
             fillPxRect(pitchCacheCtx, sx + 11, sy + 21, 4, 4, '#15803d', px);
             fillPxRect(pitchCacheCtx, sx + 24, sy + 26, 14, 12, '#facc15', px);
           }
         }
 
-        // Warm Golden-Ochre Brick Running Track Collar
-        const trackPad = 44;
-        fillPxRect(pitchCacheCtx, -trackPad - 4, -trackPad - 4, w + (trackPad + 4) * 2, h + (trackPad + 4) * 2, outline, px);
-        fillPxRect(pitchCacheCtx, -trackPad, -trackPad, w + trackPad * 2, h + trackPad * 2, '#9a3412', px);
-        fillPxRect(pitchCacheCtx, -trackPad + 8, -trackPad + 8, w + (trackPad - 8) * 2, h + (trackPad - 8) * 2, '#d97706', px);
-        pitchCacheCtx.strokeStyle = 'rgba(254, 249, 195, 0.85)';
-        pitchCacheCtx.lineWidth = 2.5;
-        pitchCacheCtx.strokeRect(-trackPad + 18, -trackPad + 18, w + (trackPad - 18) * 2, h + (trackPad - 18) * 2);
-
-        // Timber Park Grandstands with Warm Amber Trim
-        for (const by of [-102, h + 50]) {
-          fillPxRect(pitchCacheCtx, 110, by - 4, w - 220, 52, outline, px);
-          fillPxRect(pitchCacheCtx, 114, by, w - 228, 44, '#78350f', px);
-          fillPxRect(pitchCacheCtx, 120, by + 8, w - 240, 11, '#92400e', px);
-          fillPxRect(pitchCacheCtx, 120, by + 26, w - 240, 11, '#92400e', px);
-          fillPxRect(pitchCacheCtx, 120, by + 2, (w - 240) * 0.48, 4, '#f59e0b', px);
-          fillPxRect(pitchCacheCtx, w * 0.52, by + 2, (w - 240) * 0.48, 4, '#ea580c', px);
-        }
-
-        drawCornerFloodlightTower(pitchCacheCtx, -108, -96, 1, 1, px);
-        drawCornerFloodlightTower(pitchCacheCtx, w + 108, -96, -1, 1, px);
-        drawCornerFloodlightTower(pitchCacheCtx, -108, h + 96, 1, -1, px);
-        drawCornerFloodlightTower(pitchCacheCtx, w + 108, h + 96, -1, -1, px);
-
-        // 16 Crimson, Amber & Gold Autumn Maple & Ginkgo Trees
+        // 16 Crimson, Amber & Gold Autumn Maple & Ginkgo Trees Strictly Outside the Stadium Bowl
         const maplePositions = [
-          { x: -102, y: 88, s: 2, v: 0 },
-          { x: -205, y: 185, s: 2, v: 1 },
-          { x: -102, y: h - 88, s: 2, v: 2 },
-          { x: -205, y: h - 185, s: 2, v: 0 },
-          { x: w + 102, y: 88, s: 2, v: 1 },
-          { x: w + 205, y: 185, s: 2, v: 2 },
-          { x: w + 102, y: h - 88, s: 2, v: 0 },
-          { x: w + 205, y: h - 185, s: 2, v: 1 },
-          { x: 180, y: -136, s: 2, v: 0 },
-          { x: 430, y: -140, s: 2, v: 2 },
-          { x: w - 430, y: -140, s: 2, v: 1 },
-          { x: w - 180, y: -136, s: 2, v: 0 },
-          { x: 180, y: h + 136, s: 2, v: 1 },
-          { x: 430, y: h + 140, s: 2, v: 0 },
-          { x: w - 430, y: h + 140, s: 2, v: 2 },
-          { x: w - 180, y: h + 136, s: 2, v: 1 },
+          { x: -236, y: 88, s: 2, v: 0 },
+          { x: -325, y: 185, s: 2, v: 1 },
+          { x: -236, y: h - 88, s: 2, v: 2 },
+          { x: -325, y: h - 185, s: 2, v: 0 },
+          { x: w + 236, y: 88, s: 2, v: 1 },
+          { x: w + 325, y: 185, s: 2, v: 2 },
+          { x: w + 236, y: h - 88, s: 2, v: 0 },
+          { x: w + 325, y: h - 185, s: 2, v: 1 },
+          { x: 180, y: -234, s: 2, v: 0 },
+          { x: 430, y: -238, s: 2, v: 2 },
+          { x: w - 430, y: -238, s: 2, v: 1 },
+          { x: w - 180, y: -234, s: 2, v: 0 },
+          { x: 180, y: h + 234, s: 2, v: 1 },
+          { x: 430, y: h + 238, s: 2, v: 0 },
+          { x: w - 430, y: h + 238, s: 2, v: 2 },
+          { x: w - 180, y: h + 234, s: 2, v: 1 },
         ];
         for (const mp of maplePositions) {
           drawAutumnMapleTree(pitchCacheCtx, mp.x, mp.y, mp.s, mp.v, px);
@@ -1135,30 +1017,28 @@ export default function App() {
           pitchCacheCtx.fillRect(bx, -CACHE_PAD_Y, bandW, h + CACHE_PAD_Y * 2);
         }
 
-        // White Pebble Zen Garden Walkways & Vermilion Wooden Bridges
+        // White Pebble Zen Garden Walkways Outside Stadium Gates
         fillPxRect(pitchCacheCtx, -CACHE_PAD_X, h * 0.5 - 52, w + CACHE_PAD_X * 2, 104, outline, px);
         fillPxRect(pitchCacheCtx, -CACHE_PAD_X, h * 0.5 - 46, w + CACHE_PAD_X * 2, 92, '#fdf2f8', px);
 
-        // Left & Right Imperial Turquoise Koi Ponds with Stone Borders, Lotus Pads & Stone Toro Lanterns
-        for (const kx of [-124, w + 56]) {
+        // Left & Right Imperial Turquoise Koi Ponds & Stone Toro Lanterns Outside the Stadium Wall
+        for (const kx of [-268, w + 200]) {
           for (const ky of [h * 0.2 - 36, h * 0.8 - 36]) {
             fillPxRect(pitchCacheCtx, kx - 4, ky - 4, 76, 76, outline, px);
             fillPxRect(pitchCacheCtx, kx, ky, 68, 68, '#94a3b8', px);
             fillPxRect(pitchCacheCtx, kx + 6, ky + 6, 56, 56, '#0284c7', px);
             fillPxRect(pitchCacheCtx, kx + 12, ky + 12, 44, 44, '#38bdf8', px);
-            // Lotus lily pads with pink lotus flower
             fillPxRect(pitchCacheCtx, kx + 14, ky + 16, 12, 12, '#16a34a', px);
             fillPxRect(pitchCacheCtx, kx + 17, ky + 19, 6, 6, '#f472b6', px);
             fillPxRect(pitchCacheCtx, kx + 38, ky + 38, 12, 12, '#16a34a', px);
-            // Traditional Japanese Stone Toro Lantern with Warm Amber Light
             fillPxRect(pitchCacheCtx, kx + 26, ky - 16, 16, 16, outline, px);
             fillPxRect(pitchCacheCtx, kx + 29, ky - 13, 10, 10, '#cbd5e1', px);
             fillPxRect(pitchCacheCtx, kx + 31, ky - 11, 6, 6, '#fde047', px);
           }
         }
 
-        // Traditional Vermilion Torii Gates on Left & Right Concourses
-        for (const gx of [-102, w + 74]) {
+        // Traditional Vermilion Torii Gates on Outer Left & Right Walkways
+        for (const gx of [-246, w + 214]) {
           const gy = h * 0.5 - 32;
           fillPxRect(pitchCacheCtx, gx - 4, gy - 4, 36, 68, outline, px);
           fillPxRect(pitchCacheCtx, gx, gy, 8, 60, '#dc2626', px);
@@ -1168,47 +1048,24 @@ export default function App() {
           fillPxRect(pitchCacheCtx, gx - 4, gy + 46, 36, 8, '#ef4444', px);
         }
 
-        // Rose-Quartz Blossom Perimeter Track
-        const trackPad = 44;
-        fillPxRect(pitchCacheCtx, -trackPad - 4, -trackPad - 4, w + (trackPad + 4) * 2, h + (trackPad + 4) * 2, outline, px);
-        fillPxRect(pitchCacheCtx, -trackPad, -trackPad, w + trackPad * 2, h + trackPad * 2, '#be185d', px);
-        fillPxRect(pitchCacheCtx, -trackPad + 8, -trackPad + 8, w + (trackPad - 8) * 2, h + (trackPad - 8) * 2, '#f472b6', px);
-        pitchCacheCtx.strokeStyle = 'rgba(255, 241, 242, 0.9)';
-        pitchCacheCtx.lineWidth = 2.5;
-        pitchCacheCtx.strokeRect(-trackPad + 18, -trackPad + 18, w + (trackPad - 18) * 2, h + (trackPad - 18) * 2);
-
-        for (const by of [-102, h + 50]) {
-          fillPxRect(pitchCacheCtx, 110, by - 4, w - 220, 52, outline, px);
-          fillPxRect(pitchCacheCtx, 114, by, w - 228, 44, '#831843', px);
-          fillPxRect(pitchCacheCtx, 120, by + 8, w - 240, 11, '#9d174d', px);
-          fillPxRect(pitchCacheCtx, 120, by + 26, w - 240, 11, '#9d174d', px);
-          fillPxRect(pitchCacheCtx, 120, by + 2, (w - 240) * 0.48, 4, '#f472b6', px);
-          fillPxRect(pitchCacheCtx, w * 0.52, by + 2, (w - 240) * 0.48, 4, '#fbcfe8', px);
-        }
-
-        drawCornerFloodlightTower(pitchCacheCtx, -108, -96, 1, 1, px);
-        drawCornerFloodlightTower(pitchCacheCtx, w + 108, -96, -1, 1, px);
-        drawCornerFloodlightTower(pitchCacheCtx, -108, h + 96, 1, -1, px);
-        drawCornerFloodlightTower(pitchCacheCtx, w + 108, h + 96, -1, -1, px);
-
-        // 16 Lush Pink Cherry Blossom Sakura Trees
+        // 16 Lush Pink Cherry Blossom Sakura Trees Strictly Outside the Stadium Bowl
         const sakuraPositions = [
-          { x: -102, y: 88, s: 2, v: 0 },
-          { x: -205, y: 185, s: 2, v: 1 },
-          { x: -102, y: h - 88, s: 2, v: 1 },
-          { x: -205, y: h - 185, s: 2, v: 0 },
-          { x: w + 102, y: 88, s: 2, v: 1 },
-          { x: w + 205, y: 185, s: 2, v: 0 },
-          { x: w + 102, y: h - 88, s: 2, v: 0 },
-          { x: w + 205, y: h - 185, s: 2, v: 1 },
-          { x: 180, y: -136, s: 2, v: 0 },
-          { x: 430, y: -140, s: 2, v: 1 },
-          { x: w - 430, y: -140, s: 2, v: 0 },
-          { x: w - 180, y: -136, s: 2, v: 1 },
-          { x: 180, y: h + 136, s: 2, v: 1 },
-          { x: 430, y: h + 140, s: 2, v: 0 },
-          { x: w - 430, y: h + 140, s: 2, v: 1 },
-          { x: w - 180, y: h + 136, s: 2, v: 0 },
+          { x: -236, y: 88, s: 2, v: 0 },
+          { x: -325, y: 185, s: 2, v: 1 },
+          { x: -236, y: h - 88, s: 2, v: 1 },
+          { x: -325, y: h - 185, s: 2, v: 0 },
+          { x: w + 236, y: 88, s: 2, v: 1 },
+          { x: w + 325, y: 185, s: 2, v: 0 },
+          { x: w + 236, y: h - 88, s: 2, v: 0 },
+          { x: w + 325, y: h - 185, s: 2, v: 1 },
+          { x: 180, y: -234, s: 2, v: 0 },
+          { x: 430, y: -238, s: 2, v: 1 },
+          { x: w - 430, y: -238, s: 2, v: 0 },
+          { x: w - 180, y: -234, s: 2, v: 1 },
+          { x: 180, y: h + 234, s: 2, v: 1 },
+          { x: 430, y: h + 238, s: 2, v: 0 },
+          { x: w - 430, y: h + 238, s: 2, v: 1 },
+          { x: w - 180, y: h + 234, s: 2, v: 0 },
         ];
         for (const sk of sakuraPositions) {
           drawSakuraBlossomTree(pitchCacheCtx, sk.x, sk.y, sk.s, sk.v, px);
@@ -1224,51 +1081,24 @@ export default function App() {
           pitchCacheCtx.fillRect(bx, -CACHE_PAD_Y, bandW, h + CACHE_PAD_Y * 2);
         }
 
-        // Royal Navy & Gold VIP Red-Carpet Tunnel Approaches
+        // Royal Navy & Gold VIP Red-Carpet Tunnel Approaches Outside the Stadium Gates
         fillPxRect(pitchCacheCtx, -CACHE_PAD_X, h * 0.5 - 56, w + CACHE_PAD_X * 2, 112, outline, px);
         fillPxRect(pitchCacheCtx, -CACHE_PAD_X, h * 0.5 - 50, w + CACHE_PAD_X * 2, 100, '#1e1b4b', px);
         fillPxRect(pitchCacheCtx, -CACHE_PAD_X, h * 0.5 - 24, w + CACHE_PAD_X * 2, 48, '#b91c1c', px);
         fillPxRect(pitchCacheCtx, -CACHE_PAD_X, h * 0.5 - 28, w + CACHE_PAD_X * 2, 4, '#fde047', px);
         fillPxRect(pitchCacheCtx, -CACHE_PAD_X, h * 0.5 + 24, w + CACHE_PAD_X * 2, 4, '#fde047', px);
 
-        // Twin Gleaming 16-Bit Golden Championship Trophy Plinths on Left & Right Concourses
-        for (const tx of [-98, w + 98]) {
+        // Twin Gleaming 16-Bit Golden Championship Trophy Plinths Outside the Stadium Wall
+        for (const tx of [-234, w + 234]) {
           for (const ty of [h * 0.24, h * 0.76]) {
             fillPxRect(pitchCacheCtx, tx - 26, ty - 26, 52, 52, outline, px);
             fillPxRect(pitchCacheCtx, tx - 22, ty - 22, 44, 44, '#1e293b', px);
             fillPxRect(pitchCacheCtx, tx - 16, ty - 16, 32, 32, '#b45309', px);
-            // Golden Cup Pedestal
             fillPxRect(pitchCacheCtx, tx - 10, ty - 10, 20, 20, '#facc15', px);
             fillPxRect(pitchCacheCtx, tx - 6, ty - 6, 12, 12, '#fef08a', px);
             fillPxRect(pitchCacheCtx, tx - 3, ty - 3, 6, 6, '#ffffff', px);
           }
         }
-
-        // Royal Cobalt & Gold Star-Trimmed Stadium Collar
-        const trackPad = 44;
-        fillPxRect(pitchCacheCtx, -trackPad - 4, -trackPad - 4, w + (trackPad + 4) * 2, h + (trackPad + 4) * 2, outline, px);
-        fillPxRect(pitchCacheCtx, -trackPad, -trackPad, w + trackPad * 2, h + trackPad * 2, '#1e3a8a', px);
-        fillPxRect(pitchCacheCtx, -trackPad + 8, -trackPad + 8, w + (trackPad - 8) * 2, h + (trackPad - 8) * 2, '#2563eb', px);
-        pitchCacheCtx.strokeStyle = '#fde047';
-        pitchCacheCtx.lineWidth = 3;
-        pitchCacheCtx.strokeRect(-trackPad + 16, -trackPad + 16, w + (trackPad - 16) * 2, h + (trackPad - 16) * 2);
-
-        // Wrap-Around Double-Decker Champions Grandstands with Gold Star Ribbons
-        for (const by of [-106, h + 52]) {
-          fillPxRect(pitchCacheCtx, 90, by - 4, w - 180, 56, outline, px);
-          fillPxRect(pitchCacheCtx, 94, by, w - 188, 48, '#0f172a', px);
-          fillPxRect(pitchCacheCtx, 100, by + 8, w - 200, 12, '#1e3a8a', px);
-          fillPxRect(pitchCacheCtx, 100, by + 26, w - 200, 12, '#1e3a8a', px);
-          fillPxRect(pitchCacheCtx, 100, by + 2, w - 200, 4, '#fde047', px);
-          for (let sx = 140; sx < w - 140; sx += 110) {
-            fillPxRect(pitchCacheCtx, sx, by + 20, 18, 4, '#fde047', px);
-          }
-        }
-
-        drawCornerFloodlightTower(pitchCacheCtx, -108, -96, 1, 1, px);
-        drawCornerFloodlightTower(pitchCacheCtx, w + 108, -96, -1, 1, px);
-        drawCornerFloodlightTower(pitchCacheCtx, -108, h + 96, 1, -1, px);
-        drawCornerFloodlightTower(pitchCacheCtx, w + 108, h + 96, -1, -1, px);
       } else {
         // === 10. CLASSIC SUNLIT TURF: ROYAL BOTANICAL PARK, ORNAMENTAL FOUNTAINS & OLYMPIC ARENA ===
         pitchCacheCtx.fillStyle = GRAPHICS_CONFIG.palette.apron.base;
@@ -1282,41 +1112,18 @@ export default function App() {
 
         fillPxRect(pitchCacheCtx, -CACHE_PAD_X, h * 0.5 - 52, w + CACHE_PAD_X * 2, 104, outline, px);
         fillPxRect(pitchCacheCtx, -CACHE_PAD_X, h * 0.5 - 46, w + CACHE_PAD_X * 2, 92, '#e2e8f0', px);
-        // Manicured Royal Boxwood Hedges & Floral Topiary Borders Along Stone Promenade
-        for (const hx of [-145, w + 105]) {
+        for (const hx of [-265, w + 225]) {
           fillPxRect(pitchCacheCtx, hx, h * 0.5 - 44, 42, 14, '#15803d', px);
           fillPxRect(pitchCacheCtx, hx + 4, h * 0.5 - 41, 34, 8, '#22c55e', px);
           fillPxRect(pitchCacheCtx, hx, h * 0.5 + 30, 42, 14, '#15803d', px);
           fillPxRect(pitchCacheCtx, hx + 4, h * 0.5 + 33, 34, 8, '#22c55e', px);
         }
 
-        drawParkFountain(pitchCacheCtx, -98, h * 0.24, 34, px);
-        drawParkFountain(pitchCacheCtx, -98, h * 0.76, 34, px);
-        drawParkFountain(pitchCacheCtx, w + 98, h * 0.24, 34, px);
-        drawParkFountain(pitchCacheCtx, w + 98, h * 0.76, 34, px);
-
-        const trackPad = 44;
-        fillPxRect(pitchCacheCtx, -trackPad - 4, -trackPad - 4, w + (trackPad + 4) * 2, h + (trackPad + 4) * 2, outline, px);
-        fillPxRect(pitchCacheCtx, -trackPad, -trackPad, w + trackPad * 2, h + trackPad * 2, '#ea580c', px);
-        fillPxRect(pitchCacheCtx, -trackPad + 8, -trackPad + 8, w + (trackPad - 8) * 2, h + (trackPad - 8) * 2, '#f97316', px);
-        pitchCacheCtx.strokeStyle = 'rgba(255, 247, 237, 0.85)';
-        pitchCacheCtx.lineWidth = 2.5;
-        pitchCacheCtx.strokeRect(-trackPad + 16, -trackPad + 16, w + (trackPad - 16) * 2, h + (trackPad - 16) * 2);
-        pitchCacheCtx.strokeRect(-trackPad + 26, -trackPad + 26, w + (trackPad - 26) * 2, h + (trackPad - 26) * 2);
-
-        for (const by of [-102, h + 50]) {
-          fillPxRect(pitchCacheCtx, 110, by - 4, w - 220, 52, outline, px);
-          fillPxRect(pitchCacheCtx, 114, by, w - 228, 44, GRAPHICS_CONFIG.crowd.bleacherBase, px);
-          fillPxRect(pitchCacheCtx, 120, by + 8, w - 240, 11, GRAPHICS_CONFIG.crowd.bleacherStep, px);
-          fillPxRect(pitchCacheCtx, 120, by + 26, w - 240, 11, GRAPHICS_CONFIG.crowd.bleacherStep, px);
-          fillPxRect(pitchCacheCtx, 120, by + 2, (w - 240) * 0.48, 4, '#38bdf8', px);
-          fillPxRect(pitchCacheCtx, w * 0.52, by + 2, (w - 240) * 0.48, 4, '#fb7185', px);
-        }
-
-        drawCornerFloodlightTower(pitchCacheCtx, -108, -96, 1, 1, px);
-        drawCornerFloodlightTower(pitchCacheCtx, w + 108, -96, -1, 1, px);
-        drawCornerFloodlightTower(pitchCacheCtx, -108, h + 96, 1, -1, px);
-        drawCornerFloodlightTower(pitchCacheCtx, w + 108, h + 96, -1, -1, px);
+        // Royal Botanical Park Fountains Strictly Outside the Stadium Bowl
+        drawParkFountain(pitchCacheCtx, -234, h * 0.24, 34, px);
+        drawParkFountain(pitchCacheCtx, -234, h * 0.76, 34, px);
+        drawParkFountain(pitchCacheCtx, w + 234, h * 0.24, 34, px);
+        drawParkFountain(pitchCacheCtx, w + 234, h * 0.76, 34, px);
 
         const flowerPalette = GRAPHICS_CONFIG.palette.apron.flowerColors;
         for (let i = 0; i < 68; i++) {
@@ -1324,17 +1131,17 @@ export default function App() {
           let fx = 0;
           let fy = 0;
           if (side === 0) {
-            fx = -340 + ((i * 47) % 210);
-            fy = -220 + ((i * 173) % (h + 440));
+            fx = -420 + ((i * 47) % 190);
+            fy = -240 + ((i * 173) % (h + 480));
           } else if (side === 1) {
-            fx = w + 130 + ((i * 53) % 210);
-            fy = -220 + ((i * 191) % (h + 440));
+            fx = w + 230 + ((i * 53) % 190);
+            fy = -240 + ((i * 191) % (h + 480));
           } else if (side === 2) {
             fx = -80 + ((i * 167) % (w + 160));
-            fy = -240 + ((i * 31) % 115);
+            fy = -340 + ((i * 31) % 115);
           } else {
             fx = -80 + ((i * 181) % (w + 160));
-            fy = h + 120 + ((i * 37) % 115);
+            fy = h + 225 + ((i * 37) % 115);
           }
           const col = flowerPalette[i % flowerPalette.length];
           fillPxRect(pitchCacheCtx, fx, fy + px, px * 2, px * 2, '#34a86c', px);
@@ -1344,27 +1151,407 @@ export default function App() {
         }
 
         const treePositions = [
-          { x: -102, y: 88, s: 2, v: 0 },
-          { x: -205, y: 185, s: 2, v: 1 },
-          { x: -102, y: h - 88, s: 2, v: 1 },
-          { x: -205, y: h - 185, s: 2, v: 0 },
-          { x: w + 102, y: 88, s: 2, v: 1 },
-          { x: w + 205, y: 185, s: 2, v: 0 },
-          { x: w + 102, y: h - 88, s: 2, v: 0 },
-          { x: w + 205, y: h - 185, s: 2, v: 1 },
-          { x: 180, y: -136, s: 2, v: 0 },
-          { x: 430, y: -140, s: 2, v: 1 },
-          { x: w - 430, y: -140, s: 2, v: 0 },
-          { x: w - 180, y: -136, s: 2, v: 1 },
-          { x: 180, y: h + 136, s: 2, v: 1 },
-          { x: 430, y: h + 140, s: 2, v: 0 },
-          { x: w - 430, y: h + 140, s: 2, v: 1 },
-          { x: w - 180, y: h + 136, s: 2, v: 0 },
+          { x: -236, y: 88, s: 2, v: 0 },
+          { x: -325, y: 185, s: 2, v: 1 },
+          { x: -236, y: h - 88, s: 2, v: 1 },
+          { x: -325, y: h - 185, s: 2, v: 0 },
+          { x: w + 236, y: 88, s: 2, v: 1 },
+          { x: w + 325, y: 185, s: 2, v: 0 },
+          { x: w + 236, y: h - 88, s: 2, v: 0 },
+          { x: w + 325, y: h - 185, s: 2, v: 1 },
+          { x: 180, y: -234, s: 2, v: 0 },
+          { x: 430, y: -238, s: 2, v: 1 },
+          { x: w - 430, y: -238, s: 2, v: 0 },
+          { x: w - 180, y: -234, s: 2, v: 1 },
+          { x: 180, y: h + 234, s: 2, v: 1 },
+          { x: 430, y: h + 238, s: 2, v: 0 },
+          { x: w - 430, y: h + 238, s: 2, v: 1 },
+          { x: w - 180, y: h + 234, s: 2, v: 0 },
         ];
         for (const tr of treePositions) {
           drawPixelTree(pitchCacheCtx, tr.x, tr.y, tr.s, tr.v, px);
         }
       }
+
+      // Deep Vertical & Horizontal Outer World Details (Strictly beyond ±380px so they never touch the Stadium Bowl!)
+      for (const bandSign of [-1, 1]) {
+        for (let tier = 0; tier < 4; tier++) {
+          const baseY = bandSign < 0 ? -420 - tier * 235 : h + 340 + tier * 235;
+          if (selectedPitchTheme === 'COSMIC_SPACE') {
+            fillPxRect(pitchCacheCtx, -760, baseY - 22, w + 1520, 44, outline, px);
+            fillPxRect(pitchCacheCtx, -754, baseY - 16, w + 1508, 32, '#1e1b4b', px);
+            fillPxRect(pitchCacheCtx, -746, baseY - 6, w + 1492, 12, '#312e81', px);
+            for (let sx = -680; sx <= w + 680; sx += 260) {
+              fillPxRect(pitchCacheCtx, sx - 58, baseY - 56, 116, 36, outline, px);
+              fillPxRect(pitchCacheCtx, sx - 52, baseY - 50, 104, 24, '#1d4ed8', px);
+              fillPxRect(pitchCacheCtx, sx - 48, baseY - 39, 96, 3, '#38bdf8', px);
+              fillPxRect(pitchCacheCtx, sx - 16, baseY + 18, 32, 32, '#4c1d95', px);
+              fillPxRect(pitchCacheCtx, sx - 8, baseY + 26, 16, 16, tier % 2 === 0 ? '#22d3ee' : '#f472b6', px);
+            }
+            if (tier % 2 === 1) {
+              drawRingedPlanet(pitchCacheCtx, tier === 1 ? -420 : w + 420, baseY - 70, 56, px);
+              drawRingedPlanet(pitchCacheCtx, tier === 1 ? w - 320 : 320, baseY + 65, 48, px);
+            }
+          } else if (selectedPitchTheme === 'URBAN_CONCRETE') {
+            fillPxRect(pitchCacheCtx, -880, baseY - 28, w + 1760, 56, '#1e293b', px);
+            for (let lx = -840; lx < w + 840; lx += 84) {
+              fillPxRect(pitchCacheCtx, lx, baseY - 3, 42, 6, '#facc15', px);
+            }
+            for (let bx = -720; bx <= w + 720; bx += 310) {
+              const bCol = ((bx + tier * 100) % 620 === 0) ? '#7c2d12' : '#334155';
+              fillPxRect(pitchCacheCtx, bx - 95, baseY + 34, 190, 118, outline, px);
+              fillPxRect(pitchCacheCtx, bx - 89, baseY + 40, 178, 106, bCol, px);
+              fillPxRect(pitchCacheCtx, bx - 78, baseY + 50, 156, 86, '#475569', px);
+              if (tier % 2 === 0) {
+                fillPxRect(pitchCacheCtx, bx - 64, baseY + 58, 128, 70, '#ea580c', px);
+                pitchCacheCtx.strokeStyle = '#ffffff';
+                pitchCacheCtx.lineWidth = 2;
+                pitchCacheCtx.strokeRect(bx - 60, baseY + 62, 120, 62);
+              } else {
+                for (let wx = bx - 64; wx <= bx + 48; wx += 28) {
+                  for (let wy = baseY + 58; wy <= baseY + 110; wy += 24) {
+                    fillPxRect(pitchCacheCtx, wx, wy, 16, 14, (wx + wy) % 3 === 0 ? '#fde047' : '#38bdf8', px);
+                  }
+                }
+              }
+            }
+          } else if (selectedPitchTheme === 'RIO_CLAY') {
+            fillPxRect(pitchCacheCtx, -880, baseY - 22, w + 1760, 44, '#fde68a', px);
+            for (let mx = -860; mx < w + 860; mx += 48) {
+              fillPxRect(pitchCacheCtx, mx, baseY - 14, 24, 10, '#0f172a', px);
+              fillPxRect(pitchCacheCtx, mx + 24, baseY + 2, 24, 10, '#ffffff', px);
+            }
+            const umbCols = ['#f43f5e', '#facc15', '#38bdf8', '#22c55e', '#a855f7'];
+            for (let ux = -680; ux <= w + 680; ux += 240) {
+              const uCol = umbCols[Math.abs(Math.floor(ux / 240) + tier) % umbCols.length];
+              fillPxRect(pitchCacheCtx, ux - 22, baseY + 46, 44, 44, outline, px);
+              fillPxRect(pitchCacheCtx, ux - 18, baseY + 50, 36, 36, uCol, px);
+              fillPxRect(pitchCacheCtx, ux - 6, baseY + 62, 12, 12, '#ffffff', px);
+              drawPixelPalmTree(pitchCacheCtx, ux + 58, baseY + 68, px);
+            }
+          } else if (selectedPitchTheme === 'TWILIGHT_SYNTH') {
+            fillPxRect(pitchCacheCtx, -880, baseY - 18, w + 1760, 36, '#2e1065', px);
+            fillPxRect(pitchCacheCtx, -880, baseY - 4, w + 1760, 8, tier % 2 === 0 ? '#f472b6' : '#22d3ee', px);
+            for (let sx = -700; sx <= w + 700; sx += 280) {
+              fillPxRect(pitchCacheCtx, sx - 64, baseY + 28, 128, 96, outline, px);
+              fillPxRect(pitchCacheCtx, sx - 58, baseY + 34, 116, 84, '#0f0722', px);
+              fillPxRect(pitchCacheCtx, sx - 48, baseY + 44, 96, 12, '#22d3ee', px);
+              fillPxRect(pitchCacheCtx, sx - 48, baseY + 66, 96, 12, '#f472b6', px);
+              fillPxRect(pitchCacheCtx, sx - 48, baseY + 88, 96, 12, '#facc15', px);
+            }
+          } else if (selectedPitchTheme === 'ARCTIC_ICE') {
+            fillPxRect(pitchCacheCtx, -880, baseY - 18, w + 1760, 36, '#bae6fd', px);
+            for (let cx = -680; cx <= w + 680; cx += 270) {
+              fillPxRect(pitchCacheCtx, cx - 54, baseY + 32, 108, 72, outline, px);
+              fillPxRect(pitchCacheCtx, cx - 48, baseY + 38, 96, 60, '#78350f', px);
+              fillPxRect(pitchCacheCtx, cx - 52, baseY + 32, 104, 18, '#f8fafc', px);
+              fillPxRect(pitchCacheCtx, cx - 32, baseY + 58, 22, 20, '#fef08a', px);
+              fillPxRect(pitchCacheCtx, cx + 10, baseY + 58, 22, 20, '#fef08a', px);
+              drawSnowPineTree(pitchCacheCtx, cx + 88, baseY + 64, px);
+              drawSnowPineTree(pitchCacheCtx, cx - 88, baseY + 68, px);
+            }
+          } else if (selectedPitchTheme === 'VOLCANO_FORGE') {
+            fillPxRect(pitchCacheCtx, -880, baseY - 20, w + 1760, 40, outline, px);
+            fillPxRect(pitchCacheCtx, -880, baseY - 14, w + 1760, 28, '#ea580c', px);
+            fillPxRect(pitchCacheCtx, -880, baseY - 6, w + 1760, 12, '#fde047', px);
+            for (let fx = -680; fx <= w + 680; fx += 270) {
+              fillPxRect(pitchCacheCtx, fx - 56, baseY + 34, 112, 82, outline, px);
+              fillPxRect(pitchCacheCtx, fx - 50, baseY + 40, 100, 70, '#29150e', px);
+              fillPxRect(pitchCacheCtx, fx - 32, baseY + 56, 64, 38, '#f97316', px);
+              fillPxRect(pitchCacheCtx, fx - 18, baseY + 66, 36, 18, '#fef08a', px);
+            }
+          } else if (selectedPitchTheme === 'TURF_AUTUMN') {
+            fillPxRect(pitchCacheCtx, -880, baseY - 18, w + 1760, 36, outline, px);
+            fillPxRect(pitchCacheCtx, -880, baseY - 12, w + 1760, 24, '#fef3c7', px);
+            for (let ax = -680; ax <= w + 680; ax += 250) {
+              drawAutumnMapleTree(pitchCacheCtx, ax - 55, baseY + 66, 2, Math.abs(ax + tier) % 3, px);
+              drawAutumnMapleTree(pitchCacheCtx, ax + 55, baseY + 78, 2, Math.abs(ax + tier + 1) % 3, px);
+              fillPxRect(pitchCacheCtx, ax - 18, baseY + 52, 36, 36, outline, px);
+              fillPxRect(pitchCacheCtx, ax - 14, baseY + 56, 28, 28, '#ea580c', px);
+              fillPxRect(pitchCacheCtx, ax - 6, baseY + 64, 12, 12, '#fef08a', px);
+            }
+          } else if (selectedPitchTheme === 'TURF_SAKURA') {
+            fillPxRect(pitchCacheCtx, -880, baseY - 18, w + 1760, 36, outline, px);
+            fillPxRect(pitchCacheCtx, -880, baseY - 12, w + 1760, 24, '#fbcfe8', px);
+            for (let kx = -680; kx <= w + 680; kx += 260) {
+              drawSakuraBlossomTree(pitchCacheCtx, kx - 62, baseY + 68, 2, 0, px);
+              drawSakuraBlossomTree(pitchCacheCtx, kx + 62, baseY + 74, 2, 1, px);
+              fillPxRect(pitchCacheCtx, kx - 28, baseY + 46, 56, 14, outline, px);
+              fillPxRect(pitchCacheCtx, kx - 24, baseY + 50, 48, 8, '#ef4444', px);
+              fillPxRect(pitchCacheCtx, kx - 16, baseY + 58, 8, 34, '#dc2626', px);
+              fillPxRect(pitchCacheCtx, kx + 8, baseY + 58, 8, 34, '#dc2626', px);
+            }
+          } else if (selectedPitchTheme === 'TURF_CHAMPIONS') {
+            fillPxRect(pitchCacheCtx, -880, baseY - 20, w + 1760, 40, outline, px);
+            fillPxRect(pitchCacheCtx, -880, baseY - 14, w + 1760, 28, '#1e3a8a', px);
+            fillPxRect(pitchCacheCtx, -880, baseY - 2, w + 1760, 4, '#fde047', px);
+            for (let cx = -680; cx <= w + 680; cx += 260) {
+              fillPxRect(pitchCacheCtx, cx - 48, baseY + 38, 96, 76, outline, px);
+              fillPxRect(pitchCacheCtx, cx - 42, baseY + 44, 84, 64, '#172554', px);
+              fillPxRect(pitchCacheCtx, cx - 32, baseY + 54, 64, 44, '#2563eb', px);
+              fillPxRect(pitchCacheCtx, cx - 12, baseY + 64, 24, 24, '#facc15', px);
+              fillPxRect(pitchCacheCtx, cx - 6, baseY + 70, 12, 12, '#fef08a', px);
+            }
+          } else {
+            fillPxRect(pitchCacheCtx, -880, baseY - 18, w + 1760, 36, outline, px);
+            fillPxRect(pitchCacheCtx, -880, baseY - 12, w + 1760, 24, '#e2e8f0', px);
+            for (let pxPos = -680; pxPos <= w + 680; pxPos += 250) {
+              drawPixelTree(pitchCacheCtx, pxPos - 64, baseY + 68, 2, Math.abs(pxPos + tier) % 2, px);
+              drawPixelTree(pitchCacheCtx, pxPos + 64, baseY + 74, 2, Math.abs(pxPos + tier + 1) % 2, px);
+              if (tier % 2 === 0) {
+                drawParkFountain(pitchCacheCtx, pxPos, baseY + 72, 28, px);
+              } else {
+                fillPxRect(pitchCacheCtx, pxPos - 36, baseY + 52, 72, 36, outline, px);
+                fillPxRect(pitchCacheCtx, pxPos - 32, baseY + 56, 64, 28, '#15803d', px);
+                fillPxRect(pitchCacheCtx, pxPos - 24, baseY + 62, 48, 16, '#f43f5e', px);
+                fillPxRect(pitchCacheCtx, pxPos - 12, baseY + 66, 24, 8, '#fde047', px);
+              }
+            }
+          }
+        }
+      }
+
+      // ======================================================================
+      // STEP 2: UNIFIED ARCHITECTURAL STADIUM BOWL PLINTH, CONCOURSE & GRANDSTANDS
+      // Drawn ON TOP of the outside world so zero outside roads, grids, or props overlap!
+      // ======================================================================
+      const bowlThemeSpec: Record<
+        PitchThemeId,
+        {
+          outerWall: string;
+          concourseBase: string;
+          concourseInner: string;
+          collarOuter: string;
+          collarInner: string;
+          collarTrim: string;
+          standBase: string;
+          standStep: string;
+          accentHome: string;
+          accentAway: string;
+        }
+      > = {
+        CLASSIC_TURF: {
+          outerWall: '#334155',
+          concourseBase: '#cbd5e1',
+          concourseInner: '#e2e8f0',
+          collarOuter: '#ea580c',
+          collarInner: '#f97316',
+          collarTrim: '#fff7ed',
+          standBase: '#475569',
+          standStep: '#64748b',
+          accentHome: '#38bdf8',
+          accentAway: '#fb7185',
+        },
+        TURF_AUTUMN: {
+          outerWall: '#431407',
+          concourseBase: '#fed7aa',
+          concourseInner: '#ffedd5',
+          collarOuter: '#9a3412',
+          collarInner: '#d97706',
+          collarTrim: '#fef9c3',
+          standBase: '#78350f',
+          standStep: '#92400e',
+          accentHome: '#f59e0b',
+          accentAway: '#ea580c',
+        },
+        TURF_SAKURA: {
+          outerWall: '#500724',
+          concourseBase: '#fbcfe8',
+          concourseInner: '#fdf2f8',
+          collarOuter: '#be185d',
+          collarInner: '#f472b6',
+          collarTrim: '#fff1f2',
+          standBase: '#831843',
+          standStep: '#9d174d',
+          accentHome: '#f472b6',
+          accentAway: '#fbcfe8',
+        },
+        TURF_CHAMPIONS: {
+          outerWall: '#0f172a',
+          concourseBase: '#1e293b',
+          concourseInner: '#334155',
+          collarOuter: '#1e3a8a',
+          collarInner: '#2563eb',
+          collarTrim: '#fde047',
+          standBase: '#0f172a',
+          standStep: '#1e3a8a',
+          accentHome: '#fde047',
+          accentAway: '#38bdf8',
+        },
+        COSMIC_SPACE: {
+          outerWall: '#090d24',
+          concourseBase: '#1e1b4b',
+          concourseInner: '#312e81',
+          collarOuter: '#1e1b4b',
+          collarInner: '#3730a3',
+          collarTrim: '#38bdf8',
+          standBase: '#0f172a',
+          standStep: '#1e293b',
+          accentHome: '#38bdf8',
+          accentAway: '#e879f9',
+        },
+        URBAN_CONCRETE: {
+          outerWall: '#0f172a',
+          concourseBase: '#334155',
+          concourseInner: '#475569',
+          collarOuter: '#1e293b',
+          collarInner: '#334155',
+          collarTrim: '#facc15',
+          standBase: '#0f172a',
+          standStep: '#1e293b',
+          accentHome: '#facc15',
+          accentAway: '#38bdf8',
+        },
+        RIO_CLAY: {
+          outerWall: '#78350f',
+          concourseBase: '#fde68a',
+          concourseInner: '#fef3c7',
+          collarOuter: '#92400e',
+          collarInner: '#b45309',
+          collarTrim: '#fef3c7',
+          standBase: '#78350f',
+          standStep: '#92400e',
+          accentHome: '#22c55e',
+          accentAway: '#f43f5e',
+        },
+        TWILIGHT_SYNTH: {
+          outerWall: '#2e1065',
+          concourseBase: '#1e1b4b',
+          concourseInner: '#2e1065',
+          collarOuter: '#3b0764',
+          collarInner: '#1e1b4b',
+          collarTrim: '#22d3ee',
+          standBase: '#09051c',
+          standStep: '#311042',
+          accentHome: '#22d3ee',
+          accentAway: '#f472b6',
+        },
+        ARCTIC_ICE: {
+          outerWall: '#0c4a6e',
+          concourseBase: '#cbd5e1',
+          concourseInner: '#e2e8f0',
+          collarOuter: '#0284c7',
+          collarInner: '#7dd3fc',
+          collarTrim: '#ecfeff',
+          standBase: '#0f172a',
+          standStep: '#1e3a8a',
+          accentHome: '#38bdf8',
+          accentAway: '#e0f2fe',
+        },
+        VOLCANO_FORGE: {
+          outerWall: '#450a0a',
+          concourseBase: '#18181b',
+          concourseInner: '#27272a',
+          collarOuter: '#450a0a',
+          collarInner: '#27272a',
+          collarTrim: '#f97316',
+          standBase: '#09090b',
+          standStep: '#27272a',
+          accentHome: '#f97316',
+          accentAway: '#facc15',
+        },
+      };
+
+      const bowlSpec = bowlThemeSpec[selectedPitchTheme] || bowlThemeSpec.CLASSIC_TURF;
+
+      // 2A. Outer Stadium Perimeter Wall & Solid Concourse Plinth (-162..w+162, -162..h+162)
+      fillPxRect(
+        pitchCacheCtx,
+        -STADIUM_BOWL_PAD - 6,
+        -STADIUM_BOWL_PAD - 6,
+        w + (STADIUM_BOWL_PAD + 6) * 2,
+        h + (STADIUM_BOWL_PAD + 6) * 2,
+        outline,
+        px
+      );
+      fillPxRect(
+        pitchCacheCtx,
+        -STADIUM_BOWL_PAD,
+        -STADIUM_BOWL_PAD,
+        w + STADIUM_BOWL_PAD * 2,
+        h + STADIUM_BOWL_PAD * 2,
+        bowlSpec.outerWall,
+        px
+      );
+      fillPxRect(
+        pitchCacheCtx,
+        -STADIUM_BOWL_PAD + 8,
+        -STADIUM_BOWL_PAD + 8,
+        w + (STADIUM_BOWL_PAD - 8) * 2,
+        h + (STADIUM_BOWL_PAD - 8) * 2,
+        bowlSpec.concourseBase,
+        px
+      );
+      fillPxRect(
+        pitchCacheCtx,
+        -STADIUM_BOWL_PAD + 16,
+        -STADIUM_BOWL_PAD + 16,
+        w + (STADIUM_BOWL_PAD - 16) * 2,
+        h + (STADIUM_BOWL_PAD - 16) * 2,
+        bowlSpec.concourseInner,
+        px
+      );
+
+      // 2B. Inner Running Track / Pitch Collar (-40..w+40, -40..h+40)
+      const trackPad = 40;
+      fillPxRect(pitchCacheCtx, -trackPad - 4, -trackPad - 4, w + (trackPad + 4) * 2, h + (trackPad + 4) * 2, outline, px);
+      fillPxRect(pitchCacheCtx, -trackPad, -trackPad, w + trackPad * 2, h + trackPad * 2, bowlSpec.collarOuter, px);
+      fillPxRect(pitchCacheCtx, -trackPad + 8, -trackPad + 8, w + (trackPad - 8) * 2, h + (trackPad - 8) * 2, bowlSpec.collarInner, px);
+      pitchCacheCtx.strokeStyle = bowlSpec.collarTrim;
+      pitchCacheCtx.lineWidth = 2.5;
+      pitchCacheCtx.strokeRect(-trackPad + 16, -trackPad + 16, w + (trackPad - 16) * 2, h + (trackPad - 16) * 2);
+
+      // 2C. Top & Bottom Lower-Tier Grandstands (y = -94..-48 and y = h+48..h+94)
+      for (const by of [-94, h + 48]) {
+        fillPxRect(pitchCacheCtx, 92, by - 4, w - 184, 50, outline, px);
+        fillPxRect(pitchCacheCtx, 96, by, w - 192, 42, bowlSpec.standBase, px);
+        fillPxRect(pitchCacheCtx, 102, by + 7, w - 204, 11, bowlSpec.standStep, px);
+        fillPxRect(pitchCacheCtx, 102, by + 24, w - 204, 11, bowlSpec.standStep, px);
+        fillPxRect(pitchCacheCtx, 102, by + 2, (w - 204) * 0.48, 3, bowlSpec.accentHome, px);
+        fillPxRect(pitchCacheCtx, w * 0.52, by + 2, (w - 204) * 0.48, 3, bowlSpec.accentAway, px);
+      }
+
+      // 2D. Top & Bottom Upper-Deck Grandstands & VIP Broadcast Gantry (y = -148..-102 and y = h+102..h+148)
+      for (const standY of [-148, h + 104]) {
+        fillPxRect(pitchCacheCtx, 92, standY - 4, w - 184, 50, outline, px);
+        fillPxRect(pitchCacheCtx, 96, standY, w - 192, 42, '#0f172a', px);
+        fillPxRect(pitchCacheCtx, 102, standY + 6, w - 204, 11, '#1e293b', px);
+        fillPxRect(pitchCacheCtx, 102, standY + 22, w - 204, 11, '#334155', px);
+        fillPxRect(pitchCacheCtx, 102, standY + 35, (w - 204) * 0.46, 5, bowlSpec.accentHome, px);
+        fillPxRect(pitchCacheCtx, w * 0.52, standY + 35, (w - 204) * 0.46, 5, bowlSpec.accentAway, px);
+        // Center VIP Broadcast Gantry Box
+        fillPxRect(pitchCacheCtx, w * 0.5 - 88, standY + 4, 176, 32, outline, px);
+        fillPxRect(pitchCacheCtx, w * 0.5 - 84, standY + 8, 168, 24, '#1e293b', px);
+        fillPxRect(pitchCacheCtx, w * 0.5 - 76, standY + 12, 152, 12, '#38bdf8', px);
+      }
+
+      // 2E. Left & Right End-Zone Grandstand Terraces (Split cleanly above and below the Goal Mouths!)
+      const goalTopStandEnd = (h - PITCH.goalWidth) * 0.5 - 42;
+      const goalBotStandStart = (h + PITCH.goalWidth) * 0.5 + 42;
+      const topWingH = Math.max(80, goalTopStandEnd - 92);
+      const botWingH = Math.max(80, h - 92 - goalBotStandStart);
+
+      for (const standX of [-98, -148, w + 56, w + 106]) {
+        const isInner = standX === -98 || standX === w + 56;
+        const sideCol = standX < 0 ? bowlSpec.accentHome : bowlSpec.accentAway;
+        for (const seg of [
+          { sy: 92, sh: topWingH },
+          { sy: goalBotStandStart, sh: botWingH },
+        ]) {
+          fillPxRect(pitchCacheCtx, standX - 4, seg.sy - 4, 48, seg.sh + 8, outline, px);
+          fillPxRect(pitchCacheCtx, standX, seg.sy, 40, seg.sh, isInner ? bowlSpec.standBase : '#0f172a', px);
+          fillPxRect(pitchCacheCtx, standX + 6, seg.sy + 6, 11, seg.sh - 12, isInner ? bowlSpec.standStep : '#1e293b', px);
+          fillPxRect(pitchCacheCtx, standX + 23, seg.sy + 6, 11, seg.sh - 12, isInner ? bowlSpec.standStep : '#334155', px);
+          fillPxRect(pitchCacheCtx, standX + 18, seg.sy + 8, 3, seg.sh - 16, sideCol, px);
+        }
+      }
+
+      // 2F. 4 Corner Floodlight Towers in the Clean Stadium Corner Plazas
+      drawCornerFloodlightTower(pitchCacheCtx, -102, -98, 1, 1, px);
+      drawCornerFloodlightTower(pitchCacheCtx, w + 102, -98, -1, 1, px);
+      drawCornerFloodlightTower(pitchCacheCtx, -102, h + 98, 1, -1, px);
+      drawCornerFloodlightTower(pitchCacheCtx, w + 102, h + 98, -1, -1, px);
+
 
       // 4. Clipped Chamfered Pitch Turf, Bespoke Mowing Patterns, Center Circle Emblems & Chalk Markings
       pitchCacheCtx.save();
@@ -1711,6 +1898,7 @@ export default function App() {
       color: string;
       phase: number;
       isHome: boolean;
+      prop?: 'SCARF' | 'FLAG' | 'NONE';
     }
     interface PitchFlower {
       x: number;
@@ -1819,31 +2007,15 @@ export default function App() {
     let landscapeLockDismissed = false;
 
     function tryLockDeviceToLandscape() {
-      try {
-        const scr = window.screen as Screen & {
-          orientation?: { lock?: (mode: string) => Promise<void> };
-        };
-        if (scr?.orientation && typeof scr.orientation.lock === 'function') {
-          scr.orientation.lock('landscape').catch(() => {});
-        }
-      } catch {
-        // Ignore on browsers that restrict orientation lock
-      }
+      // Portrait & Landscape are both natively supported and optimized on mobile; do not force orientation lock
     }
 
     function syncLandscapeLockOverlay() {
       const lockOverlay = document.getElementById('landscapeLockOverlay');
       if (!lockOverlay) return;
-      const w = window.innerWidth;
-      const h = window.innerHeight;
-      const isPortrait = w < h;
-      const isMobileOrTab = hasDetectedTouchInput || isCoarseTouchHardware() || w < 768;
-      if (!isPortrait) {
-        landscapeLockDismissed = false;
-      }
-      const shouldShowLock = isPortrait && isMobileOrTab && !landscapeLockDismissed;
-      lockOverlay.classList.toggle('hidden', !shouldShowLock);
-      lockOverlay.classList.toggle('flex', shouldShowLock);
+      // Portrait mode is now fully supported with dedicated mobile framing & controls; keep lock overlay hidden
+      lockOverlay.classList.add('hidden');
+      lockOverlay.classList.remove('flex');
     }
 
     function shouldShowMobileTouchControls(): boolean {
@@ -1857,7 +2029,10 @@ export default function App() {
       if (menuOverlayEl && !menuOverlayEl.classList.contains('hidden')) return false;
       if (splashEl && !splashEl.classList.contains('hidden')) return false;
 
-      if (hasDetectedTouchInput) return true;
+      const w = window.innerWidth;
+      const h = window.innerHeight;
+      const isPhoneViewport = (w < h && w <= 640) || (w > h && h <= 540);
+      if (hasDetectedTouchInput || isPhoneViewport) return true;
       if (
         isCoarseTouchHardware() &&
         activeControlScheme !== 'MOUSE' &&
@@ -1912,7 +2087,7 @@ export default function App() {
     let userKitChoice: KitChoice = 'HOME';
     let tournamentRound = 0; // 0 = Quarter-Final (Game 1), 1 = Semi-Final (Game 2), 2 = Grand Final (Game 3)
 
-    // User Profile State (Name + Preset Icon or Camera Photo + Ranked Progression & Setup Flag)
+    // User Profile State (Name + Preset Icon or Camera Photo + Ranked Progression + Balance & Pokie Jackpot)
     interface UserProfile {
       name: string;
       iconType: 'preset' | 'photo';
@@ -1921,6 +2096,8 @@ export default function App() {
       rankedWins: number;
       rankedMatches: number;
       hasEditedProfile: boolean;
+      balance: number;
+      jackpotPool: number;
     }
 
     const PRESET_ICONS: { id: string; label: string; html: string }[] = [
@@ -1940,6 +2117,8 @@ export default function App() {
       rankedWins: 0,
       rankedMatches: 0,
       hasEditedProfile: false,
+      balance: INITIAL_PLAYER_BALANCE,
+      jackpotPool: BASE_JACKPOT_POOL,
     };
 
     try {
@@ -1955,6 +2134,14 @@ export default function App() {
             rankedWins: typeof parsed.rankedWins === 'number' && parsed.rankedWins >= 0 ? Math.floor(parsed.rankedWins) : 0,
             rankedMatches: typeof parsed.rankedMatches === 'number' && parsed.rankedMatches >= 0 ? Math.floor(parsed.rankedMatches) : 0,
             hasEditedProfile: Boolean(parsed.hasEditedProfile),
+            balance:
+              typeof parsed.balance === 'number' && Number.isFinite(parsed.balance) && parsed.balance >= 0
+                ? Math.floor(parsed.balance)
+                : INITIAL_PLAYER_BALANCE,
+            jackpotPool:
+              typeof parsed.jackpotPool === 'number' && Number.isFinite(parsed.jackpotPool) && parsed.jackpotPool >= BASE_JACKPOT_POOL
+                ? Math.floor(parsed.jackpotPool)
+                : BASE_JACKPOT_POOL,
           };
         }
       }
@@ -2263,9 +2450,20 @@ export default function App() {
     }
 
     function syncProfileUI() {
+      // Ensure balance and jackpotPool are always valid integers
+      userProfile.balance =
+        typeof userProfile.balance === 'number' && Number.isFinite(userProfile.balance) && userProfile.balance >= 0
+          ? Math.floor(userProfile.balance)
+          : INITIAL_PLAYER_BALANCE;
+      userProfile.jackpotPool =
+        typeof userProfile.jackpotPool === 'number' &&
+        Number.isFinite(userProfile.jackpotPool) &&
+        userProfile.jackpotPool >= BASE_JACKPOT_POOL
+          ? Math.floor(userProfile.jackpotPool)
+          : BASE_JACKPOT_POOL;
+
       const youIsHome = userKitChoice === 'HOME';
       const rankInfo = getUserRankInfo(userProfile.rankedWins);
-      const nextRank = getNextRankInfo(userProfile.rankedWins);
 
       const menuNameEl = document.getElementById('menuProfileNameText');
       const menuRankBadgeEl = document.getElementById('menuProfileRankBadge');
@@ -2330,9 +2528,13 @@ export default function App() {
       const ovAvatarInitials = document.getElementById('overviewProfileInitials');
       const ovName = document.getElementById('overviewProfileName');
       const ovRankBadge = document.getElementById('overviewRankBadge');
+      const ovBalanceBadge = document.getElementById('overviewBalanceBadge');
       const ovWinsText = document.getElementById('overviewRankedWinsText');
       const ovNextRankText = document.getElementById('overviewNextRankText');
       const ovProgressBar = document.getElementById('overviewRankProgressBar');
+      const slotBalEl = document.getElementById('slotBalanceDisplay');
+      const slotJackpotEl = document.getElementById('slotJackpotDisplay');
+      const slotSpinsLeftEl = document.getElementById('slotSpinsLeftDisplay');
 
       if (ovAvatarBox) {
         applyRankOutlineStyle(ovAvatarBox);
@@ -2354,6 +2556,19 @@ export default function App() {
         ovRankBadge.style.backgroundColor = rankInfo.badgeBgHex;
         ovRankBadge.style.color = rankInfo.badgeTextHex;
         ovRankBadge.style.borderColor = rankInfo.borderHex;
+      }
+      if (ovBalanceBadge) {
+        ovBalanceBadge.innerText = `$${userProfile.balance}`;
+      }
+      if (slotBalEl) {
+        slotBalEl.innerText = `$${userProfile.balance}`;
+      }
+      if (slotJackpotEl) {
+        slotJackpotEl.innerText = `$${userProfile.jackpotPool.toLocaleString()}`;
+      }
+      if (slotSpinsLeftEl) {
+        const spinsAvailable = Math.floor(userProfile.balance / SLOT_SPIN_COST);
+        slotSpinsLeftEl.innerText = `${spinsAvailable} ${spinsAvailable === 1 ? 'SPIN' : 'SPINS'} READY`;
       }
       if (ovWinsText) {
         ovWinsText.innerText = `${userProfile.rankedWins} ${userProfile.rankedWins === 1 ? 'Win' : 'Wins'}`;
@@ -2521,6 +2736,10 @@ export default function App() {
       }
       if (vsBadge) vsBadge.className = 'w-9 h-9 sm:w-10 sm:h-10 rounded-2xl bg-amber-300 text-slate-900 text-xs font-black flex items-center justify-center shadow-[0_3px_0_#0f172a] border-2 border-slate-900 absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-10 transition-all duration-300';
       if (progressWrap) progressWrap.classList.add('hidden');
+      const openSlotBtnEl = document.getElementById('openSlotMachineBtn');
+      if (openSlotBtnEl) {
+        openSlotBtnEl.classList.toggle('hidden', gameState !== 'MENU');
+      }
       if (startBtnEl) {
         startBtnEl.classList.remove('hidden');
         startBtnEl.removeAttribute('disabled');
@@ -2692,50 +2911,69 @@ export default function App() {
       if (crowdFans.length === 0) {
         const homeColors = ['#38bdf8', '#60a5fa', '#fde047', '#a7f3d0', '#fef08a'];
         const awayColors = ['#fb7185', '#fda4af', '#f472b6', '#fcd34d', '#ffffff'];
-        for (let row = 0; row < 2; row++) {
-          const topY = -68 - row * 20;
-          const botY = PITCH.height + 68 + row * 20;
-          for (let x = 135; x <= PITCH.width - 135; x += 48) {
+        const pickProp = (idx: number): 'SCARF' | 'FLAG' | 'NONE' =>
+          idx % 7 === 0 ? 'FLAG' : idx % 4 === 0 ? 'SCARF' : 'NONE';
+        let fanIdx = 0;
+
+        // Inner & Upper-Deck Top/Bottom Grandstand Supporters (4 Tiers on Lower & Upper Bleachers inside the ±162px Stadium Bowl)
+        const topRows = [-58, -76, -112, -130];
+        const botRows = [PITCH.height + 58, PITCH.height + 76, PITCH.height + 112, PITCH.height + 130];
+        for (let row = 0; row < topRows.length; row++) {
+          const topY = topRows[row];
+          const botY = botRows[row];
+          const stepX = row < 2 ? 42 : 46;
+          for (let x = 95; x <= PITCH.width - 95; x += stepX) {
             if (row === 0 && x > PITCH.width * 0.21 && x < PITCH.width * 0.79) continue;
+            if (row >= 2 && Math.abs(x - PITCH.width * 0.5) < 96) continue;
             const isHomeSide = x < PITCH.width * 0.5;
             const palette = isHomeSide ? homeColors : awayColors;
+            fanIdx++;
             crowdFans.push({
               x: x + (Math.random() - 0.5) * 10,
               baseY: topY,
               color: palette[Math.floor(Math.random() * palette.length)],
               phase: Math.random() * Math.PI * 2,
               isHome: isHomeSide,
+              prop: pickProp(fanIdx),
             });
+            fanIdx++;
             crowdFans.push({
               x: x + (Math.random() - 0.5) * 10,
               baseY: botY,
               color: palette[Math.floor(Math.random() * palette.length)],
               phase: Math.random() * Math.PI * 2,
               isHome: isHomeSide,
+              prop: pickProp(fanIdx),
             });
           }
         }
-        // Left & Right End-Zone Supporter Terrace Crowd
+        // Left & Right End-Zone Supporter Terrace Crowd (Lower + Upper Decks cleanly above & below goal mouths)
         const goalTopY = (PITCH.height - PITCH.goalWidth) * 0.5;
         const goalBotY = (PITCH.height + PITCH.goalWidth) * 0.5;
-        for (let col = 0; col < 2; col++) {
-          const leftX = -82 - col * 20;
-          const rightX = PITCH.width + 82 + col * 20;
-          for (let y = 100; y <= PITCH.height - 100; y += 46) {
-            if (y > goalTopY - 85 && y < goalBotY + 85) continue;
+        const leftCols = [-66, -83, -116, -133];
+        const rightCols = [PITCH.width + 66, PITCH.width + 83, PITCH.width + 116, PITCH.width + 133];
+        for (let col = 0; col < leftCols.length; col++) {
+          const leftX = leftCols[col];
+          const rightX = rightCols[col];
+          for (let y = 90; y <= PITCH.height - 90; y += 44) {
+            if (y > goalTopY - 48 && y < goalBotY + 48) continue;
+            fanIdx++;
             crowdFans.push({
               x: leftX + (Math.random() - 0.5) * 6,
               baseY: y,
               color: homeColors[Math.floor(Math.random() * homeColors.length)],
               phase: Math.random() * Math.PI * 2,
               isHome: true,
+              prop: pickProp(fanIdx),
             });
+            fanIdx++;
             crowdFans.push({
               x: rightX + (Math.random() - 0.5) * 6,
               baseY: y,
               color: awayColors[Math.floor(Math.random() * awayColors.length)],
               phase: Math.random() * Math.PI * 2,
               isHome: false,
+              prop: pickProp(fanIdx),
             });
           }
         }
@@ -2747,10 +2985,10 @@ export default function App() {
           const side = i % 4;
           let fx = 0;
           let fy = 0;
-          if (side === 0) { fx = -190 + Math.random() * 95; fy = -120 + Math.random() * (PITCH.height + 240); }
-          else if (side === 1) { fx = PITCH.width + 95 + Math.random() * 95; fy = -120 + Math.random() * (PITCH.height + 240); }
-          else if (side === 2) { fx = Math.random() * PITCH.width; fy = -195 + Math.random() * 55; }
-          else { fx = Math.random() * PITCH.width; fy = PITCH.height + 125 + Math.random() * 65; }
+          if (side === 0) { fx = -340 + Math.random() * 145; fy = -200 + Math.random() * (PITCH.height + 400); }
+          else if (side === 1) { fx = PITCH.width + 195 + Math.random() * 145; fy = -200 + Math.random() * (PITCH.height + 400); }
+          else if (side === 2) { fx = Math.random() * PITCH.width; fy = -310 + Math.random() * 115; }
+          else { fx = Math.random() * PITCH.width; fy = PITCH.height + 195 + Math.random() * 115; }
           pitchFlowers.push({
             x: fx,
             y: fy,
@@ -2977,15 +3215,25 @@ export default function App() {
       const isMobileOrTablet = isMobileOrTabletViewport();
 
       if (isMobileOrTablet) {
-        // Mobile & Tablet Landscape Arena Framing: adds a comfortable zoom on compact phone landscape so action feels close and dynamic
+        const isPortraitPhone = w < h;
         const isCompactPhoneLandscape = h <= 550 && w > h;
-        canvasOffsetY = isCompactPhoneLandscape ? 10 : 14;
-        const padX = isCompactPhoneLandscape ? 24 : 48;
-        const padY = isCompactPhoneLandscape ? 42 : 76;
-        const scaleX = Math.max(240, w - padX) / (PITCH.width + 64);
-        const scaleY = Math.max(180, h - padY) / (PITCH.height + 64);
-        const fitScale = Math.min(scaleX, scaleY);
-        viewScale = isCompactPhoneLandscape ? fitScale * 1.24 : fitScale * 1.06;
+        if (isPortraitPhone) {
+          // Portrait Mobile Optimization: closer dynamic zoom & upward pitch offset for bottom thumbstick/buttons, while revealing rich top & bottom stadium grandstands and outer fan plazas
+          canvasOffsetY = -18;
+          const fitScaleX = w / (PITCH.width + 80);
+          const fitScaleY = h / (PITCH.height + 360);
+          const fitScale = Math.min(fitScaleX, fitScaleY);
+          viewScale = Math.max(0.28, fitScale * 1.48);
+        } else {
+          // Landscape Mobile & Tablet Arena Framing: comfortable zoom so players and ball are crisp and close
+          canvasOffsetY = isCompactPhoneLandscape ? 10 : 14;
+          const padX = isCompactPhoneLandscape ? 24 : 48;
+          const padY = isCompactPhoneLandscape ? 42 : 76;
+          const scaleX = Math.max(240, w - padX) / (PITCH.width + 64);
+          const scaleY = Math.max(180, h - padY) / (PITCH.height + 64);
+          const fitScale = Math.min(scaleX, scaleY);
+          viewScale = isCompactPhoneLandscape ? fitScale * 1.24 : fitScale * 1.06;
+        }
       } else {
         // Normal PC widescreen viewing mode: balanced framing so stadium bleachers, floodlights, trees & cosmic space art are visible around the cage
         canvasOffsetY = 8;
@@ -4039,6 +4287,7 @@ export default function App() {
       const editProfileBtn = document.getElementById('editProfileBtn');
       const mainMenuBtn = document.getElementById('mainMenuBtn');
       const startBtnEl = document.getElementById('startBtn');
+      const openSlotBtnEl = document.getElementById('openSlotMachineBtn');
       if (!modalCard) return;
 
       if (state === 'SPLASH' || state === 'PLAYING' || state === 'GOAL_CELEBRATION') {
@@ -4071,6 +4320,7 @@ export default function App() {
         if (bottomBar) bottomBar.className = 'flex flex-col items-center space-y-2';
         if (profileBar) profileBar.classList.add('hidden');
         if (editProfileBtn) editProfileBtn.classList.add('hidden');
+        if (openSlotBtnEl) openSlotBtnEl.classList.add('hidden');
         if (howToPlayWrap) howToPlayWrap.classList.add('hidden');
         if (howToPlayPanel) howToPlayPanel.classList.add('hidden');
         if (mainMenuBtn) {
@@ -4105,6 +4355,7 @@ export default function App() {
         if (postMatchRankCard) postMatchRankCard.classList.add('hidden');
         if (profileBar) profileBar.classList.remove('hidden');
         if (editProfileBtn) editProfileBtn.classList.remove('hidden');
+        if (openSlotBtnEl) openSlotBtnEl.classList.remove('hidden');
         if (howToPlayWrap) howToPlayWrap.classList.remove('hidden');
         if (mainMenuBtn) mainMenuBtn.classList.add('hidden');
         if (startBtnEl) startBtnEl.classList.remove('hidden');
@@ -4149,7 +4400,7 @@ export default function App() {
 
       const candidates = Array.from(
         overlay.querySelectorAll<HTMLElement>(
-          '.mode-btn, .kit-btn, #editProfileBtn, #startBtn, #rematchSameBtn, #mainMenuBtn, #resumeBtn, #forfeitBtn, #howToPlayBtn, .control-tab-btn'
+          '.mode-btn, .kit-btn, #editProfileBtn, #openSlotMachineBtn, #startBtn, #rematchSameBtn, #mainMenuBtn, #resumeBtn, #forfeitBtn, #howToPlayBtn, .control-tab-btn'
         )
       );
       return candidates.filter((el) => {
@@ -4165,7 +4416,7 @@ export default function App() {
 
     function syncMenuFocusVisual(showFocusRing = true) {
       const allBtns = document.querySelectorAll<HTMLElement>(
-        '#splashStartBtn, .mode-btn, .kit-btn, #editProfileBtn, #startBtn, #rematchSameBtn, #mainMenuBtn, #resumeBtn, #forfeitBtn, #howToPlayBtn, .control-tab-btn, #takePhotoBtn, #capturePhotoBtn, #clearPhotoBtn, #saveProfileBtn, #closeProfileModalBtn'
+        '#splashStartBtn, .mode-btn, .kit-btn, #editProfileBtn, #openSlotMachineBtn, #startBtn, #rematchSameBtn, #mainMenuBtn, #resumeBtn, #forfeitBtn, #howToPlayBtn, .control-tab-btn, #takePhotoBtn, #capturePhotoBtn, #clearPhotoBtn, #saveProfileBtn, #closeProfileModalBtn'
       );
       allBtns.forEach((b) => b.classList.remove('controller-focused'));
       if (!showFocusRing) return;
@@ -4832,8 +5083,8 @@ export default function App() {
       ledMessage: 'GOOOAAAL!',
     };
 
-    function handleGoalScored(scoringTeam: 'YOU' | 'AI') {
-      if (gameState === 'GOAL_CELEBRATION') return;
+    function handleGoalScored(scoringTeam: 'YOU' | 'AI', variationOverride?: number, forceReTrigger = false) {
+      if (gameState === 'GOAL_CELEBRATION' && !forceReTrigger) return;
       gameState = 'GOAL_CELEBRATION';
       syncBodyStateAttr(gameState);
       goalScorerTeam = scoringTeam;
@@ -4892,6 +5143,9 @@ export default function App() {
         isGoldenGoal,
         matchTimeRemaining: matchTime,
         opponentTag: currentOpponent.tag,
+        playerName: userProfile.name,
+        pitchTheme: selectedPitchTheme,
+        variationIndex: variationOverride,
       });
 
       activeGoalCelebration = celebrationSpec;
@@ -5234,7 +5488,7 @@ export default function App() {
       ctx.drawImage(pitchCacheCanvas, -CACHE_PAD_X, -CACHE_PAD_Y);
 
       if (selectedPitchTheme === 'COSMIC_SPACE') {
-        // 2A. Live Twinkling 4-Point Stars, Streaking Shooting Comets, Drifting Asteroids & Cruising 16-Bit Alien UFOs
+        // 2A. Live Twinkling 4-Point Stars, Streaking Shooting Comets, Drifting Asteroids & Cruising 16-Bit Alien UFOs (Strictly in Outer Space Surround >= ±195px)
         ctx.save();
         const twinklePalette = ['#ffffff', '#fef08a', '#38bdf8', '#e879f9', '#a7f3d0'];
         for (let i = 0; i < 42; i++) {
@@ -5242,17 +5496,17 @@ export default function App() {
           let sx = 0;
           let sy = 0;
           if (side === 0) {
-            sx = 60 + ((i * 239) % (w - 120));
-            sy = -68 - ((i * 53) % 130);
+            sx = -220 + ((i * 239) % (w + 440));
+            sy = -195 - ((i * 53) % 145);
           } else if (side === 1) {
-            sx = 60 + ((i * 251) % (w - 120));
-            sy = h + 68 + ((i * 59) % 130);
+            sx = -220 + ((i * 251) % (w + 440));
+            sy = h + 195 + ((i * 59) % 145);
           } else if (side === 2) {
-            sx = -68 - ((i * 47) % 140);
-            sy = 60 + ((i * 199) % (h - 120));
+            sx = -205 - ((i * 47) % 165);
+            sy = -120 + ((i * 199) % (h + 240));
           } else {
-            sx = w + 68 + ((i * 61) % 140);
-            sy = 60 + ((i * 211) % (h - 120));
+            sx = w + 205 + ((i * 61) % 165);
+            sy = -120 + ((i * 211) % (h + 240));
           }
           const pulse = 0.5 + 0.5 * Math.sin(matchTick * 0.11 + i * 1.73);
           ctx.globalAlpha = 0.35 + pulse * 0.65;
@@ -5269,10 +5523,10 @@ export default function App() {
         }
         ctx.globalAlpha = 1;
 
-        // Streaking Shooting Comets across top & bottom space
+        // Streaking Shooting Comets across top & bottom outer space
         for (let cIdx = 0; cIdx < 2; cIdx++) {
           const cometProg = ((matchTick * 6.5 + cIdx * 700) % (w + 600)) - 300;
-          const cometY = cIdx === 0 ? -128 : h + 128;
+          const cometY = cIdx === 0 ? -245 : h + 245;
           const dir = cIdx === 0 ? 1 : -1;
           const cx = cIdx === 0 ? cometProg : w - cometProg;
           ctx.fillStyle = 'rgba(56, 189, 248, 0.35)';
@@ -5281,9 +5535,9 @@ export default function App() {
           ctx.fillRect(Math.round(cx - 4), cometY - 4, 8, 8);
         }
 
-        // Drifting 16-bit Pixel Asteroids
+        // Drifting 16-bit Pixel Asteroids in Left & Right Outer Space
         for (let a = 0; a < 6; a++) {
-          const ax = a < 3 ? -96 + Math.sin(matchTick * 0.02 + a) * 14 : w + 96 + Math.cos(matchTick * 0.02 + a) * 14;
+          const ax = a < 3 ? -235 + Math.sin(matchTick * 0.02 + a) * 16 : w + 235 + Math.cos(matchTick * 0.02 + a) * 16;
           const ay = 140 + (a % 3) * 290 + Math.cos(matchTick * 0.03 + a * 2) * 18;
           fillPxRect(ctx, ax - 11, ay - 11, 22, 22, GRAPHICS_CONFIG.palette.outline, px);
           fillPxRect(ctx, ax - 8, ay - 8, 16, 16, '#64748b', px);
@@ -5291,28 +5545,28 @@ export default function App() {
         }
 
         const ufo1X = w * 0.5 + Math.cos(matchTick * 0.012) * (w * 0.36);
-        const ufo1Y = -102 + Math.sin(matchTick * 0.045) * 16;
+        const ufo1Y = -225 + Math.sin(matchTick * 0.045) * 14;
         drawPixelUfo(ctx, ufo1X, ufo1Y, matchTick, px);
 
         const ufo2X = w * 0.5 - Math.cos(matchTick * 0.01 + 1.8) * (w * 0.34);
-        const ufo2Y = h + 96 + Math.cos(matchTick * 0.04) * 14;
+        const ufo2Y = h + 225 + Math.cos(matchTick * 0.04) * 14;
         drawPixelUfo(ctx, ufo2X, ufo2Y, matchTick + 25, px);
         ctx.restore();
       } else if (selectedPitchTheme === 'URBAN_CONCRETE') {
-        // 2B. Live Cruising 16-Bit Cars, Police Cruiser with Flashing Sirens, Bouncing Streetballs & Boombox Beats
+        // 2B. Live Cruising 16-Bit Cars on Outer Asphalt Avenues, Bouncing Streetballs & Boombox Beats
         ctx.save();
         const car1X = ((matchTick * 3.2) % (w + 560)) - 280;
-        drawStreetCar(ctx, car1X, -112, 1, '#facc15', px, false, matchTick);
+        drawStreetCar(ctx, car1X, -260, 1, '#facc15', px, false, matchTick);
         const car2X = w + 280 - (((matchTick * 2.9 + 420) % (w + 560)));
-        drawStreetCar(ctx, car2X, -82, -1, '#1e293b', px, true, matchTick);
+        drawStreetCar(ctx, car2X, -230, -1, '#1e293b', px, true, matchTick);
 
         const car3X = w + 280 - (((matchTick * 3.0 + 180) % (w + 560)));
-        drawStreetCar(ctx, car3X, h + 84, -1, '#f43f5e', px, false, matchTick);
+        drawStreetCar(ctx, car3X, h + 230, -1, '#f43f5e', px, false, matchTick);
         const car4X = ((matchTick * 2.5 + 640) % (w + 560)) - 280;
-        drawStreetCar(ctx, car4X, h + 114, 1, '#38bdf8', px, false, matchTick);
+        drawStreetCar(ctx, car4X, h + 260, 1, '#38bdf8', px, false, matchTick);
 
-        // Animated Bouncing Basketballs on Left & Right Streetball Half-Courts + Boombox Soundwaves
-        for (const sideX of [-86, w + 86]) {
+        // Animated Bouncing Basketballs on Left & Right Outer Streetball Half-Courts + Boombox Soundwaves
+        for (const sideX of [-256, w + 256]) {
           const hop = Math.abs(Math.sin(matchTick * 0.14 + (sideX < 0 ? 0 : 1.4))) * 18;
           const bx = sideX;
           const by = h * 0.46 - hop;
@@ -5327,26 +5581,26 @@ export default function App() {
         }
         ctx.restore();
       } else if (selectedPitchTheme === 'RIO_CLAY') {
-        // 2C. Animated Ocean Waves, Cruising 16-Bit Sailboats, Flickering Tiki Torches & Gliding Seagulls
+        // 2C. Animated Outer Ocean Waves, Cruising 16-Bit Sailboats & Gliding Seagulls
         ctx.save();
         ctx.fillStyle = '#ffffff';
         for (let i = 0; i < 24; i++) {
-          const wx = -140 + ((i * 179 + Math.floor(matchTick * 0.8)) % (w + 280));
-          const wyTop = -138 + Math.sin(matchTick * 0.06 + i) * 8;
-          const wyBot = h + 134 + Math.cos(matchTick * 0.06 + i) * 8;
+          const wx = -240 + ((i * 179 + Math.floor(matchTick * 0.8)) % (w + 480));
+          const wyTop = -265 + Math.sin(matchTick * 0.06 + i) * 8;
+          const wyBot = h + 265 + Math.cos(matchTick * 0.06 + i) * 8;
           ctx.globalAlpha = 0.45 + 0.35 * Math.sin(matchTick * 0.08 + i);
           ctx.fillRect(Math.round(wx), Math.round(wyTop), 18, 4);
           ctx.fillRect(Math.round(wx), Math.round(wyBot), 18, 4);
         }
         ctx.globalAlpha = 1;
 
-        // Cruising 16-Bit Tropical Sailboats in Top & Bottom Ocean
+        // Cruising 16-Bit Tropical Sailboats in Top & Bottom Outer Ocean
         for (let b = 0; b < 2; b++) {
           const dir = b === 0 ? 1 : -1;
           const bx = b === 0
             ? ((matchTick * 1.1 + 220) % (w + 360)) - 180
             : w + 180 - ((matchTick * 1.0 + 540) % (w + 360));
-          const by = b === 0 ? -152 + Math.sin(matchTick * 0.05) * 4 : h + 150 + Math.cos(matchTick * 0.05) * 4;
+          const by = b === 0 ? -285 + Math.sin(matchTick * 0.05) * 4 : h + 285 + Math.cos(matchTick * 0.05) * 4;
           // White water wake
           fillPxRect(ctx, bx - dir * 28, by + 4, 18, 4, '#e0f2fe', px);
           // Hull & Sail
@@ -5356,10 +5610,10 @@ export default function App() {
           fillPxRect(ctx, bx - 5, by - 17, 12, 16, '#ffffff', px);
         }
 
-        // Gliding pixel seagulls
+        // Gliding pixel seagulls over the outer boardwalk
         for (let g = 0; g < 4; g++) {
           const gx = ((matchTick * (1.6 + g * 0.25) + g * 520) % (w + 360)) - 180;
-          const gy = (g % 2 === 0 ? -98 : h + 98) + Math.sin(matchTick * 0.05 + g * 2) * 14;
+          const gy = (g % 2 === 0 ? -225 : h + 225) + Math.sin(matchTick * 0.05 + g * 2) * 14;
           const wingY = Math.sin(matchTick * 0.18 + g) > 0 ? -4 : 3;
           ctx.fillStyle = '#ffffff';
           ctx.fillRect(Math.round(gx - 8), Math.round(gy + wingY), 7, 3);
@@ -5369,32 +5623,32 @@ export default function App() {
         }
         ctx.restore();
       } else if (selectedPitchTheme === 'TWILIGHT_SYNTH') {
-        // 2D. Sweeping Cyber-Synth Neon Searchlights & Cruising Hover-Spinners with Plasma Thruster Trails
+        // 2D. Sweeping Cyber-Synth Neon Searchlights & Cruising Hover-Spinners in Outer Skyline
         ctx.save();
         for (const sl of [
-          { x: 260, y: -110, sign: 1, col: 'rgba(244, 114, 182, 0.24)' },
-          { x: w - 260, y: -110, sign: -1, col: 'rgba(34, 211, 238, 0.24)' },
-          { x: 260, y: h + 110, sign: 1, col: 'rgba(34, 211, 238, 0.24)' },
-          { x: w - 260, y: h + 110, sign: -1, col: 'rgba(244, 114, 182, 0.24)' },
+          { x: 260, y: -215, sign: 1, col: 'rgba(244, 114, 182, 0.22)' },
+          { x: w - 260, y: -215, sign: -1, col: 'rgba(34, 211, 238, 0.22)' },
+          { x: 260, y: h + 215, sign: 1, col: 'rgba(34, 211, 238, 0.22)' },
+          { x: w - 260, y: h + 215, sign: -1, col: 'rgba(244, 114, 182, 0.22)' },
         ]) {
           const swing = Math.sin(matchTick * 0.025 * sl.sign + (sl.y < 0 ? 0 : 1.5)) * 180;
           ctx.fillStyle = sl.col;
           ctx.beginPath();
           ctx.moveTo(sl.x - 10, sl.y);
           ctx.lineTo(sl.x + 10, sl.y);
-          ctx.lineTo(sl.x + swing + 75, sl.y < 0 ? 110 : h - 110);
-          ctx.lineTo(sl.x + swing - 75, sl.y < 0 ? 110 : h - 110);
+          ctx.lineTo(sl.x + swing + 75, sl.y < 0 ? -165 : h + 165);
+          ctx.lineTo(sl.x + swing - 75, sl.y < 0 ? -165 : h + 165);
           ctx.closePath();
           ctx.fill();
         }
 
-        // Flying 16-Bit Cyber Hover-Spinners with Neon Thruster Trails
+        // Flying 16-Bit Cyber Hover-Spinners with Neon Thruster Trails in Outer Highway
         for (let s = 0; s < 2; s++) {
           const dir = s === 0 ? 1 : -1;
           const hx = s === 0
             ? ((matchTick * 4.2 + 120) % (w + 480)) - 240
             : w + 240 - ((matchTick * 3.8 + 380) % (w + 480));
-          const hy = s === 0 ? -96 + Math.sin(matchTick * 0.08) * 6 : h + 96 + Math.cos(matchTick * 0.08) * 6;
+          const hy = s === 0 ? -225 + Math.sin(matchTick * 0.08) * 6 : h + 225 + Math.cos(matchTick * 0.08) * 6;
           fillPxRect(ctx, hx - dir * 38, hy - 3, 28, 6, s === 0 ? '#22d3ee' : '#f472b6', px);
           fillPxRect(ctx, hx - 18, hy - 9, 36, 18, GRAPHICS_CONFIG.palette.outline, px);
           fillPxRect(ctx, hx - 15, hy - 6, 30, 12, '#312e81', px);
@@ -5402,21 +5656,21 @@ export default function App() {
         }
         ctx.restore();
       } else if (selectedPitchTheme === 'ARCTIC_ICE') {
-        // 2E. Shimmering Aurora Borealis Ribbons, Falling Pixel Snowflakes, Waddling Penguins & Cabin Smoke
+        // 2E. Shimmering Aurora Borealis Ribbons, Falling Pixel Snowflakes & Waddling Penguins in Outer Glacier
         ctx.save();
-        // Aurora Borealis Shimmering Curtains at Top & Bottom Horizon
+        // Aurora Borealis Shimmering Curtains at Top & Bottom Outer Horizon
         for (let a = 0; a < 10; a++) {
           const ax = 80 + a * ((w - 160) / 10) + Math.sin(matchTick * 0.03 + a) * 24;
           const waveY = Math.sin(matchTick * 0.05 + a * 0.8) * 12;
           ctx.fillStyle = a % 2 === 0 ? 'rgba(45, 212, 191, 0.24)' : 'rgba(168, 85, 247, 0.22)';
-          ctx.fillRect(Math.round(ax), Math.round(-155 + waveY), 95, 28);
-          ctx.fillRect(Math.round(ax), Math.round(h + 125 - waveY), 95, 28);
+          ctx.fillRect(Math.round(ax), Math.round(-290 + waveY), 95, 28);
+          ctx.fillRect(Math.round(ax), Math.round(h + 260 - waveY), 95, 28);
         }
 
-        // Waddling 16-Bit Pixel Penguins along Top & Bottom Snowbanks
+        // Waddling 16-Bit Pixel Penguins along Top & Bottom Outer Snowbanks
         for (let p = 0; p < 4; p++) {
           const pxBase = p % 2 === 0 ? 540 : w - 540;
-          const pyBase = p < 2 ? -76 : h + 76;
+          const pyBase = p < 2 ? -205 : h + 205;
           const waddleX = pxBase + Math.sin(matchTick * 0.03 + p * 1.7) * 38;
           const hopY = Math.abs(Math.sin(matchTick * 0.16 + p)) * 4;
           fillPxRect(ctx, waddleX - 8, pyBase - 10 - hopY, 16, 20, '#0f172a', px);
@@ -5424,29 +5678,29 @@ export default function App() {
           fillPxRect(ctx, waddleX - 3, pyBase - 7 - hopY, 6, 4, '#f97316', px);
         }
 
-        // Falling & Swirling 16-Bit Pixel Snowflakes Around the Perimeter
+        // Falling & Swirling 16-Bit Pixel Snowflakes Around the Outer Perimeter
         ctx.fillStyle = '#ffffff';
         for (let s = 0; s < 36; s++) {
-          const sx = -120 + ((s * 173 + Math.floor(matchTick * 0.6 + Math.sin(matchTick * 0.04 + s) * 14)) % (w + 240));
-          const sy = -140 + ((s * 97 + Math.floor(matchTick * 1.1)) % (h + 280));
-          if (sx > -20 && sx < w + 20 && sy > -20 && sy < h + 20) continue;
+          const sx = -260 + ((s * 173 + Math.floor(matchTick * 0.6 + Math.sin(matchTick * 0.04 + s) * 14)) % (w + 520));
+          const sy = -280 + ((s * 97 + Math.floor(matchTick * 1.1)) % (h + 560));
+          if (sx > -168 && sx < w + 168 && sy > -168 && sy < h + 168) continue;
           ctx.globalAlpha = 0.55 + 0.4 * Math.sin(matchTick * 0.07 + s);
           ctx.fillRect(Math.round(sx), Math.round(sy), 5, 5);
         }
         ctx.globalAlpha = 1;
         ctx.restore();
       } else if (selectedPitchTheme === 'VOLCANO_FORGE') {
-        // 2F. Roaring 16-Bit Fire Brazier Flames, Bursting Lava Bubbles & Rising Volcanic Ember Sparks
+        // 2F. Roaring 16-Bit Fire Brazier Flames (Matched 1:1 to Outer Caldera Pedestals) & Rising Volcanic Ember Sparks
         ctx.save();
         for (const bz of [
-          { x: 170, y: -76 },
-          { x: w - 170, y: -76 },
-          { x: 170, y: h + 76 },
-          { x: w - 170, y: h + 76 },
-          { x: -96, y: 155 },
-          { x: -96, y: h - 155 },
-          { x: w + 96, y: 155 },
-          { x: w + 96, y: h - 155 },
+          { x: 240, y: -214 },
+          { x: w - 240, y: -214 },
+          { x: 240, y: h + 214 },
+          { x: w - 240, y: h + 214 },
+          { x: -232, y: 155 },
+          { x: -232, y: h - 155 },
+          { x: w + 232, y: 155 },
+          { x: w + 232, y: h - 155 },
         ]) {
           const flicker = Math.round(Math.sin(matchTick * 0.24 + bz.x) * 6);
           fillPxRect(ctx, bz.x - 10, bz.y - 22 - Math.abs(flicker), 20, 18 + Math.abs(flicker), '#ef4444', px);
@@ -5454,67 +5708,35 @@ export default function App() {
           fillPxRect(ctx, bz.x - 4, bz.y - 12 - Math.abs(flicker) * 0.5, 8, 8, '#fde047', px);
         }
 
-        // Rising Glowing Volcanic Ember Sparks & Lava Bubbles
+        // Rising Glowing Volcanic Ember Sparks & Lava Bubbles in Outer Caldera
         for (let e = 0; e < 36; e++) {
-          const ex = -125 + ((e * 181 + Math.floor(Math.sin(matchTick * 0.05 + e) * 16)) % (w + 250));
-          const ey = h + 145 - ((e * 103 + Math.floor(matchTick * 1.4)) % (h + 290));
-          if (ex > -24 && ex < w + 24 && ey > -24 && ey < h + 24) continue;
+          const ex = -260 + ((e * 181 + Math.floor(Math.sin(matchTick * 0.05 + e) * 16)) % (w + 520));
+          const ey = h + 280 - ((e * 103 + Math.floor(matchTick * 1.4)) % (h + 560));
+          if (ex > -168 && ex < w + 168 && ey > -168 && ey < h + 168) continue;
           ctx.fillStyle = e % 2 === 0 ? '#fde047' : '#f97316';
           ctx.fillRect(Math.round(ex), Math.round(ey), 5, 5);
         }
         ctx.restore();
       } else if (selectedPitchTheme === 'TURF_AUTUMN') {
-        // 2G. Bouncing Crowd + Live Drifting Golden/Crimson Autumn Maple Leaves
+        // 2G. Live Drifting Golden/Crimson Autumn Maple Leaves in Outer Park
         ctx.save();
-        const bounceAmp = 2.4 + crowdExcitement * 7.8 + (superFlowActive ? 3.5 : 0);
-        const bounceFreq = 0.08 + crowdExcitement * 0.14;
-        for (let i = 0; i < crowdFans.length; i++) {
-          const fan = crowdFans[i];
-          const hop = Math.round(Math.abs(Math.sin(matchTick * bounceFreq + fan.phase)) * bounceAmp);
-          const fx = Math.round(fan.x);
-          const fy = Math.round(fan.baseY - hop);
-          ctx.fillStyle = GRAPHICS_CONFIG.palette.outline;
-          ctx.fillRect(fx - 7, fy - 7, 14, 14);
-          ctx.fillStyle = fan.color;
-          ctx.fillRect(fx - 5, fy - 5, 10, 10);
-          ctx.fillStyle = '#ffffff';
-          ctx.fillRect(fx - 4, fy - 4, 4, 3);
-        }
-
-        // Drifting 16-Bit Crimson, Orange & Gold Autumn Maple Leaves
         const leafColors = ['#ea580c', '#dc2626', '#facc15', '#f97316'];
         for (let l = 0; l < 32; l++) {
-          const lx = -125 + ((l * 179 + Math.floor(matchTick * 0.85 + Math.sin(matchTick * 0.05 + l) * 18)) % (w + 250));
-          const ly = -140 + ((l * 107 + Math.floor(matchTick * 0.95)) % (h + 280));
-          if (lx > -18 && lx < w + 18 && ly > -18 && ly < h + 18) continue;
+          const lx = -260 + ((l * 179 + Math.floor(matchTick * 0.85 + Math.sin(matchTick * 0.05 + l) * 18)) % (w + 520));
+          const ly = -280 + ((l * 107 + Math.floor(matchTick * 0.95)) % (h + 560));
+          if (lx > -168 && lx < w + 168 && ly > -168 && ly < h + 168) continue;
           ctx.fillStyle = leafColors[l % leafColors.length];
           ctx.fillRect(Math.round(lx), Math.round(ly), 6, 6);
         }
         ctx.restore();
       } else if (selectedPitchTheme === 'TURF_SAKURA') {
-        // 2H. Bouncing Crowd, Swimming Koi Fish in Imperial Ponds & Swirling Pink Sakura Petals
+        // 2H. Swimming Koi Fish in Outer Imperial Ponds & Swirling Pink Sakura Petals
         ctx.save();
-        const bounceAmp = 2.4 + crowdExcitement * 7.8 + (superFlowActive ? 3.5 : 0);
-        const bounceFreq = 0.08 + crowdExcitement * 0.14;
-        for (let i = 0; i < crowdFans.length; i++) {
-          const fan = crowdFans[i];
-          const hop = Math.round(Math.abs(Math.sin(matchTick * bounceFreq + fan.phase)) * bounceAmp);
-          const fx = Math.round(fan.x);
-          const fy = Math.round(fan.baseY - hop);
-          ctx.fillStyle = GRAPHICS_CONFIG.palette.outline;
-          ctx.fillRect(fx - 7, fy - 7, 14, 14);
-          ctx.fillStyle = fan.color;
-          ctx.fillRect(fx - 5, fy - 5, 10, 10);
-          ctx.fillStyle = '#ffffff';
-          ctx.fillRect(fx - 4, fy - 4, 4, 3);
-        }
-
-        // Swimming Orange & White Pixel Koi Fish inside the 4 Imperial Koi Ponds
         for (const pond of [
-          { x: -90, y: h * 0.2 },
-          { x: -90, y: h * 0.8 },
-          { x: w + 90, y: h * 0.2 },
-          { x: w + 90, y: h * 0.8 },
+          { x: -234, y: h * 0.2 },
+          { x: -234, y: h * 0.8 },
+          { x: w + 234, y: h * 0.2 },
+          { x: w + 234, y: h * 0.8 },
         ]) {
           const koiAng = matchTick * 0.045 + pond.y * 0.01;
           const kx = pond.x + Math.cos(koiAng) * 14;
@@ -5523,46 +5745,23 @@ export default function App() {
           fillPxRect(ctx, kx + 2, ky - 2, 4, 4, '#ffffff', px);
         }
 
-        // Swirling Pink Sakura Cherry Blossom Petals
         const petalColors = ['#fbcfe8', '#f472b6', '#ffe4e6'];
         for (let p = 0; p < 36; p++) {
-          const pxPos = -130 + ((p * 167 + Math.floor(matchTick * 1.05 + Math.sin(matchTick * 0.06 + p) * 16)) % (w + 260));
-          const pyPos = -140 + ((p * 97 + Math.floor(matchTick * 0.9)) % (h + 280));
-          if (pxPos > -18 && pxPos < w + 18 && pyPos > -18 && pyPos < h + 18) continue;
+          const pxPos = -260 + ((p * 167 + Math.floor(matchTick * 1.05 + Math.sin(matchTick * 0.06 + p) * 16)) % (w + 520));
+          const pyPos = -280 + ((p * 97 + Math.floor(matchTick * 0.9)) % (h + 560));
+          if (pxPos > -168 && pxPos < w + 168 && pyPos > -168 && pyPos < h + 168) continue;
           ctx.fillStyle = petalColors[p % petalColors.length];
           ctx.fillRect(Math.round(pxPos), Math.round(pyPos), 5, 5);
         }
         ctx.restore();
       } else if (selectedPitchTheme === 'TURF_CHAMPIONS') {
-        // 2I. Bouncing Ultras Crowd, Gleaming Trophy Sparkles & Paparazzi Camera Flashes
+        // 2I. Gleaming Trophy Sparkles on the 4 Outer Championship Trophy Plinths
         ctx.save();
-        const bounceAmp = 2.8 + crowdExcitement * 8.2 + (superFlowActive ? 3.8 : 0);
-        const bounceFreq = 0.09 + crowdExcitement * 0.14;
-        for (let i = 0; i < crowdFans.length; i++) {
-          const fan = crowdFans[i];
-          const hop = Math.round(Math.abs(Math.sin(matchTick * bounceFreq + fan.phase)) * bounceAmp);
-          const fx = Math.round(fan.x);
-          const fy = Math.round(fan.baseY - hop);
-          ctx.fillStyle = GRAPHICS_CONFIG.palette.outline;
-          ctx.fillRect(fx - 7, fy - 7, 14, 14);
-          ctx.fillStyle = fan.color;
-          ctx.fillRect(fx - 5, fy - 5, 10, 10);
-          ctx.fillStyle = '#ffffff';
-          ctx.fillRect(fx - 4, fy - 4, 4, 3);
-
-          // Periodic Paparazzi Camera Flash Bulbs in the Grandstands
-          if ((i * 19 + Math.floor(matchTick * 0.25)) % 47 === 0) {
-            ctx.fillStyle = 'rgba(255, 255, 255, 0.92)';
-            ctx.fillRect(fx - 10, fy - 10, 20, 20);
-          }
-        }
-
-        // Golden Star Sparkles on the 4 Sideline Championship Trophy Plinths
         for (const tp of [
-          { x: -98, y: h * 0.24 },
-          { x: -98, y: h * 0.76 },
-          { x: w + 98, y: h * 0.24 },
-          { x: w + 98, y: h * 0.76 },
+          { x: -234, y: h * 0.24 },
+          { x: -234, y: h * 0.76 },
+          { x: w + 234, y: h * 0.24 },
+          { x: w + 234, y: h * 0.76 },
         ]) {
           const gleamR = 10 + Math.sin(matchTick * 0.14 + tp.y) * 5;
           ctx.strokeStyle = 'rgba(254, 240, 138, 0.85)';
@@ -5573,29 +5772,13 @@ export default function App() {
         }
         ctx.restore();
       } else {
-        // 2J. Fast Bouncing 16-Bit Crowd Sprites & Sparkling Fountain Water Jets in Royal Botanical Park
+        // 2J. Sparkling Fountain Water Jets in Outer Royal Botanical Park
         ctx.save();
-        const bounceAmp = 2.4 + crowdExcitement * 7.8 + (superFlowActive ? 3.5 : 0);
-        const bounceFreq = 0.08 + crowdExcitement * 0.14;
-        for (let i = 0; i < crowdFans.length; i++) {
-          const fan = crowdFans[i];
-          const hop = Math.round(Math.abs(Math.sin(matchTick * bounceFreq + fan.phase)) * bounceAmp);
-          const fx = Math.round(fan.x);
-          const fy = Math.round(fan.baseY - hop);
-          ctx.fillStyle = GRAPHICS_CONFIG.palette.outline;
-          ctx.fillRect(fx - 7, fy - 7, 14, 14);
-          ctx.fillStyle = fan.color;
-          ctx.fillRect(fx - 5, fy - 5, 10, 10);
-          ctx.fillStyle = '#ffffff';
-          ctx.fillRect(fx - 4, fy - 4, 4, 3);
-        }
-
-        // Animated Sparkling Water Fountain Spray Ripples in the 4 Corner Fountains
         for (const ftn of [
-          { x: -98, y: h * 0.24 },
-          { x: -98, y: h * 0.76 },
-          { x: w + 98, y: h * 0.24 },
-          { x: w + 98, y: h * 0.76 },
+          { x: -234, y: h * 0.24 },
+          { x: -234, y: h * 0.76 },
+          { x: w + 234, y: h * 0.24 },
+          { x: w + 234, y: h * 0.76 },
         ]) {
           const sprayR = 8 + ((matchTick * 0.45) % 18);
           ctx.strokeStyle = 'rgba(224, 242, 254, 0.75)';
@@ -5606,6 +5789,47 @@ export default function App() {
         }
         ctx.restore();
       }
+
+      // 2K. Universal Multi-Tier Stadium Crowd (Rendered across ALL 10 Stadiums with Waving Team Flags, Raised Scarves & Camera Flashes!)
+      ctx.save();
+      const bounceAmp = 2.4 + crowdExcitement * 7.8 + (superFlowActive ? 3.5 : 0);
+      const bounceFreq = 0.08 + crowdExcitement * 0.14;
+      const isExcited = crowdExcitement > 0.22 || gameState === 'GOAL_CELEBRATION' || superFlowActive;
+      for (let i = 0; i < crowdFans.length; i++) {
+        const fan = crowdFans[i];
+        const hop = Math.round(Math.abs(Math.sin(matchTick * bounceFreq + fan.phase)) * bounceAmp);
+        const fx = Math.round(fan.x);
+        const fy = Math.round(fan.baseY - hop);
+        ctx.fillStyle = GRAPHICS_CONFIG.palette.outline;
+        ctx.fillRect(fx - 7, fy - 7, 14, 14);
+        ctx.fillStyle = fan.color;
+        ctx.fillRect(fx - 5, fy - 5, 10, 10);
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(fx - 4, fy - 4, 4, 3);
+
+        // Supporter Scarves & Waving Team Flags
+        if (fan.prop === 'FLAG') {
+          const waveX = Math.round(Math.sin(matchTick * 0.16 + fan.phase) * 5);
+          ctx.fillStyle = '#f8fafc';
+          ctx.fillRect(fx + 5, fy - 16, 2, 14);
+          ctx.fillStyle = fan.isHome ? '#38bdf8' : '#fb7185';
+          ctx.fillRect(fx + 7, fy - 16 + (waveX > 0 ? 1 : 0), 9 + Math.abs(waveX) * 0.5, 6);
+          ctx.fillStyle = '#fde047';
+          ctx.fillRect(fx + 9, fy - 14 + (waveX > 0 ? 1 : 0), 4, 2);
+        } else if (fan.prop === 'SCARF' && isExcited) {
+          ctx.fillStyle = fan.isHome ? '#38bdf8' : '#fb7185';
+          ctx.fillRect(fx - 7, fy - 12, 14, 3);
+          ctx.fillStyle = '#ffffff';
+          ctx.fillRect(fx - 3, fy - 12, 6, 3);
+        }
+
+        // Periodic Camera Flash Bulbs in the Stands during Goals or High Excitement
+        if (isExcited && (i * 23 + Math.floor(matchTick * 0.3)) % 67 === 0) {
+          ctx.fillStyle = 'rgba(255, 255, 255, 0.88)';
+          ctx.fillRect(fx - 9, fy - 9, 18, 18);
+        }
+      }
+      ctx.restore();
 
       // 3. Top Interactive Stadium LED Perimeter Board (16-Bit Pixel Frame)
       ctx.save();
@@ -5760,12 +5984,12 @@ export default function App() {
 
         // Subtle Theme-Specific Stadium Celebration Accents
         if (stadiumFx.effectStyle === 'BOTANICAL_FOUNTAIN') {
-          // Classic Sunlit Turf: 4 Corner Fountains erupt with higher sparkling cyan/gold water rings
+          // Classic Sunlit Turf: 4 Outer Park Fountains erupt with higher sparkling cyan/gold water rings
           for (const ftn of [
-            { x: -98, y: h * 0.24 },
-            { x: -98, y: h * 0.76 },
-            { x: w + 98, y: h * 0.24 },
-            { x: w + 98, y: h * 0.76 },
+            { x: -234, y: h * 0.24 },
+            { x: -234, y: h * 0.76 },
+            { x: w + 234, y: h * 0.24 },
+            { x: w + 234, y: h * 0.76 },
           ]) {
             ctx.strokeStyle = '#38bdf8';
             ctx.lineWidth = 3;
@@ -5805,8 +6029,8 @@ export default function App() {
           ctx.ellipse(w * 0.5, h * 0.5, 110 + goalElapsed * 1.5, 48 + goalElapsed * 0.6, goalElapsed * 0.04, 0, Math.PI * 2);
           ctx.stroke();
         } else if (stadiumFx.effectStyle === 'STREET_GRAFFITI_BASS') {
-          // Urban Street Concrete: Booming Boombox Soundwave Rings on Left & Right Courts
-          for (const sx of [-86, w + 86]) {
+          // Urban Street Concrete: Booming Boombox Soundwave Rings on Left & Right Outer Courts
+          for (const sx of [-256, w + 256]) {
             ctx.strokeStyle = '#facc15';
             ctx.lineWidth = 3.5;
             ctx.beginPath();
@@ -5848,12 +6072,12 @@ export default function App() {
             ctx.stroke();
           }
         } else if (stadiumFx.effectStyle === 'VOLCANO_MAGMA_PLUME') {
-          // Magma Caldera Citadel: 8 Perimeter Fire Braziers Surge with Tall Molten Gold Pillars
+          // Magma Caldera Citadel: Outer Caldera Fire Braziers Surge with Tall Molten Gold Pillars
           for (const bz of [
-            { x: 170, y: -76 },
-            { x: w - 170, y: -76 },
-            { x: 170, y: h + 76 },
-            { x: w - 170, y: h + 76 },
+            { x: 240, y: -214 },
+            { x: w - 240, y: -214 },
+            { x: 240, y: h + 214 },
+            { x: w - 240, y: h + 214 },
           ]) {
             fillPxRect(ctx, bz.x - 14, bz.y - 42, 28, 34, '#f97316', px);
             fillPxRect(ctx, bz.x - 8, bz.y - 36, 16, 26, '#fde047', px);
@@ -6178,16 +6402,16 @@ export default function App() {
         const isMobOrTab = isMobileOrTabletViewport();
         const isCompactPhoneLandscape = Boolean(canvas && canvas.height <= 550 && canvas.width > canvas.height);
 
-        // Enhanced camera tracking & slight zoom on phone landscape so gameplay feels close, smooth, and responsive
-        const panFactorX = isCompactPhoneLandscape ? 0.38 : isPortrait ? 0.24 : isMobOrTab ? 0.22 : 0.14;
-        const panFactorY = isCompactPhoneLandscape ? 0.36 : isPortrait ? 0.22 : isMobOrTab ? 0.20 : 0.12;
+        // Enhanced camera tracking & slight zoom on phone portrait & landscape so gameplay feels close, smooth, and responsive
+        const panFactorX = isPortrait ? 0.56 : isCompactPhoneLandscape ? 0.38 : isMobOrTab ? 0.22 : 0.14;
+        const panFactorY = isPortrait ? 0.34 : isCompactPhoneLandscape ? 0.36 : isMobOrTab ? 0.20 : 0.12;
         const rawCamX = PITCH.width * 0.5 + (focusX - PITCH.width * 0.5) * panFactorX;
         const rawCamY = PITCH.height * 0.5 + (focusY - PITCH.height * 0.5) * panFactorY;
-        const clampMarginX = isCompactPhoneLandscape ? 0.26 : isPortrait ? 0.34 : isMobOrTab ? 0.34 : 0.22;
-        const clampMarginY = isCompactPhoneLandscape ? 0.28 : isPortrait ? 0.34 : isMobOrTab ? 0.34 : 0.28;
+        const clampMarginX = isPortrait ? 0.18 : isCompactPhoneLandscape ? 0.26 : isMobOrTab ? 0.34 : 0.22;
+        const clampMarginY = isPortrait ? 0.24 : isCompactPhoneLandscape ? 0.28 : isMobOrTab ? 0.34 : 0.28;
         targetCamX = Math.max(PITCH.width * clampMarginX, Math.min(PITCH.width * (1 - clampMarginX), rawCamX));
         targetCamY = Math.max(PITCH.height * clampMarginY, Math.min(PITCH.height * (1 - clampMarginY), rawCamY));
-        const baseGameplayZoom = isCompactPhoneLandscape ? 1.06 : 1.0;
+        const baseGameplayZoom = isPortrait ? 1.04 : isCompactPhoneLandscape ? 1.06 : 1.0;
         if (gameState === 'GOAL_CELEBRATION') {
           targetZoom = baseGameplayZoom + 0.06;
         } else if (kickChargeState.power > 0.25) {
@@ -6418,6 +6642,7 @@ export default function App() {
       let nextBtnLabel = 'FIND NEW MATCH';
       let showRematchBtn = true;
       let isTournamentChampion = false;
+      const matchRoundBeforeUpdate = tournamentRound;
 
       // Ranked & Tournament win progression: start at Bronze I and rank up by winning games, with Post-Match Rank Progress Bar UI!
       let rankUpAnnouncement = '';
@@ -6558,15 +6783,44 @@ export default function App() {
         }
       }
 
+      // Calculate & Award Match Money Reward (depends on game outcome & game mode)
+      const moneyReward = calculateMatchMoneyReward({
+        gameMode: currentGameMode,
+        didWin: youWon,
+        isDraw: scoreYou === scoreAi,
+        goalsFor: scoreYou,
+        goalsAgainst: scoreAi,
+        isMercyRule: Math.abs(scoreYou - scoreAi) >= MERCY_RULE_LEAD,
+        tournamentRound: matchRoundBeforeUpdate,
+      });
+      userProfile.balance =
+        (Number.isFinite(userProfile.balance) ? userProfile.balance : INITIAL_PLAYER_BALANCE) +
+        moneyReward.totalReward;
+      saveUserProfileToStorage();
+      syncProfileUI();
+
       const spEl = document.getElementById('statPasses');
       const scEl = document.getElementById('statCombo');
       const ssEl = document.getElementById('statShots');
       const spoEl = document.getElementById('statPossession');
+      const smeEl = document.getElementById('statMoneyEarned');
+      const twMoneyEl = document.getElementById('tourneyWinMoneyStat');
+      const statMoneyModeBadgeEl = document.getElementById('statMoneyModeBadge');
 
       if (spEl) spEl.innerText = String(totalPassesYou);
       if (scEl) scEl.innerText = `x${maxFlowCombo}`;
       if (ssEl) ssEl.innerText = String(totalShotsYou);
       if (spoEl) spoEl.innerText = `${possPct}%`;
+      if (smeEl) smeEl.innerText = `+$${moneyReward.totalReward}`;
+      if (twMoneyEl) twMoneyEl.innerText = `+$${moneyReward.totalReward}`;
+      if (statMoneyModeBadgeEl) {
+        statMoneyModeBadgeEl.innerText =
+          currentGameMode === 'TOURNAMENT'
+            ? '2X CUP'
+            : currentGameMode === 'RANKED'
+              ? '1.5X'
+              : '1X';
+      }
 
       if (statsRow) {
         statsRow.classList.remove('hidden');
@@ -6577,6 +6831,7 @@ export default function App() {
 
       setMatchmakingIdleUI();
       if (startBtnText) startBtnText.innerText = nextBtnLabel;
+      if (openSlotMachineBtn) openSlotMachineBtn.classList.add('hidden');
 
       if (rematchSameBtn && rematchSameText) {
         if (showRematchBtn) {
@@ -6600,6 +6855,8 @@ export default function App() {
           if (menuOverlay) menuOverlay.classList.remove('hidden');
           syncMenuFocusVisual(true);
         }
+        // Trigger post-match cash reward count-up animation & coin clink SFX
+        triggerMatchCashRewardAnimation(moneyReward.totalReward);
       });
     }
 
@@ -6959,6 +7216,7 @@ export default function App() {
       if (forfeitBtn) forfeitBtn.classList.add('hidden');
       if (rematchSameBtn) rematchSameBtn.classList.add('hidden');
       if (mainMenuBtn) mainMenuBtn.classList.add('hidden');
+      if (openSlotMachineBtn) openSlotMachineBtn.classList.add('hidden');
 
       sound.playMatchmakingTick(0);
       applySearchingVisualState(0, '0.4', 18);
@@ -7055,6 +7313,7 @@ export default function App() {
         if (playlistWrap) playlistWrap.classList.add('hidden');
         if (kitWrap) kitWrap.classList.add('hidden');
         if (startBtn) startBtn.classList.add('hidden');
+        if (openSlotMachineBtn) openSlotMachineBtn.classList.add('hidden');
         if (rematchSameBtn) rematchSameBtn.classList.add('hidden');
         if (mainMenuBtn) mainMenuBtn.classList.add('hidden');
         if (resumeBtn) resumeBtn.classList.remove('hidden');
@@ -7284,10 +7543,636 @@ export default function App() {
       closeEditProfileModal();
     }
 
-    if (editProfileBtn) editProfileBtn.addEventListener('click', openEditProfileModal);
-    if (menuProfileBar && menuProfileBar !== editProfileBtn) {
-      menuProfileBar.addEventListener('click', openEditProfileModal);
+    // --- Coupon Redemption ("HACK" = +$100 / 10 Spins) & Club Store Teaser ---
+    const couponCodeInput = document.getElementById('couponCodeInput') as HTMLInputElement | null;
+    const redeemCouponBtn = document.getElementById('redeemCouponBtn');
+    const couponFeedbackText = document.getElementById('couponFeedbackText');
+
+    function handleRedeemCoupon(overrideCode?: string) {
+      sound.init();
+      const rawCode = typeof overrideCode === 'string' ? overrideCode : couponCodeInput ? couponCodeInput.value : '';
+      const res = redeemCouponCode(rawCode, userProfile.balance);
+      if (res.valid) {
+        userProfile.balance = res.newBalance;
+        saveUserProfileToStorage();
+        syncProfileUI();
+        sound.playCouponRedeem();
+        if (couponCodeInput && typeof overrideCode !== 'string') {
+          couponCodeInput.value = '';
+        }
+        if (couponFeedbackText) {
+          couponFeedbackText.innerText = res.message;
+          couponFeedbackText.className =
+            'text-[11px] font-black text-emerald-800 bg-emerald-100 border-2 border-emerald-500 rounded-xl px-3 py-1.5 mt-2 shadow-[0_2px_0_#0f172a]';
+          couponFeedbackText.classList.remove('hidden');
+        }
+      } else {
+        sound.playUiBack();
+        if (couponFeedbackText) {
+          couponFeedbackText.innerText = res.message;
+          couponFeedbackText.className =
+            'text-[11px] font-black text-rose-800 bg-rose-100 border-2 border-rose-400 rounded-xl px-3 py-1.5 mt-2 shadow-[0_2px_0_#0f172a]';
+          couponFeedbackText.classList.remove('hidden');
+        }
+      }
+      return res;
     }
+
+    if (redeemCouponBtn) {
+      redeemCouponBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        handleRedeemCoupon();
+      });
+    }
+    if (couponCodeInput) {
+      couponCodeInput.addEventListener('keydown', (e) => {
+        e.stopPropagation();
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          handleRedeemCoupon();
+        }
+      });
+    }
+
+    // --- REMATCH JACKPOT POKIES (Arcade Slot Machine with Real Virtual-Reel & 5-Payline Maths) ---
+    const openSlotMachineBtn = document.getElementById('openSlotMachineBtn');
+    const slotMachineModal = document.getElementById('slotMachineModal');
+    const closeSlotModalBtn = document.getElementById('closeSlotModalBtn');
+    const slotSpinBtn = document.getElementById('slotSpinBtn') as HTMLButtonElement | null;
+    const slotSpinBtnLabel = document.getElementById('slotSpinBtnLabel');
+    const slotStatusBanner = document.getElementById('slotStatusBanner');
+    const slotWinAmountBadge = document.getElementById('slotWinAmountBadge');
+    const slotBalanceDeltaBadge = document.getElementById('slotBalanceDeltaBadge');
+    let isSlotSpinning = false;
+    let slotSpinTimeouts: ReturnType<typeof setTimeout>[] = [];
+    let matchCashAnimInterval: ReturnType<typeof setInterval> | null = null;
+    let currentPokieGrid = getPokieGridFromStops([0, 2, 1]);
+
+    function clearSlotTimers() {
+      slotSpinTimeouts.forEach((t) => clearTimeout(t));
+      slotSpinTimeouts = [];
+      if (matchCashAnimInterval) {
+        clearInterval(matchCashAnimInterval);
+        matchCashAnimInterval = null;
+      }
+      isSlotSpinning = false;
+    }
+
+    function triggerMatchCashRewardAnimation(targetReward: number) {
+      if (matchCashAnimInterval) {
+        clearInterval(matchCashAnimInterval);
+        matchCashAnimInterval = null;
+      }
+      const smeEl = document.getElementById('statMoneyEarned');
+      const twMoneyEl = document.getElementById('tourneyWinMoneyStat');
+      const statMoneyCardEl = document.getElementById('statMoneyCard');
+      const twMoneyCardEl = document.getElementById('tourneyWinMoneyCard');
+      const statCoinIconEl = document.getElementById('statMoneyCoinIcon');
+      const twCoinIconEl = document.getElementById('tourneyWinCoinIcon');
+
+      sound.playMatchCashReward(targetReward >= 45);
+
+      [statMoneyCardEl, twMoneyCardEl].forEach((card) => {
+        if (!card) return;
+        card.classList.remove('cash-reward-card-anim');
+        void card.offsetWidth;
+        card.classList.add('cash-reward-card-anim');
+      });
+      [statCoinIconEl, twCoinIconEl].forEach((icon) => {
+        if (!icon) return;
+        icon.classList.add('coin-reward-spin');
+      });
+
+      const totalSteps = 7;
+      let step = 0;
+      matchCashAnimInterval = setInterval(() => {
+        step++;
+        sound.playCoinTick(step - 1, totalSteps);
+        const curVal =
+          step >= totalSteps
+            ? targetReward
+            : Math.max(1, Math.round((targetReward * step) / totalSteps));
+        if (smeEl) smeEl.innerText = `+$${curVal}`;
+        if (twMoneyEl) twMoneyEl.innerText = `+$${curVal}`;
+
+        if (step >= totalSteps) {
+          if (matchCashAnimInterval) {
+            clearInterval(matchCashAnimInterval);
+            matchCashAnimInterval = null;
+          }
+          [statCoinIconEl, twCoinIconEl].forEach((icon) => {
+            if (!icon) return;
+            icon.classList.remove('coin-reward-spin');
+          });
+        }
+      }, 42);
+    }
+
+    function getPokieSymbolVisual(symId: string) {
+      const safeId = (symId in POKIE_SYMBOLS ? symId : 'DIAMOND_BALL') as PokieSymbolId;
+      const spec = POKIE_SYMBOLS[safeId];
+
+      // Bespoke 16-bit Pixel Art SVG Icons for each Arcade Pokie Symbol
+      const svgMap: Record<PokieSymbolId, string> = {
+        MEGA_TROPHY: `<svg viewBox="0 0 16 16" class="w-7 h-7 sm:w-8 sm:h-8 drop-shadow-[0_2px_0_#0f172a]" shape-rendering="crispEdges" fill="none">
+          <rect x="4" y="1" width="8" height="2" fill="#0f172a"/>
+          <rect x="2" y="2" width="12" height="5" fill="#0f172a"/>
+          <rect x="4" y="7" width="8" height="3" fill="#0f172a"/>
+          <rect x="6" y="10" width="4" height="2" fill="#0f172a"/>
+          <rect x="4" y="12" width="8" height="3" fill="#0f172a"/>
+          <rect x="5" y="2" width="6" height="5" fill="#facc15"/>
+          <rect x="3" y="3" width="2" height="3" fill="#fde047"/>
+          <rect x="11" y="3" width="2" height="3" fill="#d97706"/>
+          <rect x="6" y="3" width="2" height="3" fill="#ffffff"/>
+          <rect x="5" y="7" width="6" height="2" fill="#f59e0b"/>
+          <rect x="7" y="10" width="2" height="2" fill="#facc15"/>
+          <rect x="5" y="13" width="6" height="1" fill="#fde047"/>
+        </svg>`,
+        WILD_STAR: `<svg viewBox="0 0 16 16" class="w-7 h-7 sm:w-8 sm:h-8 drop-shadow-[0_2px_0_#0f172a]" shape-rendering="crispEdges" fill="none">
+          <rect x="6" y="1" width="4" height="3" fill="#0f172a"/>
+          <rect x="1" y="5" width="14" height="4" fill="#0f172a"/>
+          <rect x="3" y="9" width="10" height="3" fill="#0f172a"/>
+          <rect x="2" y="12" width="4" height="3" fill="#0f172a"/>
+          <rect x="10" y="12" width="4" height="3" fill="#0f172a"/>
+          <rect x="7" y="2" width="2" height="10" fill="#38bdf8"/>
+          <rect x="2" y="6" width="12" height="2" fill="#38bdf8"/>
+          <rect x="4" y="8" width="8" height="3" fill="#0284c7"/>
+          <rect x="3" y="12" width="3" height="2" fill="#38bdf8"/>
+          <rect x="10" y="12" width="3" height="2" fill="#38bdf8"/>
+          <rect x="6" y="6" width="4" height="3" fill="#fde047"/>
+          <rect x="7" y="7" width="2" height="1" fill="#ffffff"/>
+        </svg>`,
+        DIAMOND_BALL: `<svg viewBox="0 0 16 16" class="w-7 h-7 sm:w-8 sm:h-8 drop-shadow-[0_2px_0_#0f172a]" shape-rendering="crispEdges" fill="none">
+          <rect x="5" y="1" width="6" height="1" fill="#0f172a"/>
+          <rect x="3" y="2" width="10" height="12" fill="#0f172a"/>
+          <rect x="2" y="4" width="12" height="8" fill="#0f172a"/>
+          <rect x="5" y="14" width="6" height="1" fill="#0f172a"/>
+          <rect x="5" y="2" width="6" height="12" fill="#ffffff"/>
+          <rect x="3" y="4" width="10" height="8" fill="#f8fafc"/>
+          <rect x="6" y="6" width="4" height="4" fill="#0f172a"/>
+          <rect x="7" y="2" width="2" height="2" fill="#0f172a"/>
+          <rect x="3" y="7" width="2" height="2" fill="#0f172a"/>
+          <rect x="11" y="7" width="2" height="2" fill="#0f172a"/>
+          <rect x="5" y="4" width="2" height="2" fill="#38bdf8"/>
+        </svg>`,
+        GOLD_BOOT: `<svg viewBox="0 0 16 16" class="w-7 h-7 sm:w-8 sm:h-8 drop-shadow-[0_2px_0_#0f172a]" shape-rendering="crispEdges" fill="none">
+          <rect x="3" y="3" width="5" height="9" fill="#0f172a"/>
+          <rect x="2" y="7" width="12" height="6" fill="#0f172a"/>
+          <rect x="4" y="4" width="3" height="6" fill="#f97316"/>
+          <rect x="3" y="8" width="10" height="3" fill="#fb923c"/>
+          <rect x="5" y="8" width="4" height="2" fill="#fde047"/>
+          <rect x="3" y="11" width="10" height="1" fill="#ffffff"/>
+          <rect x="3" y="13" width="2" height="2" fill="#facc15"/>
+          <rect x="7" y="13" width="2" height="2" fill="#facc15"/>
+          <rect x="11" y="13" width="2" height="2" fill="#facc15"/>
+        </svg>`,
+        FIRE_FLAME: `<svg viewBox="0 0 16 16" class="w-7 h-7 sm:w-8 sm:h-8 drop-shadow-[0_2px_0_#0f172a]" shape-rendering="crispEdges" fill="none">
+          <rect x="6" y="1" width="4" height="3" fill="#0f172a"/>
+          <rect x="4" y="4" width="8" height="4" fill="#0f172a"/>
+          <rect x="2" y="7" width="12" height="6" fill="#0f172a"/>
+          <rect x="4" y="13" width="8" height="2" fill="#0f172a"/>
+          <rect x="7" y="2" width="2" height="3" fill="#f43f5e"/>
+          <rect x="5" y="5" width="6" height="4" fill="#f97316"/>
+          <rect x="3" y="8" width="10" height="4" fill="#fb7185"/>
+          <rect x="5" y="8" width="6" height="4" fill="#fde047"/>
+          <rect x="6" y="10" width="4" height="3" fill="#ffffff"/>
+        </svg>`,
+        WHISTLE: `<svg viewBox="0 0 16 16" class="w-7 h-7 sm:w-8 sm:h-8 drop-shadow-[0_2px_0_#0f172a]" shape-rendering="crispEdges" fill="none">
+          <rect x="2" y="5" width="12" height="7" fill="#0f172a"/>
+          <rect x="3" y="4" width="6" height="9" fill="#0f172a"/>
+          <rect x="4" y="5" width="5" height="7" fill="#34d399"/>
+          <rect x="9" y="6" width="4" height="4" fill="#10b981"/>
+          <rect x="5" y="6" width="3" height="2" fill="#a7f3d0"/>
+          <rect x="6" y="8" width="2" height="2" fill="#0f172a"/>
+        </svg>`,
+        CHERRY_CARD: `<svg viewBox="0 0 16 16" class="w-7 h-7 sm:w-8 sm:h-8 drop-shadow-[0_2px_0_#0f172a]" shape-rendering="crispEdges" fill="none">
+          <rect x="7" y="2" width="5" height="2" fill="#22c55e"/>
+          <rect x="5" y="4" width="2" height="4" fill="#16a34a"/>
+          <rect x="9" y="4" width="2" height="4" fill="#16a34a"/>
+          <rect x="2" y="8" width="6" height="6" fill="#0f172a"/>
+          <rect x="8" y="8" width="6" height="6" fill="#0f172a"/>
+          <rect x="3" y="9" width="4" height="4" fill="#f43f5e"/>
+          <rect x="9" y="9" width="4" height="4" fill="#e11d48"/>
+          <rect x="3" y="9" width="2" height="2" fill="#fda4af"/>
+          <rect x="9" y="9" width="2" height="2" fill="#fda4af"/>
+        </svg>`,
+        SCATTER_CROWN: `<svg viewBox="0 0 16 16" class="w-7 h-7 sm:w-8 sm:h-8 drop-shadow-[0_2px_0_#0f172a]" shape-rendering="crispEdges" fill="none">
+          <rect x="1" y="3" width="14" height="11" fill="#0f172a"/>
+          <rect x="2" y="4" width="2" height="7" fill="#fde047"/>
+          <rect x="7" y="3" width="2" height="8" fill="#fde047"/>
+          <rect x="12" y="4" width="2" height="7" fill="#fde047"/>
+          <rect x="4" y="7" width="8" height="4" fill="#facc15"/>
+          <rect x="2" y="11" width="12" height="2" fill="#d97706"/>
+          <rect x="4" y="8" width="2" height="2" fill="#38bdf8"/>
+          <rect x="7" y="8" width="2" height="2" fill="#f43f5e"/>
+          <rect x="10" y="8" width="2" height="2" fill="#34d399"/>
+        </svg>`,
+      };
+
+      const tileThemeMap: Record<
+        PokieSymbolId,
+        { tileBg: string; pillBg: string; pillText: string; shortTag: string; multTag: string }
+      > = {
+        MEGA_TROPHY: {
+          tileBg: 'linear-gradient(180deg, #fef08a 0%, #facc15 100%)',
+          pillBg: '#0f172a',
+          pillText: '#fde047',
+          shortTag: 'GRAND CUP',
+          multTag: 'JACKPOT',
+        },
+        WILD_STAR: {
+          tileBg: 'linear-gradient(180deg, #e0f2fe 0%, #38bdf8 100%)',
+          pillBg: '#0f172a',
+          pillText: '#38bdf8',
+          shortTag: '2X WILD',
+          multTag: '40X',
+        },
+        DIAMOND_BALL: {
+          tileBg: 'linear-gradient(180deg, #f8fafc 0%, #cbd5e1 100%)',
+          pillBg: '#0f172a',
+          pillText: '#ffffff',
+          shortTag: 'GOLD BALL',
+          multTag: '20X',
+        },
+        GOLD_BOOT: {
+          tileBg: 'linear-gradient(180deg, #ffedd5 0%, #fb923c 100%)',
+          pillBg: '#0f172a',
+          pillText: '#fed7aa',
+          shortTag: 'STRIKER',
+          multTag: '12X',
+        },
+        FIRE_FLAME: {
+          tileBg: 'linear-gradient(180deg, #ffe4e6 0%, #fb7185 100%)',
+          pillBg: '#0f172a',
+          pillText: '#fecdd3',
+          shortTag: 'FLOW FIRE',
+          multTag: '6X',
+        },
+        WHISTLE: {
+          tileBg: 'linear-gradient(180deg, #d1fae5 0%, #34d399 100%)',
+          pillBg: '#0f172a',
+          pillText: '#a7f3d0',
+          shortTag: 'WHISTLE',
+          multTag: '3X',
+        },
+        CHERRY_CARD: {
+          tileBg: 'linear-gradient(180deg, #fae8ff 0%, #e879f9 100%)',
+          pillBg: '#0f172a',
+          pillText: '#f5d0fe',
+          shortTag: 'CHERRY',
+          multTag: '2X/1X',
+        },
+        SCATTER_CROWN: {
+          tileBg: 'linear-gradient(180deg, #fef3c7 0%, #f472b6 100%)',
+          pillBg: '#0f172a',
+          pillText: '#fde047',
+          shortTag: 'SCATTER',
+          multTag: '15X ANY',
+        },
+      };
+
+      const theme = tileThemeMap[safeId];
+      return {
+        ...spec,
+        svg: svgMap[safeId],
+        tileBg: theme.tileBg,
+        pillBg: theme.pillBg,
+        pillText: theme.pillText,
+        shortTag: theme.shortTag,
+        multTag: theme.multTag,
+      };
+    }
+
+    function setPokieMarqueeFast(fast: boolean) {
+      const bulbs = document.querySelectorAll('.slot-bulb-dot');
+      bulbs.forEach((b) => {
+        b.classList.toggle('slot-marquee-bulb-fast', fast);
+        b.classList.toggle('slot-marquee-bulb', !fast);
+      });
+    }
+
+    function highlightActivePaylineBadges(winningLineIds: number[]) {
+      const winSet = new Set(winningLineIds);
+      for (let id = 1; id <= 5; id++) {
+        const leftBadge = document.getElementById(`slotPaylineLeft_${id}`);
+        const rightBadge = document.getElementById(`slotPaylineRight_${id}`);
+        const isHit = winSet.has(id);
+        [leftBadge, rightBadge].forEach((el) => {
+          if (!el) return;
+          el.classList.toggle('scale-125', isHit);
+          el.classList.toggle('ring-2', isHit);
+          el.classList.toggle('ring-white', isHit);
+          el.classList.toggle('opacity-45', winSet.size > 0 && !isHit);
+          el.classList.toggle('opacity-95', winSet.size === 0 || isHit);
+        });
+      }
+    }
+
+    function renderPokieGridDOM(
+      grid: string[][],
+      winningCells: Set<string> = new Set(),
+      spinningReels: [boolean, boolean, boolean] = [false, false, false],
+      teaserReel2 = false,
+      stoppedReels: [boolean, boolean, boolean] = [false, false, false]
+    ) {
+      for (let col = 0; col < 3; col++) {
+        const reelColEl = document.getElementById(`slotReelCol${col}`);
+        if (reelColEl) {
+          reelColEl.classList.toggle('slot-reel-spinning', spinningReels[col]);
+          reelColEl.classList.toggle('slot-reel-teaser', col === 2 && teaserReel2 && spinningReels[2]);
+          reelColEl.classList.toggle('slot-reel-stopped', !spinningReels[col] && stoppedReels[col]);
+        }
+        for (let row = 0; row < 3; row++) {
+          const cellEl = document.getElementById(`slotCell_${col}_${row}`);
+          if (!cellEl) continue;
+          const symId = grid[col]?.[row] || 'DIAMOND_BALL';
+          const vis = getPokieSymbolVisual(symId);
+          const isWinner = winningCells.has(`${col}_${row}`);
+          const isCenterRow = row === 1;
+          cellEl.style.background = isWinner
+            ? 'linear-gradient(180deg, #ffffff 0%, #fef08a 45%, #facc15 100%)'
+            : vis.tileBg;
+          cellEl.style.borderColor = '#0f172a';
+          cellEl.className = `slot-symbol-cell relative rounded-2xl border-[2.5px] p-1 sm:p-1.5 flex flex-col items-center justify-center text-center transition-all duration-150 select-none min-h-[60px] sm:min-h-[66px] ${
+            isWinner
+              ? 'slot-cell-winner z-10'
+              : isCenterRow
+                ? 'shadow-[0_3px_0_#0f172a] ring-1 ring-amber-300/60'
+                : 'shadow-[0_3px_0_#0f172a]'
+          }`;
+          cellEl.innerHTML = `
+            <span class="absolute top-1 right-1 px-1 py-0.2 rounded text-[7px] font-mono-num font-black uppercase tracking-tighter border border-slate-900/30" style="background:${
+              isWinner ? '#dc2626' : 'rgba(255,255,255,0.88)'
+            };color:${isWinner ? '#ffffff' : '#0f172a'}">${ isWinner ? 'WIN!' : vis.multTag }</span>
+            <div class="my-0.5 flex items-center justify-center">${vis.svg}</div>
+            <span class="text-[8px] sm:text-[9px] font-black uppercase tracking-wider mt-0.5 px-2 py-0.2 rounded-full border border-slate-900 whitespace-nowrap" style="background:${vis.pillBg};color:${vis.pillText}">${vis.shortTag}</span>
+          `;
+        }
+      }
+    }
+
+    function openSlotMachineModal() {
+      sound.init();
+      sound.playUiClick();
+      if (editProfileModal && !editProfileModal.classList.contains('hidden')) {
+        closeEditProfileModal();
+      }
+      syncProfileUI();
+      highlightActivePaylineBadges([]);
+      setPokieMarqueeFast(false);
+      renderPokieGridDOM(currentPokieGrid);
+      if (slotMachineModal) {
+        slotMachineModal.classList.remove('hidden');
+      }
+    }
+
+    function closeSlotMachineModal() {
+      clearSlotTimers();
+      setPokieMarqueeFast(false);
+      if (slotMachineModal) {
+        slotMachineModal.classList.add('hidden');
+      }
+      if (slotSpinBtn) {
+        slotSpinBtn.disabled = false;
+      }
+      if (slotSpinBtnLabel) {
+        slotSpinBtnLabel.innerText = `SPIN REELS • $${SLOT_SPIN_COST}`;
+      }
+    }
+
+    function handleSpinSlotMachine(forcedStops?: [number, number, number]) {
+      sound.init();
+      if (isSlotSpinning) return null;
+
+      userProfile.balance = Number.isFinite(userProfile.balance)
+        ? Math.max(0, Math.floor(userProfile.balance))
+        : INITIAL_PLAYER_BALANCE;
+
+      if (userProfile.balance < SLOT_SPIN_COST) {
+        sound.playUiBack();
+        if (slotStatusBanner) {
+          slotStatusBanner.innerText = `NEED $${SLOT_SPIN_COST} TO SPIN! PLAY A MATCH OR REDEEM COUPON 'HACK' IN PROFILE!`;
+          slotStatusBanner.className =
+            'p-2.5 rounded-2xl bg-rose-200 border-2 border-slate-900 text-rose-950 font-black text-xs uppercase tracking-wide text-center shadow-[0_3px_0_#0f172a]';
+        }
+        return null;
+      }
+
+      const balanceBeforeSpin = userProfile.balance;
+      const finalResult = spinPokieReels(
+        SLOT_SPIN_COST,
+        userProfile.jackpotPool,
+        Math.random,
+        forcedStops
+      );
+
+      // Deduct spin cost immediately & increment progressive jackpot pool while spinning
+      userProfile.balance = Math.max(0, balanceBeforeSpin - SLOT_SPIN_COST);
+      userProfile.jackpotPool = Math.round(userProfile.jackpotPool + SLOT_SPIN_COST * 0.2);
+      saveUserProfileToStorage();
+      syncProfileUI();
+
+      isSlotSpinning = true;
+      setPokieMarqueeFast(true);
+      highlightActivePaylineBadges([]);
+
+      if (slotSpinBtn) {
+        slotSpinBtn.disabled = true;
+      }
+      if (slotSpinBtnLabel) {
+        slotSpinBtnLabel.innerText = 'SPINNING REELS...';
+      }
+      if (slotBalanceDeltaBadge) {
+        slotBalanceDeltaBadge.classList.add('hidden');
+      }
+      if (slotWinAmountBadge) {
+        slotWinAmountBadge.innerText = '$0';
+        slotWinAmountBadge.className = 'font-mono-num text-sm sm:text-lg font-black text-slate-500 mt-0.5';
+      }
+      if (slotStatusBanner) {
+        slotStatusBanner.innerText = '⚡ REELS SPINNING • WATCH THE 5 PAYLINES! ⚡';
+        slotStatusBanner.className =
+          'p-2.5 rounded-2xl bg-sky-200 border-2 border-slate-900 text-slate-900 font-black text-xs uppercase tracking-wide text-center shadow-[0_3px_0_#0f172a]';
+      }
+
+      sound.playSlotSpin();
+      const isTeaser = finalResult.isTeaserTwoReels;
+
+      // Rapid visual symbol cycling while reels are in motion
+      const spinStart = performance.now();
+      const stopReel0Ms = 420;
+      const stopReel1Ms = 780;
+      const stopReel2Ms = isTeaser ? 1320 : 1080;
+
+      const tickInterval = setInterval(() => {
+        const elapsed = performance.now() - spinStart;
+        const r0Spin = elapsed < stopReel0Ms;
+        const r1Spin = elapsed < stopReel1Ms;
+        const r2Spin = elapsed < stopReel2Ms;
+        if (!r0Spin && !r1Spin && !r2Spin) {
+          clearInterval(tickInterval);
+          return;
+        }
+        const tempStops: [number, number, number] = [
+          r0Spin ? Math.floor(Math.random() * VIRTUAL_REEL_STRIPS[0].length) : finalResult.stopIndices[0],
+          r1Spin ? Math.floor(Math.random() * VIRTUAL_REEL_STRIPS[1].length) : finalResult.stopIndices[1],
+          r2Spin ? Math.floor(Math.random() * VIRTUAL_REEL_STRIPS[2].length) : finalResult.stopIndices[2],
+        ];
+        const tempGrid = getPokieGridFromStops(tempStops);
+        renderPokieGridDOM(
+          tempGrid,
+          new Set(),
+          [r0Spin, r1Spin, r2Spin],
+          isTeaser && !r1Spin,
+          [!r0Spin, !r1Spin, !r2Spin]
+        );
+        sound.playSlotReelTick(r0Spin ? 0 : r1Spin ? 1 : 2);
+      }, 72);
+      slotSpinTimeouts.push(tickInterval as unknown as ReturnType<typeof setTimeout>);
+
+      // Stop Reel 1
+      slotSpinTimeouts.push(
+        setTimeout(() => {
+          sound.playSlotReelStop(0, false);
+        }, stopReel0Ms)
+      );
+
+      // Stop Reel 2
+      slotSpinTimeouts.push(
+        setTimeout(() => {
+          sound.playSlotReelStop(1, isTeaser);
+          if (isTeaser && slotStatusBanner) {
+            slotStatusBanner.innerText = '🔥 2-REEL TEASER! REEL 3 WINDING UP FOR BIG WIN... 🔥';
+            slotStatusBanner.className =
+              'p-2.5 rounded-2xl bg-amber-300 border-2 border-slate-900 text-slate-950 font-black text-xs uppercase tracking-wide text-center shadow-[0_3px_0_#0f172a] animate-pulse';
+          }
+        }, stopReel1Ms)
+      );
+
+      // Stop Reel 3 & Evaluate Win
+      slotSpinTimeouts.push(
+        setTimeout(() => {
+          clearInterval(tickInterval);
+          sound.playSlotReelStop(2, false);
+          currentPokieGrid = finalResult.grid;
+          userProfile.balance = Math.max(0, balanceBeforeSpin - SLOT_SPIN_COST + finalResult.totalPayout);
+          userProfile.jackpotPool = finalResult.updatedJackpotPool;
+          saveUserProfileToStorage();
+          syncProfileUI();
+
+          const winCells = new Set<string>();
+          const hitLineIds: number[] = [];
+          for (const wl of finalResult.winningLines) {
+            hitLineIds.push(wl.lineId);
+            for (let colIdx = 0; colIdx < wl.matchCount; colIdx++) {
+              winCells.add(`${colIdx}_${wl.rows[colIdx]}`);
+            }
+          }
+          if (finalResult.scatterCount >= 2) {
+            for (const sp of finalResult.scatterPositions) {
+              winCells.add(`${sp.reel}_${sp.row}`);
+            }
+          }
+
+          highlightActivePaylineBadges(hitLineIds);
+          renderPokieGridDOM(finalResult.grid, winCells, [false, false, false], false, [true, true, true]);
+
+          if (finalResult.totalPayout > 0) {
+            sound.playSlotWin(finalResult.winTier === 'NONE' ? 'SMALL' : finalResult.winTier);
+            setPokieMarqueeFast(true);
+            if (slotBalanceDeltaBadge) {
+              slotBalanceDeltaBadge.innerText = `+$${finalResult.totalPayout}`;
+              slotBalanceDeltaBadge.classList.remove('hidden');
+            }
+            if (slotWinAmountBadge) {
+              slotWinAmountBadge.innerText = `+$${finalResult.totalPayout}`;
+              slotWinAmountBadge.className =
+                finalResult.winTier === 'JACKPOT' || finalResult.winTier === 'MEGA'
+                  ? 'font-mono-num text-base sm:text-lg font-black text-amber-600 animate-bounce mt-0.5'
+                  : 'font-mono-num text-sm sm:text-lg font-black text-emerald-700 mt-0.5';
+            }
+
+            // Animate payout & bankroll count-up with coin clink SFX
+            const startBal = Math.max(0, balanceBeforeSpin - SLOT_SPIN_COST);
+            const endBal = userProfile.balance;
+            const slotBalEl = document.getElementById('slotBalanceDisplay');
+            const countSteps = 8;
+            let cStep = 0;
+            const winCountInterval = setInterval(() => {
+              cStep++;
+              sound.playCoinTick(cStep - 1, countSteps);
+              const curWin =
+                cStep >= countSteps
+                  ? finalResult.totalPayout
+                  : Math.max(1, Math.round((finalResult.totalPayout * cStep) / countSteps));
+              const curBal =
+                cStep >= countSteps
+                  ? endBal
+                  : Math.round(startBal + ((endBal - startBal) * cStep) / countSteps);
+              if (slotWinAmountBadge) slotWinAmountBadge.innerText = `+$${curWin}`;
+              if (slotBalEl) slotBalEl.innerText = `$${curBal}`;
+              if (cStep >= countSteps) {
+                clearInterval(winCountInterval);
+              }
+            }, 46);
+            slotSpinTimeouts.push(winCountInterval as unknown as ReturnType<typeof setTimeout>);
+
+            if (slotStatusBanner) {
+              const lineSummary =
+                finalResult.winningLines.length > 0
+                  ? finalResult.winningLines
+                      .map((l) => `${l.lineName}${l.hasWildMultiplier ? ' (2X WILD!)' : ''}`)
+                      .join(' + ')
+                  : finalResult.scatterCount >= 2
+                    ? `${finalResult.scatterCount}X CROWN SCATTERS`
+                    : '';
+              slotStatusBanner.innerText = lineSummary
+                ? `${finalResult.headline} • ${lineSummary}`
+                : finalResult.headline;
+              slotStatusBanner.className =
+                finalResult.winTier === 'JACKPOT'
+                  ? 'p-2.5 rounded-2xl bg-gradient-to-r from-amber-300 via-yellow-200 to-amber-300 border-2 border-slate-900 text-slate-900 font-black text-xs sm:text-sm uppercase tracking-wide text-center shadow-[0_4px_0_#0f172a]'
+                  : 'p-2.5 rounded-2xl bg-emerald-300 border-2 border-slate-900 text-slate-950 font-black text-xs uppercase tracking-wide text-center shadow-[0_3px_0_#0f172a]';
+            }
+          } else {
+            setPokieMarqueeFast(false);
+            if (slotStatusBanner) {
+              slotStatusBanner.innerText = finalResult.headline;
+              slotStatusBanner.className =
+                'p-2.5 rounded-2xl bg-slate-100 border-2 border-slate-900 text-slate-700 font-extrabold text-xs uppercase tracking-wide text-center shadow-[0_2px_0_#0f172a]';
+            }
+          }
+
+          isSlotSpinning = false;
+          if (slotSpinBtn) {
+            slotSpinBtn.disabled = false;
+          }
+          if (slotSpinBtnLabel) {
+            slotSpinBtnLabel.innerText = `SPIN REELS • $${SLOT_SPIN_COST}`;
+          }
+        }, stopReel2Ms)
+      );
+
+      return finalResult;
+    }
+
+    if (openSlotMachineBtn) {
+      openSlotMachineBtn.addEventListener('click', openSlotMachineModal);
+    }
+    if (closeSlotModalBtn) {
+      closeSlotModalBtn.addEventListener('click', () => {
+        sound.init();
+        sound.playUiBack();
+        closeSlotMachineModal();
+      });
+    }
+    if (slotSpinBtn) {
+      slotSpinBtn.addEventListener('click', () => {
+        handleSpinSlotMachine();
+      });
+    }
+
+    if (editProfileBtn) editProfileBtn.addEventListener('click', openEditProfileModal);
     if (switchToEditProfileBtn) {
       switchToEditProfileBtn.addEventListener('click', (e) => {
         e.stopPropagation();
@@ -7456,7 +8341,7 @@ export default function App() {
 
     // Highlight focused UI button on pointer hover and trigger subtle hover SFX
     const allInteractiveMenuBtns = document.querySelectorAll<HTMLElement>(
-      '.mode-btn, .kit-btn, #editProfileBtn, #startBtn, #rematchSameBtn, #mainMenuBtn, #resumeBtn, #forfeitBtn, #howToPlayBtn, .control-tab-btn, #switchToEditProfileBtn, #backToProfileOverviewBtn, #takePhotoBtn, #capturePhotoBtn, #clearPhotoBtn, #saveProfileBtn, #closeProfileModalBtn'
+      '.mode-btn, .kit-btn, #editProfileBtn, #openSlotMachineBtn, #startBtn, #rematchSameBtn, #mainMenuBtn, #resumeBtn, #forfeitBtn, #howToPlayBtn, .control-tab-btn, #switchToEditProfileBtn, #backToProfileOverviewBtn, #takePhotoBtn, #capturePhotoBtn, #clearPhotoBtn, #saveProfileBtn, #closeProfileModalBtn'
     );
     allInteractiveMenuBtns.forEach((btn) => {
       btn.addEventListener('pointerenter', () => {
@@ -7484,14 +8369,25 @@ export default function App() {
     window.addEventListener('blur', handleWindowBlur);
 
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Ignore global game shortcuts while typing inside the Profile Name input
-      if (document.activeElement === profileNameInput) {
+      // Ignore global game shortcuts while typing inside the Profile Name or Coupon Code input
+      if (document.activeElement === profileNameInput || document.activeElement === couponCodeInput) {
         if (e.code === 'Escape') {
           e.preventDefault();
           closeEditProfileModal();
-        } else if (e.code === 'Enter') {
+        } else if (e.code === 'Enter' && document.activeElement === profileNameInput) {
           e.preventDefault();
           handleSaveUserProfile();
+        }
+        return;
+      }
+
+      if (slotMachineModal && !slotMachineModal.classList.contains('hidden')) {
+        if (e.code === 'Escape') {
+          e.preventDefault();
+          closeSlotMachineModal();
+        } else if (e.code === 'Space' || e.code === 'Enter') {
+          e.preventDefault();
+          handleSpinSlotMachine();
         }
         return;
       }
@@ -8128,7 +9024,7 @@ export default function App() {
           ctx.fillRect(Math.round(sx - 4), Math.round(sy - 4), 8, 8);
         }
 
-        // 2. Top Kicker Ribbon Badge (Neo-Brutalist Bright Yellow/Sky Tag)
+        // 2. Top Kicker Ribbon Badge (Uses Bespoke Celebration Palette / Stadium Badge Colors)
         const kickerText = activeGoalCelebration.kickerBadge || (goalScorerTeam === 'YOU' ? '⚽ GOAL SCORED' : '⚠️ RIVAL GOAL');
         ctx.font = isCompact ? '900 10.5px "Plus Jakarta Sans", sans-serif' : '900 12.5px "Plus Jakarta Sans", sans-serif';
         ctx.textAlign = 'center';
@@ -8140,32 +9036,43 @@ export default function App() {
         ctx.beginPath();
         ctx.roundRect(-kw / 2 + 3, ky - kh / 2 + 3, kw, kh, 999);
         ctx.fill();
-        ctx.fillStyle = goalScorerTeam === 'YOU' ? '#fde047' : '#fda4af';
+        ctx.fillStyle = activeGoalCelebration.badgeBgColor || (goalScorerTeam === 'YOU' ? '#fde047' : '#fda4af');
         ctx.strokeStyle = '#0f172a';
         ctx.lineWidth = 2.5;
         ctx.beginPath();
         ctx.roundRect(-kw / 2, ky - kh / 2, kw, kh, 999);
         ctx.fill();
         ctx.stroke();
-        ctx.fillStyle = '#0f172a';
+        ctx.fillStyle = activeGoalCelebration.badgeTextColor || '#0f172a';
         ctx.fillText(kickerText, 0, ky + 0.5);
 
-        // 3. Giant 3D Extruded Arcade Headline (No Black Box Behind It!)
-        const headlineFontPx = isCompact ? 32 : Math.min(52, Math.max(34, Math.floor(canvas.width * 0.044)));
+        // 3. Giant 3D Extruded Arcade Headline (Responsive Font Sizing for Portrait/Landscape & Personalized Slogans)
+        const maxBannerW = canvas.width * 0.88;
+        const charScale = goalBannerText.length > 20 ? 0.78 : goalBannerText.length > 16 ? 0.88 : 1.0;
+        const baseHeadlinePx = isCompact
+          ? 30
+          : Math.min(52, Math.max(24, Math.floor(canvas.width * 0.052)));
+        let headlineFontPx = Math.max(18, Math.round(baseHeadlinePx * charScale));
         ctx.font = `900 ${headlineFontPx}px "Plus Jakarta Sans", sans-serif`;
+        const measuredHeadW = ctx.measureText(goalBannerText).width;
+        if (measuredHeadW > maxBannerW && measuredHeadW > 0) {
+          headlineFontPx = Math.max(16, Math.floor(headlineFontPx * (maxBannerW / measuredHeadW)));
+          ctx.font = `900 ${headlineFontPx}px "Plus Jakarta Sans", sans-serif`;
+        }
         ctx.lineJoin = 'round';
         ctx.miterLimit = 2;
 
         // Deep 3D Extruded Block Shadow Layer
+        const headStrokeW = Math.max(6, Math.round(headlineFontPx * 0.24));
         ctx.fillStyle = '#0f172a';
         ctx.strokeStyle = '#0f172a';
-        ctx.lineWidth = isCompact ? 9 : 12;
+        ctx.lineWidth = headStrokeW;
         ctx.strokeText(goalBannerText, 4, 6);
         ctx.fillText(goalBannerText, 4, 6);
 
         // Crisp Main Outline Stroke
         ctx.strokeStyle = '#0f172a';
-        ctx.lineWidth = isCompact ? 9 : 12;
+        ctx.lineWidth = headStrokeW;
         ctx.strokeText(goalBannerText, 0, 0);
 
         // Vibrant Vertical Gradient Fill inside Letters
@@ -8175,18 +9082,6 @@ export default function App() {
         textGrad.addColorStop(1, activeGoalCelebration.secondaryColor || '#f59e0b');
         ctx.fillStyle = textGrad;
         ctx.fillText(goalBannerText, 0, 0);
-
-        // 4. Unboxed 3D Outlined Subheadline (Goal Style + Match Score Situation)
-        const subY = isCompact ? 28 : 40;
-        const subFontPx = isCompact ? 11.5 : 14.5;
-        ctx.font = `900 ${subFontPx}px "JetBrains Mono", monospace`;
-        ctx.fillStyle = '#0f172a';
-        ctx.strokeStyle = '#0f172a';
-        ctx.lineWidth = isCompact ? 5 : 6.5;
-        ctx.strokeText(goalBannerSub, 2, subY + 2.5);
-        ctx.strokeText(goalBannerSub, 0, subY);
-        ctx.fillStyle = goalScorerTeam === 'YOU' ? '#fef08a' : '#fecdd3';
-        ctx.fillText(goalBannerSub, 0, subY);
 
         ctx.restore();
       }
@@ -8254,16 +9149,25 @@ export default function App() {
         scoreYou?: number;
         scoreAi?: number;
         kickOriginX?: number;
+        isLongRange?: boolean;
         isPerfectStrike?: boolean;
         isOneTouch?: boolean;
         wasWallBounce?: boolean;
         spin?: number;
         flowCombo?: number;
+        playerName?: string;
+        variationIndex?: number;
       }) {
+        if (typeof opts?.playerName === 'string' && opts.playerName.trim()) {
+          userProfile.name = opts.playerName.trim().slice(0, 16);
+          syncUserProfileUI();
+        }
         if (typeof opts?.scoreYou === 'number') scoreYou = opts.scoreYou;
         if (typeof opts?.scoreAi === 'number') scoreAi = opts.scoreAi;
         if (typeof opts?.flowCombo === 'number') flowCombo = opts.flowCombo;
-        ball.kickOriginX = opts?.kickOriginX ?? PITCH.width * 0.42;
+        ball.kickOriginX =
+          opts?.kickOriginX ??
+          (opts?.isLongRange ? PITCH.width * 0.42 : PITCH.width - 240);
         ball.kickOriginY = PITCH.height * 0.5;
         ball.isPerfectStrike = Boolean(opts?.isPerfectStrike);
         ball.isOneTouch = Boolean(opts?.isOneTouch);
@@ -8271,7 +9175,8 @@ export default function App() {
         ball.spin = opts?.spin ?? 0;
         ball.x = (opts?.scoringTeam ?? 'YOU') === 'YOU' ? PITCH.width - 8 : 8;
         ball.y = PITCH.height * 0.5;
-        handleGoalScored(opts?.scoringTeam ?? 'YOU');
+        handleGoalScored(opts?.scoringTeam ?? 'YOU', opts?.variationIndex, true);
+        return activeGoalCelebration;
       },
       openTournamentBracketPreview() {
         const splashEl = document.getElementById('splashScreen');
@@ -8282,6 +9187,20 @@ export default function App() {
         pickRandomOpponent(false);
         populatePreMatchVsOverlay();
       },
+      redeemCoupon(code: string) {
+        return handleRedeemCoupon(code);
+      },
+      openSlotMachine() {
+        const splashEl = document.getElementById('splashScreen');
+        if (splashEl) splashEl.classList.add('hidden');
+        openSlotMachineModal();
+      },
+      spinSlotMachine(forcedStops?: [number, number, number]) {
+        return handleSpinSlotMachine(forcedStops);
+      },
+      getProfileState() {
+        return { ...userProfile };
+      },
     };
 
     rafId = requestAnimationFrame(renderLoop);
@@ -8290,6 +9209,7 @@ export default function App() {
       cancelAnimationFrame(rafId);
       clearInterval(pingInterval);
       clearMatchmakingTimers();
+      clearSlotTimers();
       stopProfileCameraStream();
       sound.stopMusic();
       window.removeEventListener('resize', resizeCanvas);
@@ -8382,42 +9302,41 @@ export default function App() {
         </div>
       </div>
 
-      {/* Top Perimeter Indie Sports HUD (Responsive for iPhone Landscape, Tablet & Desktop) */}
+      {/* Top Perimeter Indie Sports HUD (Clean, Uncrammed Layout for Mobile Portrait/Landscape, Tablet & Desktop) */}
       <div
         id="hud"
-        className="hud-safe-top hidden absolute top-0 left-0 w-full px-2.5 py-1.5 sm:px-5 md:px-7 md:py-2.5 flex justify-between items-center gap-2 sm:gap-3 pointer-events-none z-20"
+        className="hud-safe-top hidden absolute top-0 left-0 w-full px-2 py-1.5 sm:px-5 md:px-7 md:py-2.5 flex justify-between items-center gap-1.5 sm:gap-3 pointer-events-none z-20"
       >
-        {/* Left: Tactile Flow Combo Meter */}
-        <div className="flex items-center space-x-1.5 sm:space-x-2.5 shrink-0 z-10">
+        {/* Left Slot: Tournament Round Badge (Flow UI removed per user request to keep mobile HUD clean and uncrammed) */}
+        <div className="flex items-center space-x-1.5 sm:space-x-2.5 shrink-0 z-10 min-w-[36px]">
           <div
             id="flowBadge"
-            className="glass-pill rounded-xl sm:rounded-2xl px-2.5 py-1 sm:px-3.5 sm:py-1.5 flex items-center space-x-1.5 sm:space-x-2 transition-colors duration-150"
+            className="hidden"
+            aria-hidden="true"
           >
-            <PixelFlameIcon className="w-4 h-4 sm:w-4 sm:h-4 md:w-5 md:h-5 shrink-0" />
-            <div className="hidden sm:flex items-center space-x-1.5" id="passDotsContainer">
-              <span id="passDot1" className="w-2.5 h-2.5 rounded-full bg-slate-300 transition-colors duration-150" />
-              <span id="passDot2" className="w-2.5 h-2.5 rounded-full bg-slate-300 transition-colors duration-150" />
-              <span id="passDot3" className="w-2.5 h-2.5 rounded-full bg-slate-300 transition-colors duration-150" />
+            <PixelFlameIcon className="w-4 h-4 shrink-0" />
+            <div className="hidden" id="passDotsContainer">
+              <span id="passDot1" />
+              <span id="passDot2" />
+              <span id="passDot3" />
             </div>
-            <span id="flowVal" className="font-mono-num text-[10px] sm:text-xs font-extrabold text-slate-800 whitespace-nowrap">
-              FLOW x0
-            </span>
+            <span id="flowVal">FLOW x0</span>
           </div>
 
           <div
             id="hudTourneyBadge"
-            className="hidden glass-pill rounded-2xl px-3 py-1.5 text-[10px] font-black uppercase tracking-wider text-amber-900 bg-amber-200/95 whitespace-nowrap"
+            className="hidden glass-pill rounded-xl sm:rounded-2xl px-2 py-1 sm:px-3 sm:py-1.5 text-[9px] sm:text-[10px] font-black uppercase tracking-wider text-amber-900 bg-amber-200/95 whitespace-nowrap"
           >
-            CUP 1/3 · QUARTER-FINAL
+            CUP 1/3 · QF
           </div>
         </div>
 
-        {/* Center: Indie Arcade Broadcast Scoreboard & Timer (Centered at the Top) */}
-        <div className="glass-pill rounded-xl sm:rounded-2xl p-1 sm:p-1.5 flex items-center space-x-1.5 sm:space-x-2 shrink-0 absolute left-1/2 -translate-x-1/2 z-10">
+        {/* Center: Indie Arcade Broadcast Scoreboard & Timer (Cleanly Centered, Never Overlapping) */}
+        <div className="glass-pill rounded-xl sm:rounded-2xl p-1 sm:p-1.5 flex items-center space-x-1 sm:space-x-2 shrink-0 mx-auto z-10 shadow-[0_3px_0_#0f172a]">
           {/* Player Team (YOU) Pill */}
           <div
             id="hudYouPill"
-            className="flex items-center space-x-1.5 sm:space-x-2 bg-sky-500 text-white px-2 py-0.5 sm:px-3 sm:py-1 rounded-lg sm:rounded-xl border-2 border-slate-900 shadow-xs transition-colors"
+            className="flex items-center space-x-1 sm:space-x-2 bg-sky-500 text-white px-2 py-0.5 sm:px-3 sm:py-1 rounded-lg sm:rounded-xl border-2 border-slate-900 shadow-xs transition-colors"
           >
             <span className="text-[9px] sm:text-[10px] md:text-xs font-black tracking-wider uppercase">YOU</span>
             <span
@@ -8429,7 +9348,7 @@ export default function App() {
           </div>
 
           {/* Match Clock */}
-          <div className="bg-slate-900 text-white px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-lg sm:rounded-xl flex items-center justify-center min-w-[44px] sm:min-w-[54px]">
+          <div className="bg-slate-900 text-white px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-lg sm:rounded-xl flex items-center justify-center min-w-[42px] sm:min-w-[54px]">
             <span id="timerText" className="font-mono-num text-[10px] sm:text-xs font-black tracking-wider text-amber-300">
               02:00
             </span>
@@ -8438,7 +9357,7 @@ export default function App() {
           {/* Opponent Team (RIVAL) Pill */}
           <div
             id="hudAiPill"
-            className="flex items-center space-x-1.5 sm:space-x-2 bg-rose-500 text-white px-2 py-0.5 sm:px-3 sm:py-1 rounded-lg sm:rounded-xl border-2 border-slate-900 shadow-xs transition-colors"
+            className="flex items-center space-x-1 sm:space-x-2 bg-rose-500 text-white px-2 py-0.5 sm:px-3 sm:py-1 rounded-lg sm:rounded-xl border-2 border-slate-900 shadow-xs transition-colors"
           >
             <span
               id="scoreAi"
@@ -8465,10 +9384,10 @@ export default function App() {
             type="button"
             tabIndex={-1}
             aria-label="Toggle Audio"
-            className="glass-pill btn-clean w-9 h-9 sm:w-auto sm:h-auto sm:min-h-[38px] sm:min-w-[38px] px-0 sm:px-3 rounded-xl sm:rounded-2xl flex items-center justify-center space-x-2 text-slate-800 hover:bg-white cursor-pointer"
+            className="glass-pill btn-clean w-8 h-8 sm:w-auto sm:h-auto sm:min-h-[38px] sm:min-w-[38px] px-0 sm:px-3 rounded-xl sm:rounded-2xl flex items-center justify-center space-x-2 text-slate-800 hover:bg-white cursor-pointer"
             title="Toggle Audio [M]"
           >
-            <PixelSoundOnIcon className="w-4 h-4 shrink-0" />
+            <PixelSoundOnIcon className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
             <i id="muteIcon" className="fa-solid fa-volume-high text-xs text-emerald-600 sr-only" />
             <span id="soundStatusText" className="text-[11px] font-extrabold hidden lg:inline whitespace-nowrap">
               Audio On
@@ -8479,49 +9398,51 @@ export default function App() {
             type="button"
             tabIndex={-1}
             aria-label="Pause Match"
-            className="glass-pill btn-clean w-9 h-9 sm:w-auto sm:h-auto sm:min-w-[38px] sm:min-h-[38px] rounded-xl sm:rounded-2xl flex items-center justify-center text-slate-800 hover:bg-white cursor-pointer"
+            className="glass-pill btn-clean w-8 h-8 sm:w-auto sm:h-auto sm:min-w-[38px] sm:min-h-[38px] rounded-xl sm:rounded-2xl flex items-center justify-center text-slate-800 hover:bg-white cursor-pointer"
             title="Pause Match [P]"
           >
-            <PixelPauseIcon className="w-4 h-4 text-slate-800" />
+            <PixelPauseIcon className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-slate-800" />
           </button>
         </div>
       </div>
 
-      {/* Mobile & Tablet Touch Controls (Strictly hidden on Computer/Gamepad; displayed with subtle translucency on touch devices during active play) */}
+      {/* Mobile & Tablet Touch Controls (Upgraded Neo-Brutalist Arcade Controls for Portrait & Landscape) */}
       <div
         id="mobileControls"
         style={{ display: 'none' }}
         className="mobile-controls-safe hidden fixed bottom-0 left-0 w-full justify-between items-end pointer-events-none z-20"
       >
-        {/* Left Thumb: Generous 360° Arcade Analog Thumbstick with Subtle Transparency */}
+        {/* Left Thumb: Precision 360° Arcade Analog Thumbstick with Tactile Bezel & Directional Pips */}
         <div
           id="joystickZone"
           aria-label="Virtual Movement Joystick"
-          className="rounded-full bg-white/40 backdrop-blur-md border-2 border-slate-900/55 relative flex items-center justify-center pointer-events-auto touch-none shadow-[0_6px_18px_rgba(15,23,42,0.2)] transition-opacity"
+          className="touch-joy-zone rounded-full relative flex items-center justify-center pointer-events-auto touch-none transition-opacity"
         >
-          <span className="absolute top-2 text-[9px] font-black text-slate-700/70 pointer-events-none">▲</span>
-          <span className="absolute bottom-2 text-[9px] font-black text-slate-700/70 pointer-events-none">▼</span>
-          <span className="absolute left-2.5 text-[9px] font-black text-slate-700/70 pointer-events-none">◀</span>
-          <span className="absolute right-2.5 text-[9px] font-black text-slate-700/70 pointer-events-none">▶</span>
-          <div className="w-14 h-14 rounded-full border-2 border-dashed border-slate-600/35 pointer-events-none absolute" />
+          <span className="absolute top-1.5 text-[8px] font-black text-white/80 drop-shadow-[0_1px_0_#0f172a] pointer-events-none">▲</span>
+          <span className="absolute bottom-1.5 text-[8px] font-black text-white/80 drop-shadow-[0_1px_0_#0f172a] pointer-events-none">▼</span>
+          <span className="absolute left-2 text-[8px] font-black text-white/80 drop-shadow-[0_1px_0_#0f172a] pointer-events-none">◀</span>
+          <span className="absolute right-2 text-[8px] font-black text-white/80 drop-shadow-[0_1px_0_#0f172a] pointer-events-none">▶</span>
+          <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-full border-2 border-dashed border-white/40 pointer-events-none absolute" />
           <div
             id="joystickKnob"
-            className="rounded-full bg-slate-900/75 border-2 border-sky-400/90 shadow-[0_3px_8px_rgba(15,23,42,0.35)] transition-transform duration-75 pointer-events-none relative z-10 flex items-center justify-center"
+            className="touch-joy-knob rounded-full transition-transform duration-75 pointer-events-none relative z-10 flex items-center justify-center"
           >
-            <div className="w-3.5 h-3.5 rounded-full bg-sky-400/85" />
+            <div className="w-4 h-4 rounded-full bg-amber-300 border-2 border-slate-900 shadow-inner" />
           </div>
         </div>
 
-        {/* Right Thumb: Ergonomic Arcade Action Cluster with Subtle Transparency & Contained Labels */}
-        <div className="flex items-end space-x-3 sm:space-x-4 pointer-events-auto touch-none">
+        {/* Right Thumb: Ergonomic Dual-Button Arcade Action Cluster */}
+        <div className="flex items-end space-x-2.5 sm:space-x-3.5 pointer-events-auto touch-none">
           <button
             id="mobileSwitchBtn"
             type="button"
             aria-label="Send Teammate Run or Switch Defender"
-            className="w-[74px] h-[74px] sm:w-[82px] sm:h-[82px] px-1.5 rounded-full bg-white/55 backdrop-blur-md border-2 border-slate-900/65 text-slate-900 font-black flex flex-col items-center justify-center active:scale-90 transition-transform shadow-[0_4px_0_rgba(15,23,42,0.5)] mb-0.5 overflow-hidden text-center"
+            className="touch-btn-secondary px-2 rounded-full font-black flex flex-col items-center justify-center active:scale-92 active:translate-y-0.5 transition-all mb-0.5 overflow-hidden text-center"
           >
-            <i className="fa-solid fa-bolt text-xs sm:text-sm mb-0.5 text-amber-500 shrink-0" />
-            <span id="mobileSecondaryText" className="text-[10px] sm:text-[11px] leading-[1.08] font-black text-center max-w-full">
+            <span className="w-5 h-5 rounded-full bg-amber-300 border-2 border-slate-900 flex items-center justify-center mb-0.5 shrink-0 shadow-[0_1px_0_#0f172a]">
+              <i className="fa-solid fa-bolt text-[10px] text-slate-900" />
+            </span>
+            <span id="mobileSecondaryText" className="text-[9.5px] sm:text-[10.5px] uppercase tracking-tight leading-[1.05] font-black text-center max-w-full drop-shadow-[0_1px_0_rgba(15,23,42,0.8)]">
               Send Run
             </span>
           </button>
@@ -8529,10 +9450,12 @@ export default function App() {
             id="mobileActionBtn"
             type="button"
             aria-label="Kick, Pass, or Hold for Finesse Shot"
-            className="w-[86px] h-[86px] sm:w-[96px] sm:h-[96px] px-1.5 rounded-full bg-sky-500/75 active:bg-amber-400/90 backdrop-blur-md border-[3px] border-slate-900/75 text-white active:text-slate-900 font-black shadow-[0_5px_0_rgba(15,23,42,0.65)] flex flex-col items-center justify-center active:translate-y-1 transition-all mb-2.5 overflow-hidden text-center"
+            className="touch-btn-primary px-2 rounded-full font-black flex flex-col items-center justify-center active:scale-92 active:translate-y-1 transition-all mb-2 overflow-hidden text-center"
           >
-            <PixelSoccerBallIcon className="w-6 h-6 sm:w-7 sm:h-7 mb-0.5 opacity-95 shrink-0" />
-            <span id="mobileActionText" className="text-xs sm:text-sm leading-none font-black text-center max-w-full">
+            <span className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-white/95 border-2 border-slate-900 flex items-center justify-center mb-0.5 shrink-0 shadow-[0_2px_0_#0f172a]">
+              <PixelSoccerBallIcon className="w-4 h-4 sm:w-5 sm:h-5" />
+            </span>
+            <span id="mobileActionText" className="text-[11px] sm:text-xs uppercase tracking-wider leading-none font-black text-center max-w-full drop-shadow-[0_1px_0_rgba(15,23,42,0.85)]">
               Kick
             </span>
           </button>
@@ -8807,7 +9730,7 @@ export default function App() {
               <rect x="6" y="4" width="2" height="3" fill="#fef08a" />
               <rect x="6" y="8" width="4" height="2" fill="#f59e0b" />
               <rect x="7" y="10" width="2" height="2" fill="#facc15" />
-              <rect x="5" y="13" width="6" height="1" fill="#fde047" />
+              <rect x="5" y="13" width="6" height="1" fill="#fde087" />
             </svg>
           </div>
 
@@ -8861,7 +9784,7 @@ export default function App() {
           </div>
 
           {/* Tournament Stats Row */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-5 p-3 rounded-2xl bg-slate-100 border-2 border-slate-900 text-center">
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 mb-5 p-3 rounded-2xl bg-slate-100 border-2 border-slate-900 text-center">
             <div>
               <div className="text-[9px] font-extrabold uppercase text-slate-500">Cup Score</div>
               <div id="tourneyWinGoalsStat" className="font-mono-num text-sm sm:text-base font-black text-emerald-600 mt-0.5">
@@ -8884,6 +9807,20 @@ export default function App() {
               <div className="text-[9px] font-extrabold uppercase text-slate-500">Possession</div>
               <div id="tourneyWinPossStat" className="font-mono-num text-sm sm:text-base font-black text-sky-600 mt-0.5">
                 60%
+              </div>
+            </div>
+            <div
+              id="tourneyWinMoneyCard"
+              className="col-span-2 sm:col-span-1 bg-gradient-to-b from-amber-200 to-emerald-200 rounded-xl py-1 px-2 border-2 border-slate-900 shadow-[0_2px_0_#0f172a]"
+            >
+              <div className="text-[9px] font-black uppercase text-slate-900 flex items-center justify-center gap-1">
+                <span id="tourneyWinCoinIcon" className="inline-flex">
+                  <PixelGoldCoinIcon className="w-3.5 h-3.5 shrink-0" />
+                </span>
+                <span>Cup Prize</span>
+              </div>
+              <div id="tourneyWinMoneyStat" className="font-mono-num text-sm sm:text-base font-black text-emerald-900 mt-0.5">
+                +$110
               </div>
             </div>
           </div>
@@ -8919,7 +9856,7 @@ export default function App() {
           id="menuModalCard"
           className="w-full max-w-2xl lg:max-w-5xl flex flex-col gap-3 sm:gap-4 text-center relative my-auto"
         >
-          {/* Top Bar: Title Lockup & Centered/Balanced Clickable Player Profile Card */}
+          {/* Top Bar: Title Lockup & Clickable Player Profile Card */}
           <div
             id="menuTopBar"
             className="glass-modal rounded-3xl px-4 py-3 sm:px-6 sm:py-3.5 flex flex-col sm:flex-row items-center justify-center sm:justify-between gap-2.5 sm:gap-3"
@@ -8944,12 +9881,12 @@ export default function App() {
               </h1>
             </div>
 
-            {/* Clickable Player Profile Card (Centered on narrow screens, right-aligned on landscape/PC, with Rank Outline Border) */}
-            <div id="menuProfileBar" className="flex items-center justify-center relative">
+            {/* Clickable Player Profile Card (No money amount displayed on Main Menu) */}
+            <div id="menuProfileBar" className="flex flex-wrap items-center justify-center gap-2 sm:gap-2.5 relative">
               <button
                 id="editProfileBtn"
                 type="button"
-                aria-label="Open Player Profile"
+                aria-label="Open Player Profile & Coupon Vault"
                 className="btn-clean group relative flex items-center justify-center gap-2.5 sm:gap-3 px-3.5 py-1.5 sm:px-4 sm:py-2 rounded-2xl bg-slate-100 hover:bg-white border-[3px] border-amber-600 shadow-[0_3px_0_#0f172a] cursor-pointer transition-all text-left"
               >
                 <div
@@ -9206,10 +10143,10 @@ export default function App() {
             </div>
           </div>
 
-          {/* End-of-Match Summary */}
+          {/* End-of-Match Summary (Includes Match Cash Reward!) */}
           <div
             id="matchStatsRow"
-            className="hidden grid-cols-2 sm:grid-cols-4 gap-2.5 mb-3 p-3 rounded-2xl bg-slate-100 border-2 border-slate-900 text-center"
+            className="hidden grid-cols-2 sm:grid-cols-5 gap-2.5 mb-3 p-3 rounded-2xl bg-slate-100 border-2 border-slate-900 text-center"
           >
             <div>
               <div className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500">Passes</div>
@@ -9235,9 +10172,31 @@ export default function App() {
                 50%
               </div>
             </div>
+            <div
+              id="statMoneyCard"
+              className="col-span-2 sm:col-span-1 bg-gradient-to-b from-amber-200 via-yellow-200 to-emerald-200 rounded-xl py-1 px-2 border-2 border-slate-900 shadow-[0_2px_0_#0f172a] relative overflow-hidden flex flex-col items-center justify-center"
+            >
+              <div className="text-[9.5px] font-black uppercase tracking-wider text-slate-900 flex items-center justify-center gap-1 whitespace-nowrap">
+                <span id="statMoneyCoinIcon" className="inline-flex">
+                  <PixelGoldCoinIcon className="w-3.5 h-3.5 shrink-0" />
+                </span>
+                <span>Match Cash</span>
+              </div>
+              <div className="flex items-center justify-center gap-1 mt-0.5 whitespace-nowrap">
+                <div id="statMoneyEarned" className="font-mono-num text-base font-black text-emerald-950 leading-tight">
+                  +$20
+                </div>
+                <span
+                  id="statMoneyModeBadge"
+                  className="px-1.5 py-0.2 rounded bg-slate-900 text-amber-300 font-mono-num text-[8px] font-black uppercase tracking-tight whitespace-nowrap"
+                >
+                  1X
+                </span>
+              </div>
+            </div>
           </div>
 
-          {/* Primary Actions — Centered & Well-Proportioned (Never Stretched Super Wide) */}
+          {/* Primary Actions — Centered & Well-Proportioned (With Main Menu Pokie Machine Access) */}
           <div id="menuBottomBar" className="glass-modal rounded-3xl p-3.5 sm:p-4 flex flex-col items-center space-y-2">
             <div
               id="menuActionsRow"
@@ -9247,10 +10206,20 @@ export default function App() {
                 id="startBtn"
                 type="button"
                 data-start="true"
-                className="indie-cta-btn w-full sm:w-auto sm:min-w-[240px] sm:max-w-[320px] min-h-[46px] sm:min-h-[50px] py-3 sm:py-3.5 px-7 rounded-2xl bg-sky-500 hover:bg-sky-400 text-white font-black text-sm sm:text-base tracking-wide cursor-pointer flex items-center justify-center space-x-2.5"
+                className="indie-cta-btn w-full sm:w-auto sm:min-w-[230px] sm:max-w-[310px] min-h-[46px] sm:min-h-[50px] py-3 sm:py-3.5 px-6 rounded-2xl bg-sky-500 hover:bg-sky-400 text-white font-black text-sm sm:text-base tracking-wide cursor-pointer flex items-center justify-center space-x-2.5"
               >
                 <i id="startBtnIcon" className="fa-solid fa-play text-xs shrink-0" />
                 <span id="startBtnText" className="truncate">FIND CASUAL MATCH</span>
+              </button>
+
+              <button
+                id="openSlotMachineBtn"
+                type="button"
+                aria-label="Open Rematch Jackpot Pokie Machine"
+                className="indie-cta-btn w-full sm:w-auto sm:min-w-[205px] sm:max-w-[270px] min-h-[46px] sm:min-h-[50px] py-2.5 sm:py-3 px-5 rounded-2xl bg-gradient-to-r from-amber-300 via-yellow-300 to-amber-400 hover:from-amber-200 hover:to-yellow-200 text-slate-900 font-black text-xs sm:text-sm tracking-wide cursor-pointer flex items-center justify-center space-x-2.5"
+              >
+                <PixelSlotMachineIcon className="w-5 h-5 shrink-0" />
+                <span className="truncate">JACKPOT POKIES</span>
               </button>
 
               <button
@@ -9434,7 +10403,7 @@ export default function App() {
         </div>
       </div>
 
-      {/* Player Profile Modal (Overview Screen + Edit Profile View) */}
+      {/* Player Profile Modal (Overview + Coupon Vault + Store Teaser + Edit Profile View) */}
       <div
         id="editProfileModal"
         className="hidden fixed inset-0 z-50 bg-slate-900/65 flex items-center justify-center p-4 overflow-y-auto"
@@ -9443,7 +10412,7 @@ export default function App() {
           <div className="flex items-center justify-between pb-3 mb-4 border-b-2 border-slate-200">
             <div>
               <div className="text-[10px] font-black uppercase tracking-widest text-sky-600">
-                CLUB IDENTITY &amp; RANKING
+                CLUB IDENTITY, WALLET &amp; COUPONS
               </div>
               <h2 id="profileModalTitleText" className="text-xl sm:text-2xl font-black text-slate-900">
                 Player Profile
@@ -9462,12 +10431,12 @@ export default function App() {
             </button>
           </div>
 
-          {/* VIEW 1: PROFILE OVERVIEW (Displays Rank, Border Color, Ranked Wins & Edit Profile Option) */}
-          <div id="profileOverviewSection" className="space-y-4">
-            <div className="p-4 rounded-2xl bg-slate-50 border-2 border-slate-900 flex items-center space-x-4">
+          {/* VIEW 1: PROFILE OVERVIEW (Displays Rank, Wallet, Edit Profile, Store Teaser & Bottom Coupon Code Input) */}
+          <div id="profileOverviewSection" className="space-y-3.5">
+            <div className="p-3.5 rounded-2xl bg-slate-50 border-2 border-slate-900 flex items-center space-x-3.5">
               <div
                 id="overviewAvatarBox"
-                className="w-20 h-20 rounded-2xl bg-sky-400 border-[3.5px] border-amber-600 shadow-[0_4px_0_#0f172a] overflow-hidden relative flex items-center justify-center shrink-0"
+                className="w-18 h-18 rounded-2xl bg-sky-400 border-[3.5px] border-amber-600 shadow-[0_4px_0_#0f172a] overflow-hidden relative flex items-center justify-center shrink-0"
               >
                 <img
                   id="overviewProfileImg"
@@ -9494,16 +10463,22 @@ export default function App() {
                 <div className="mt-1 flex flex-wrap items-center gap-1.5">
                   <span
                     id="overviewRankBadge"
-                    className="inline-flex items-center px-3 py-0.5 rounded-full border-2 text-xs font-black tracking-wide bg-amber-100 text-amber-900 border-amber-700"
+                    className="inline-flex items-center px-2.5 py-0.5 rounded-full border-2 text-xs font-black tracking-wide bg-amber-100 text-amber-900 border-amber-700"
                   >
                     Bronze I
+                  </span>
+                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full border-2 border-slate-900 text-xs font-black tracking-wide bg-emerald-300 text-slate-900">
+                    <PixelGoldCoinIcon className="w-3.5 h-3.5 shrink-0" />
+                    <span id="overviewBalanceBadge" className="font-mono-num">
+                      $30
+                    </span>
                   </span>
                 </div>
               </div>
             </div>
 
             {/* Competitive Rank Progression Card */}
-            <div className="p-4 rounded-2xl bg-white border-2 border-slate-900 shadow-[0_3px_0_#0f172a] space-y-2.5">
+            <div className="p-3.5 rounded-2xl bg-white border-2 border-slate-900 shadow-[0_3px_0_#0f172a] space-y-2">
               <div className="flex items-center justify-between">
                 <span className="text-[11px] font-black uppercase tracking-wider text-slate-700 flex items-center space-x-1.5">
                   <i className="fa-solid fa-trophy text-amber-500" />
@@ -9528,50 +10503,78 @@ export default function App() {
               <div id="overviewNextRankText" className="text-[11px] font-bold text-slate-600">
                 Win 1 more Ranked match to reach Bronze II
               </div>
+            </div>
 
-              {/* Rank Tier Color Key */}
-              <div className="pt-2 border-t border-slate-200 grid grid-cols-3 gap-1.5 text-[10px] font-extrabold text-slate-700">
-                <div className="flex items-center space-x-1.5">
-                  <span className="w-2.5 h-2.5 rounded-full border border-slate-900 shrink-0" style={{ backgroundColor: '#d97706' }} />
-                  <span>Bronze</span>
-                </div>
-                <div className="flex items-center space-x-1.5">
-                  <span className="w-2.5 h-2.5 rounded-full border border-slate-900 shrink-0" style={{ backgroundColor: '#94a3b8' }} />
-                  <span>Silver</span>
-                </div>
-                <div className="flex items-center space-x-1.5">
-                  <span className="w-2.5 h-2.5 rounded-full border border-slate-900 shrink-0" style={{ backgroundColor: '#facc15' }} />
-                  <span>Gold</span>
-                </div>
-                <div className="flex items-center space-x-1.5">
-                  <span className="w-2.5 h-2.5 rounded-full border border-slate-900 shrink-0" style={{ backgroundColor: '#10b981' }} />
-                  <span>Platinum</span>
-                </div>
-                <div className="flex items-center space-x-1.5">
-                  <span className="w-2.5 h-2.5 rounded-full border border-slate-900 shrink-0" style={{ backgroundColor: '#38bdf8' }} />
-                  <span>Diamond</span>
-                </div>
-                <div className="flex items-center space-x-1.5">
-                  <span className="w-2.5 h-2.5 rounded-full border border-slate-900 shrink-0" style={{ backgroundColor: '#a855f7' }} />
-                  <span>Champion</span>
+            {/* Unlaunched Club Store Teaser */}
+            <div
+              id="clubStoreTeaserCard"
+              className="p-3 rounded-2xl bg-slate-100 border-2 border-dashed border-slate-400 text-left flex items-center justify-between opacity-90 select-none"
+            >
+              <div className="flex items-center space-x-2.5">
+                <span className="text-lg leading-none">🛍️</span>
+                <div>
+                  <div className="text-xs font-black text-slate-800 leading-tight">Club Store</div>
+                  <div className="text-[10px] font-bold text-slate-500">Custom Kits &amp; FX — Not Launched Yet</div>
                 </div>
               </div>
+              <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded bg-slate-800 text-amber-300 shrink-0">
+                COMING SOON
+              </span>
             </div>
 
             <button
               id="switchToEditProfileBtn"
               type="button"
-              className="indie-cta-btn w-full py-3.5 px-6 rounded-2xl bg-amber-300 hover:bg-amber-200 text-slate-900 font-black text-sm tracking-wide uppercase cursor-pointer flex items-center justify-center space-x-2"
+              className="indie-cta-btn w-full py-3 px-6 rounded-2xl bg-amber-300 hover:bg-amber-200 text-slate-900 font-black text-xs sm:text-sm tracking-wide uppercase cursor-pointer flex items-center justify-center space-x-2"
             >
               <i className="fa-solid fa-pen-to-square text-xs" />
-              <span>Edit Profile</span>
+              <span>Edit Name &amp; Avatar</span>
             </button>
+
+            {/* Coupon Code Redemption Section at the Bottom of Player Profile UI (Enter HACK for +$100 / 10 Spins) */}
+            <div
+              id="profileCouponSection"
+              className="p-3.5 rounded-2xl bg-amber-50/90 border-2 border-slate-900 shadow-[0_3px_0_#0f172a]"
+            >
+              <div className="flex items-center justify-between mb-1.5">
+                <label
+                  htmlFor="couponCodeInput"
+                  className="text-[11px] font-black uppercase tracking-wider text-slate-900 flex items-center space-x-1.5"
+                >
+                  <i className="fa-solid fa-ticket text-amber-500" />
+                  <span>Redeem Promo Coupon</span>
+                </label>
+                <span className="text-[10px] font-extrabold text-amber-800 bg-amber-200 px-2 py-0.5 rounded-full border border-amber-400">
+                  $10 / Spin
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <input
+                  id="couponCodeInput"
+                  type="text"
+                  maxLength={20}
+                  placeholder="Enter coupon code..."
+                  className="flex-1 min-w-0 px-3 py-2 rounded-xl bg-white border-2 border-slate-900 text-slate-900 font-mono-num font-black text-xs uppercase tracking-wider focus:outline-none focus:ring-2 focus:ring-amber-400"
+                />
+                <button
+                  id="redeemCouponBtn"
+                  type="button"
+                  className="btn-clean py-2 px-4 rounded-xl bg-emerald-400 hover:bg-emerald-300 border-2 border-slate-900 text-slate-900 font-black text-xs uppercase tracking-wider shadow-[0_2px_0_#0f172a] cursor-pointer shrink-0"
+                >
+                  Redeem
+                </button>
+              </div>
+              <div id="couponFeedbackText" className="hidden" />
+            </div>
           </div>
 
           {/* VIEW 2: EDIT PROFILE FORM (Name + Camera Photo Capture) */}
           <div id="profileEditSection" className="hidden space-y-4">
             <div className="p-4 rounded-2xl bg-slate-50 border-2 border-slate-900 flex flex-col items-center text-center">
-              <div className="w-24 h-24 rounded-2xl bg-sky-400 border-2 border-slate-900 shadow-[0_3px_0_#0f172a] overflow-hidden relative flex items-center justify-center mb-3">
+              <div
+                id="modalProfilePreviewBox"
+                className="w-24 h-24 rounded-2xl bg-sky-400 border-2 border-slate-900 shadow-[0_3px_0_#0f172a] overflow-hidden relative flex items-center justify-center mb-3"
+              >
                 <img
                   id="modalProfilePreviewImg"
                   alt="Profile Preview"
@@ -9659,8 +10662,270 @@ export default function App() {
         </div>
       </div>
 
+      {/* REMATCH JACKPOT POKIES — Neo-Brutalist 16-Bit Sports Arcade Cabinet Modal */}
+      <div
+        id="slotMachineModal"
+        className="hidden fixed inset-0 z-50 bg-slate-950/80 flex items-center justify-center p-2.5 sm:p-4 overflow-y-auto"
+      >
+        <div className="glass-modal screen-enter rounded-[28px] sm:rounded-[30px] max-w-xl w-full p-3.5 sm:p-4 text-left relative my-auto border-3 border-slate-900 shadow-[0_10px_0_#0f172a] bg-gradient-to-b from-white via-slate-50 to-amber-50/40">
+          {/* Top Arcade Marquee Header with Chasing Stadium Floodlight Bulbs */}
+          <div className="p-2.5 sm:p-3 rounded-2xl bg-slate-900 border-2 border-slate-950 shadow-[0_4px_0_#0f172a] mb-2.5 relative overflow-hidden">
+            {/* Chasing Bulb Strip */}
+            <div id="slotMarqueeBar" className="flex items-center justify-between px-1 mb-1.5">
+              {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11].map((idx) => (
+                <span
+                  key={idx}
+                  style={{ animationDelay: `${idx * 90}ms` }}
+                  className={`slot-bulb-dot slot-marquee-bulb w-2 h-2 rounded-full border border-slate-950 ${
+                    idx % 3 === 0 ? 'bg-amber-300' : idx % 3 === 1 ? 'bg-sky-400' : 'bg-emerald-400'
+                  }`}
+                />
+              ))}
+            </div>
+
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center space-x-2.5 min-w-0">
+                <div className="w-10 h-10 rounded-2xl bg-gradient-to-b from-amber-300 to-amber-400 border-2 border-slate-950 shadow-[0_3px_0_#000000] flex items-center justify-center shrink-0">
+                  <PixelSlotMachineIcon className="w-6 h-6" />
+                </div>
+                <div className="min-w-0">
+                  <div className="text-[9px] font-black uppercase tracking-widest text-amber-300 truncate">
+                    CLUB ARCADE LOUNGE • 5 PAYLINES + 2X WILD STAR
+                  </div>
+                  <h2 className="text-base sm:text-lg font-black text-white tracking-tight truncate">
+                    REMATCH JACKPOT POKIES
+                  </h2>
+                </div>
+              </div>
+              <button
+                id="closeSlotModalBtn"
+                type="button"
+                aria-label="Close Pokie Machine"
+                className="btn-clean w-9 h-9 rounded-xl bg-slate-800 hover:bg-rose-500 border-2 border-slate-950 text-white font-black text-sm flex items-center justify-center cursor-pointer shrink-0 shadow-[0_2px_0_#000000]"
+              >
+                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="18" y1="6" x2="6" y2="18" />
+                  <line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+              </button>
+            </div>
+          </div>
+
+          {/* Progressive Grand Jackpot, Club Gold Coin Wallet & Last Win Readout */}
+          <div className="grid grid-cols-3 gap-2 mb-2.5">
+            <div className="p-2 rounded-2xl bg-gradient-to-b from-amber-200 via-yellow-200 to-amber-300 border-2 border-slate-900 shadow-[0_3px_0_#0f172a] text-center relative overflow-hidden">
+              <div className="text-[8.5px] sm:text-[9px] font-black uppercase tracking-wider text-amber-950 flex items-center justify-center gap-1">
+                <span>🏆 GRAND JACKPOT</span>
+              </div>
+              <div
+                id="slotJackpotDisplay"
+                className="font-mono-num text-sm sm:text-base font-black text-slate-900 mt-0.5"
+              >
+                $500
+              </div>
+            </div>
+
+            <div className="p-2 rounded-2xl bg-emerald-100 border-2 border-slate-900 shadow-[0_3px_0_#0f172a] text-center relative">
+              <div className="text-[8.5px] sm:text-[9px] font-black uppercase tracking-wider text-emerald-950 flex items-center justify-center gap-1">
+                <PixelGoldCoinIcon className="w-3.5 h-3.5 shrink-0" />
+                <span>YOUR BANKROLL</span>
+              </div>
+              <div className="flex items-center justify-center gap-1 mt-0.5">
+                <span
+                  id="slotBalanceDisplay"
+                  className="font-mono-num text-sm sm:text-base font-black text-emerald-900"
+                >
+                  $30
+                </span>
+                <span
+                  id="slotBalanceDeltaBadge"
+                  className="hidden font-mono-num text-[9px] font-black px-1.5 py-0.2 rounded-full bg-amber-300 border border-slate-900 text-slate-900 animate-bounce"
+                >
+                  +$20
+                </span>
+              </div>
+            </div>
+
+            <div className="p-2 rounded-2xl bg-sky-100 border-2 border-slate-900 shadow-[0_3px_0_#0f172a] text-center">
+              <div className="text-[8.5px] sm:text-[9px] font-black uppercase tracking-wider text-sky-950">
+                ⚡ LAST PAYOUT
+              </div>
+              <div
+                id="slotWinAmountBadge"
+                className="font-mono-num text-sm sm:text-base font-black text-slate-600 mt-0.5"
+              >
+                $0
+              </div>
+            </div>
+          </div>
+
+          {/* 3x3 Arcade Pokie Reel Cabinet with Left & Right Payline Indicators */}
+          <div className="p-2.5 sm:p-3 rounded-3xl bg-slate-900 border-3 border-slate-950 shadow-[0_4px_0_#0f172a,inset_0_4px_12px_rgba(0,0,0,0.65)] mb-2.5 relative">
+            <div className="flex items-center justify-between text-[9px] font-black uppercase tracking-widest text-amber-300 mb-1.5 px-1">
+              <span className="flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+                <span>5 ACTIVE PAYLINES (MID • TOP • BOT • ↘ • ↗)</span>
+              </span>
+              <span id="slotSpinsLeftDisplay" className="text-emerald-300 font-mono-num">
+                3 SPINS READY
+              </span>
+            </div>
+
+            <div className="flex items-stretch gap-1.5 sm:gap-2">
+              {/* Left Payline Anchor Pills */}
+              <div className="flex flex-col justify-around py-1.5 shrink-0 select-none">
+                <span
+                  id="slotPaylineLeft_4"
+                  title="Payline 4: Diagonal Down"
+                  className="px-1.5 py-0.5 rounded-md bg-emerald-400 text-slate-950 font-mono-num text-[8px] font-black border border-slate-950 transition-all"
+                >
+                  4↘
+                </span>
+                <span
+                  id="slotPaylineLeft_2"
+                  title="Payline 2: Top Row"
+                  className="px-1.5 py-0.5 rounded-md bg-sky-400 text-slate-950 font-mono-num text-[8px] font-black border border-slate-950 transition-all"
+                >
+                  2─
+                </span>
+                <span
+                  id="slotPaylineLeft_1"
+                  title="Payline 1: Center Row"
+                  className="px-1.5 py-0.5 rounded-md bg-amber-300 text-slate-950 font-mono-num text-[8px] font-black border border-slate-950 transition-all"
+                >
+                  1═
+                </span>
+                <span
+                  id="slotPaylineLeft_3"
+                  title="Payline 3: Bottom Row"
+                  className="px-1.5 py-0.5 rounded-md bg-rose-400 text-slate-950 font-mono-num text-[8px] font-black border border-slate-950 transition-all"
+                >
+                  3─
+                </span>
+                <span
+                  id="slotPaylineLeft_5"
+                  title="Payline 5: Diagonal Up"
+                  className="px-1.5 py-0.5 rounded-md bg-fuchsia-400 text-slate-950 font-mono-num text-[8px] font-black border border-slate-950 transition-all"
+                >
+                  5↗
+                </span>
+              </div>
+
+              {/* 3x3 Reel Window */}
+              <div className="flex-1 grid grid-cols-3 gap-2 bg-slate-950 p-2 rounded-2xl border-2 border-slate-700 overflow-hidden relative">
+                {[0, 1, 2].map((col) => (
+                  <div
+                    key={col}
+                    id={`slotReelCol${col}`}
+                    className="flex flex-col gap-1.5 transition-transform duration-100"
+                  >
+                    {[0, 1, 2].map((row) => (
+                      <div
+                        key={row}
+                        id={`slotCell_${col}_${row}`}
+                        className="slot-symbol-cell rounded-2xl border-[2.5px] border-slate-900 bg-white p-1 sm:p-1.5 flex flex-col items-center justify-center text-center shadow-[0_3px_0_#0f172a] min-h-[60px] sm:min-h-[66px]"
+                      >
+                        <span className="text-xl sm:text-2xl leading-none">⚽</span>
+                        <span className="text-[8px] sm:text-[9px] font-black uppercase mt-1">GOLD BALL</span>
+                      </div>
+                    ))}
+                  </div>
+                ))}
+              </div>
+
+              {/* Right Payline Anchor Pills */}
+              <div className="flex flex-col justify-around py-1.5 shrink-0 select-none">
+                <span
+                  id="slotPaylineRight_5"
+                  className="px-1.5 py-0.5 rounded-md bg-fuchsia-400 text-slate-950 font-mono-num text-[8px] font-black border border-slate-950 transition-all"
+                >
+                  ↗5
+                </span>
+                <span
+                  id="slotPaylineRight_2"
+                  className="px-1.5 py-0.5 rounded-md bg-sky-400 text-slate-950 font-mono-num text-[8px] font-black border border-slate-950 transition-all"
+                >
+                  ─2
+                </span>
+                <span
+                  id="slotPaylineRight_1"
+                  className="px-1.5 py-0.5 rounded-md bg-amber-300 text-slate-950 font-mono-num text-[8px] font-black border border-slate-950 transition-all"
+                >
+                  ═1
+                </span>
+                <span
+                  id="slotPaylineRight_3"
+                  className="px-1.5 py-0.5 rounded-md bg-rose-400 text-slate-950 font-mono-num text-[8px] font-black border border-slate-950 transition-all"
+                >
+                  ─3
+                </span>
+                <span
+                  id="slotPaylineRight_4"
+                  className="px-1.5 py-0.5 rounded-md bg-emerald-400 text-slate-950 font-mono-num text-[8px] font-black border border-slate-950 transition-all"
+                >
+                  ↘4
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Live Pokie Status & Win Callout Banner */}
+          <div
+            id="slotStatusBanner"
+            className="p-2 rounded-2xl bg-slate-100 border-2 border-slate-900 text-slate-800 font-black text-xs uppercase tracking-wide text-center mb-2.5 shadow-[0_2px_0_#0f172a]"
+          >
+            SPIN FOR $10 • 3X GRAND CUP = JACKPOT • ⭐ 2X WILD DOUBLES ANY LINE!
+          </div>
+
+          {/* Primary Arcade Spin Lever Button */}
+          <button
+            id="slotSpinBtn"
+            type="button"
+            className="indie-cta-btn w-full min-h-[48px] py-3 px-6 rounded-2xl bg-gradient-to-r from-emerald-400 via-teal-300 to-sky-400 hover:from-emerald-300 hover:to-sky-300 disabled:opacity-60 text-slate-900 font-black text-sm sm:text-base uppercase tracking-wider cursor-pointer flex items-center justify-center space-x-2.5 mb-2.5"
+          >
+            <PixelGoldCoinIcon className="w-5 h-5 sm:w-6 sm:h-6 shrink-0" />
+            <span id="slotSpinBtnLabel">SPIN REELS • $10</span>
+          </button>
+
+          {/* Compact Neo-Brutalist Paytable Legend */}
+          <div className="p-2.5 rounded-2xl bg-white border-2 border-slate-900 shadow-[0_3px_0_#0f172a] text-[10px] font-extrabold text-slate-700">
+            <div className="text-[9px] font-black uppercase tracking-wider text-slate-500 mb-1.5 flex flex-wrap items-center justify-between gap-1">
+              <span>OFFICIAL 5-LINE PAYTABLE ($10 SPIN)</span>
+              <span className="text-sky-700">⭐ WILD = 2X LINE PAYOUT • 👑 2+ SCATTERS PAY ANYWHERE</span>
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 text-center">
+              <div className="px-2 py-1 rounded-lg bg-amber-200 border border-slate-900 text-slate-900 font-black">
+                🏆 3x CUP: JACKPOT
+              </div>
+              <div className="px-2 py-1 rounded-lg bg-sky-200 border border-slate-900 text-slate-900 font-black">
+                ⭐ 3x WILD: $400
+              </div>
+              <div className="px-2 py-1 rounded-lg bg-slate-200 border border-slate-900 text-slate-900 font-black">
+                ⚽ 3x BALL: $200
+              </div>
+              <div className="px-2 py-1 rounded-lg bg-pink-200 border border-slate-900 text-slate-900 font-black">
+                👑 3x SCATTER: $150
+              </div>
+              <div className="px-2 py-1 rounded-lg bg-orange-200 border border-slate-900 text-slate-900 font-black">
+                👟 3x BOOT: $120
+              </div>
+              <div className="px-2 py-1 rounded-lg bg-rose-200 border border-slate-900 text-slate-900 font-black">
+                🔥 3x FIRE: $60
+              </div>
+              <div className="px-2 py-1 rounded-lg bg-emerald-200 border border-slate-900 text-slate-900 font-black">
+                📯 3x WHISTLE: $30
+              </div>
+              <div className="px-2 py-1 rounded-lg bg-purple-200 border border-slate-900 text-slate-900 font-black">
+                🍒 CHERRY: $20 / $10
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* Isolated 60-144Hz Game Canvas */}
       <canvas id="gameCanvas" ref={canvasRef} data-testid="game-canvas" />
     </div>
   );
 }
+

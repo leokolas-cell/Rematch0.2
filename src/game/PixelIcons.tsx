@@ -156,3 +156,71 @@ export function PixelPauseIcon({ className = 'w-5 h-5' }: { className?: string }
     </svg>
   );
 }
+
+export function PixelGoldCoinIcon({ className = 'w-5 h-5' }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 16 16" className={className} shapeRendering="crispEdges" fill="none">
+      {/* Crisp 16-bit dark slate outer border */}
+      <rect x="5" y="1" width="6" height="1" fill="#0f172a" />
+      <rect x="3" y="2" width="2" height="1" fill="#0f172a" />
+      <rect x="11" y="2" width="2" height="1" fill="#0f172a" />
+      <rect x="2" y="3" width="1" height="2" fill="#0f172a" />
+      <rect x="13" y="3" width="1" height="2" fill="#0f172a" />
+      <rect x="1" y="5" width="1" height="6" fill="#0f172a" />
+      <rect x="14" y="5" width="1" height="6" fill="#0f172a" />
+      <rect x="2" y="11" width="1" height="2" fill="#0f172a" />
+      <rect x="13" y="11" width="1" height="2" fill="#0f172a" />
+      <rect x="3" y="13" width="2" height="1" fill="#0f172a" />
+      <rect x="11" y="13" width="2" height="1" fill="#0f172a" />
+      <rect x="5" y="14" width="6" height="1" fill="#0f172a" />
+      {/* Base metallic gold coin body */}
+      <rect x="5" y="2" width="6" height="12" fill="#facc15" />
+      <rect x="3" y="3" width="10" height="10" fill="#facc15" />
+      <rect x="2" y="5" width="12" height="6" fill="#facc15" />
+      {/* Sunlit top-left rim highlight */}
+      <rect x="5" y="2" width="5" height="1" fill="#fef08a" />
+      <rect x="3" y="3" width="2" height="2" fill="#fef08a" />
+      <rect x="2" y="5" width="1" height="4" fill="#fef08a" />
+      <rect x="4" y="4" width="2" height="1" fill="#ffffff" />
+      {/* Deep amber lower-right bevel shadow */}
+      <rect x="5" y="13" width="6" height="1" fill="#d97706" />
+      <rect x="11" y="11" width="2" height="2" fill="#d97706" />
+      <rect x="13" y="6" width="1" height="5" fill="#d97706" />
+      {/* Inner embossed star / dollar vertical bar */}
+      <rect x="7" y="4" width="2" height="8" fill="#b45309" />
+      <rect x="6" y="5" width="4" height="2" fill="#b45309" />
+      <rect x="6" y="9" width="4" height="2" fill="#b45309" />
+      <rect x="7" y="5" width="1" height="6" fill="#fef08a" />
+    </svg>
+  );
+}
+
+export function PixelSlotMachineIcon({ className = 'w-5 h-5' }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 16 16" className={className} shapeRendering="crispEdges" fill="none">
+      {/* Outer cabinet frame */}
+      <rect x="2" y="2" width="10" height="12" fill="#0f172a" />
+      <rect x="3" y="1" width="8" height="1" fill="#0f172a" />
+      {/* Golden dome top */}
+      <rect x="3" y="2" width="8" height="2" fill="#facc15" />
+      <rect x="4" y="2" width="3" height="1" fill="#fef08a" />
+      {/* Crimson / sky body */}
+      <rect x="3" y="4" width="8" height="9" fill="#0284c7" />
+      {/* 3 white reel windows */}
+      <rect x="3" y="5" width="2" height="4" fill="#ffffff" />
+      <rect x="6" y="5" width="2" height="4" fill="#ffffff" />
+      <rect x="9" y="5" width="2" height="4" fill="#ffffff" />
+      {/* 777 / Gold symbols inside reels */}
+      <rect x="3" y="6" width="2" height="2" fill="#f43f5e" />
+      <rect x="6" y="6" width="2" height="2" fill="#facc15" />
+      <rect x="9" y="6" width="2" height="2" fill="#10b981" />
+      {/* Payout tray */}
+      <rect x="4" y="10" width="6" height="2" fill="#fde047" />
+      {/* Right-side pull lever */}
+      <rect x="12" y="7" width="2" height="2" fill="#0f172a" />
+      <rect x="13" y="4" width="2" height="4" fill="#0f172a" />
+      <rect x="13" y="2" width="2" height="2" fill="#f43f5e" />
+    </svg>
+  );
+}
+

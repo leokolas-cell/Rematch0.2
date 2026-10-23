@@ -1765,6 +1765,216 @@ export class IndieSoundEngine {
     // Celebratory crowd & snare burst
     this.playNoiseBurst(0.55, 1600, 0.22, 1.2);
   }
+
+  playSlotSpin() {
+    this.unlock();
+    if (!this.ensureReady() || !this.ctx || !this.master) return;
+    const now = this.ctx.currentTime;
+    // Mechanical arcade lever clunk + ascending 16-bit synth sweep
+    const clunk = this.ctx.createOscillator();
+    const cg = this.ctx.createGain();
+    clunk.type = 'Sawtooth'.toLowerCase() as OscillatorType;
+    clunk.frequency.setValueAtTime(150, now);
+    clunk.frequency.exponentialRampToValueAtTime(48, now + 0.065);
+    cg.gain.setValueAtTime(0.24, now);
+    cg.gain.exponentialRampToValueAtTime(0.0001, now + 0.075);
+    clunk.connect(cg);
+    cg.connect(this.master);
+    clunk.start(now);
+    clunk.stop(now + 0.08);
+
+    [330, 440, 587.33, 783.99, 1046.5].forEach((freq, idx) => {
+      if (!this.ctx || !this.master) return;
+      const osc = this.ctx.createOscillator();
+      const g = this.ctx.createGain();
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(freq, now + idx * 0.024);
+      g.gain.setValueAtTime(0.0001, now + idx * 0.024);
+      g.gain.linearRampToValueAtTime(0.2, now + idx * 0.024 + 0.006);
+      g.gain.exponentialRampToValueAtTime(0.0001, now + idx * 0.024 + 0.085);
+      osc.connect(g);
+      g.connect(this.master);
+      osc.start(now + idx * 0.024);
+      osc.stop(now + idx * 0.024 + 0.09);
+    });
+    this.playNoiseBurst(0.055, 1950, 0.16, 1.6);
+  }
+
+  playSlotReelTick(reelIdx = 0) {
+    if (!this.ensureReady() || !this.ctx || !this.master) return;
+    const now = this.ctx.currentTime;
+    // Crisp 16-bit mechanical reel ratchet click
+    const osc = this.ctx.createOscillator();
+    const g = this.ctx.createGain();
+    osc.type = 'triangle';
+    const baseFreq = 680 + reelIdx * 105 + (Math.random() - 0.5) * 40;
+    osc.frequency.setValueAtTime(baseFreq, now);
+    osc.frequency.exponentialRampToValueAtTime(baseFreq * 0.55, now + 0.024);
+    g.gain.setValueAtTime(0.08, now);
+    g.gain.exponentialRampToValueAtTime(0.0001, now + 0.026);
+    osc.connect(g);
+    g.connect(this.master);
+    osc.start(now);
+    osc.stop(now + 0.028);
+  }
+
+  playSlotReelStop(reelIdx = 0, isTeaser = false) {
+    this.unlock();
+    if (!this.ensureReady() || !this.ctx || !this.master) return;
+    const now = this.ctx.currentTime;
+    // Crisp mechanical reel lock thud + pitched arcade bell click
+    const thud = this.ctx.createOscillator();
+    const tg = this.ctx.createGain();
+    thud.type = 'triangle';
+    const pitch = [196.0, 246.94, 329.63][reelIdx % 3] || 220;
+    thud.frequency.setValueAtTime(pitch * 1.45, now);
+    thud.frequency.exponentialRampToValueAtTime(58, now + 0.085);
+    tg.gain.setValueAtTime(0.32, now);
+    tg.gain.exponentialRampToValueAtTime(0.0001, now + 0.095);
+    thud.connect(tg);
+    tg.connect(this.master);
+    thud.start(now);
+    thud.stop(now + 0.1);
+
+    // Metallic lock harmonic click
+    const ping = this.ctx.createOscillator();
+    const pg = this.ctx.createGain();
+    ping.type = 'sine';
+    ping.frequency.setValueAtTime(pitch * 3.0, now);
+    pg.gain.setValueAtTime(0.14, now);
+    pg.gain.exponentialRampToValueAtTime(0.0001, now + 0.06);
+    ping.connect(pg);
+    pg.connect(this.master);
+    ping.start(now);
+    ping.stop(now + 0.065);
+
+    if (isTeaser) {
+      // Rising tension chime when Reels 1 & 2 align for a potential big win!
+      [587.33, 783.99, 1046.5, 1318.5].forEach((freq, i) => {
+        if (!this.ctx || !this.master) return;
+        const osc = this.ctx.createOscillator();
+        const g = this.ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(freq, now + i * 0.045);
+        g.gain.setValueAtTime(0.22, now + i * 0.045);
+        g.gain.exponentialRampToValueAtTime(0.0001, now + i * 0.045 + 0.15);
+        osc.connect(g);
+        g.connect(this.master);
+        osc.start(now + i * 0.045);
+        osc.stop(now + i * 0.045 + 0.16);
+      });
+    }
+  }
+
+  playSlotWin(tier: 'SMALL' | 'BIG' | 'MEGA' | 'JACKPOT' = 'SMALL') {
+    this.unlock();
+    if (!this.ensureReady() || !this.ctx || !this.master) return;
+    const now = this.ctx.currentTime;
+    const sequences: Record<'SMALL' | 'BIG' | 'MEGA' | 'JACKPOT', number[]> = {
+      SMALL: [523.25, 659.25, 783.99, 1046.5],
+      BIG: [523.25, 659.25, 783.99, 1046.5, 1318.51, 1567.98],
+      MEGA: [523.25, 659.25, 783.99, 1046.5, 987.77, 1174.66, 1318.51, 1567.98, 2093.0],
+      JACKPOT: [
+        523.25, 659.25, 783.99, 1046.5, 783.99, 1046.5, 1318.51, 1567.98,
+        1318.51, 1567.98, 2093.0, 2637.02,
+      ],
+    };
+    const notes = sequences[tier] || sequences.SMALL;
+    const stepTime = tier === 'JACKPOT' ? 0.065 : tier === 'MEGA' ? 0.055 : 0.048;
+
+    notes.forEach((freq, idx) => {
+      if (!this.ctx || !this.master) return;
+      const osc = this.ctx.createOscillator();
+      const g = this.ctx.createGain();
+      osc.type = tier === 'JACKPOT' || tier === 'MEGA' ? 'triangle' : 'sine';
+      osc.frequency.setValueAtTime(freq, now + idx * stepTime);
+      g.gain.setValueAtTime(0.0001, now + idx * stepTime);
+      g.gain.linearRampToValueAtTime(0.3, now + idx * stepTime + 0.01);
+      g.gain.exponentialRampToValueAtTime(0.0001, now + idx * stepTime + 0.36);
+      osc.connect(g);
+      g.connect(this.master);
+      osc.start(now + idx * stepTime);
+      osc.stop(now + idx * stepTime + 0.38);
+    });
+
+    if (tier === 'JACKPOT' || tier === 'MEGA') {
+      this.playNoiseBurst(0.65, 2200, 0.28, 1.1);
+    }
+  }
+
+  playCoinTick(step = 0, totalSteps = 10) {
+    this.unlock();
+    if (!this.ensureReady() || !this.ctx || !this.master) return;
+    const now = this.ctx.currentTime;
+    const prog = Math.max(0, Math.min(1, step / Math.max(1, totalSteps - 1)));
+    // Classic 16-bit dual-tone gold coin clink (B5 -> E6) that rises slightly as the counter climbs
+    const f1 = 987.77 * (1 + prog * 0.18);
+    const f2 = 1318.51 * (1 + prog * 0.18);
+
+    const osc1 = this.ctx.createOscillator();
+    const g1 = this.ctx.createGain();
+    osc1.type = 'sine';
+    osc1.frequency.setValueAtTime(f1, now);
+    g1.gain.setValueAtTime(0.14, now);
+    g1.gain.exponentialRampToValueAtTime(0.0001, now + 0.045);
+    osc1.connect(g1);
+    g1.connect(this.master);
+    osc1.start(now);
+    osc1.stop(now + 0.05);
+
+    const osc2 = this.ctx.createOscillator();
+    const g2 = this.ctx.createGain();
+    osc2.type = 'triangle';
+    osc2.frequency.setValueAtTime(f2, now + 0.022);
+    g2.gain.setValueAtTime(0.18, now + 0.022);
+    g2.gain.exponentialRampToValueAtTime(0.0001, now + 0.095);
+    osc2.connect(g2);
+    g2.connect(this.master);
+    osc2.start(now + 0.022);
+    osc2.stop(now + 0.1);
+  }
+
+  playMatchCashReward(isBigReward = false) {
+    this.unlock();
+    if (!this.ensureReady() || !this.ctx || !this.master) return;
+    const now = this.ctx.currentTime;
+    const chord = isBigReward
+      ? [587.33, 880.0, 1174.66, 1760.0]
+      : [523.25, 783.99, 1046.5, 1567.98];
+    chord.forEach((freq, idx) => {
+      if (!this.ctx || !this.master) return;
+      const osc = this.ctx.createOscillator();
+      const g = this.ctx.createGain();
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(freq, now + idx * 0.042);
+      g.gain.setValueAtTime(0.0001, now + idx * 0.042);
+      g.gain.linearRampToValueAtTime(0.24, now + idx * 0.042 + 0.008);
+      g.gain.exponentialRampToValueAtTime(0.0001, now + idx * 0.042 + 0.28);
+      osc.connect(g);
+      g.connect(this.master);
+      osc.start(now + idx * 0.042);
+      osc.stop(now + idx * 0.042 + 0.3);
+    });
+  }
+
+  playCouponRedeem() {
+    this.unlock();
+    if (!this.ensureReady() || !this.ctx || !this.master) return;
+    const now = this.ctx.currentTime;
+    [587.33, 739.99, 880.0, 1174.66, 1479.98].forEach((freq, idx) => {
+      if (!this.ctx || !this.master) return;
+      const osc = this.ctx.createOscillator();
+      const g = this.ctx.createGain();
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(freq, now + idx * 0.038);
+      g.gain.setValueAtTime(0.24, now + idx * 0.038);
+      g.gain.exponentialRampToValueAtTime(0.0001, now + idx * 0.038 + 0.24);
+      osc.connect(g);
+      g.connect(this.master);
+      osc.start(now + idx * 0.038);
+      osc.stop(now + idx * 0.038 + 0.26);
+    });
+  }
 }
 
 /**

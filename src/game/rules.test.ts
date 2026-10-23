@@ -31,6 +31,13 @@ import {
   computeRankProgressSummary,
   buildGoalCelebrationMessage,
   RANK_TIERS,
+  SLOT_SPIN_COST,
+  COUPON_HACK_REWARD,
+  BASE_JACKPOT_POOL,
+  calculateMatchMoneyReward,
+  redeemCouponCode,
+  evaluatePokieGrid,
+  spinPokieReels,
   type PlayerStateSnapshot,
   type KeeperStateSnapshot,
 } from './rules.ts';
@@ -622,7 +629,161 @@ test('buildGoalCelebrationMessage generates dynamic headlines & callouts for goa
   });
   assert.equal(mercyGoal.headline, 'MERCY RULE KO!');
   assert.match(mercyGoal.subheadline, /MERCY RULE KNOCKOUT/);
+
+  // 5. Stadium-Specific Goal Slogans & Varied Celebration Color Palettes
+  const spaceGoal = buildGoalCelebrationMessage({
+    scoringTeam: 'YOU',
+    scoreYou: 2,
+    scoreAi: 1,
+    prevScoreYou: 1,
+    prevScoreAi: 1,
+    isLongRange: false,
+    isPerfectStrike: false,
+    isOneTouch: false,
+    wasWallBounce: false,
+    spinMagnitude: 0,
+    flowCombo: 1,
+    isGoldenGoal: false,
+    matchTimeRemaining: 75,
+    opponentTag: 'Zico_99',
+    pitchTheme: 'COSMIC_SPACE',
+    variationIndex: 1,
+  });
+  assert.match(spaceGoal.headline, /GALACTIC SCREAMER|ORBITAL LASER STRIKE|SUPERNOVA FINISH|ZERO-G BANGER/);
+  assert.equal(spaceGoal.primaryColor, '#38bdf8');
+  assert.equal(spaceGoal.secondaryColor, '#e879f9');
+
+  // 6. Player Profile Name Slogan Insertion
+  const profileGoal = buildGoalCelebrationMessage({
+    scoringTeam: 'YOU',
+    scoreYou: 2,
+    scoreAi: 1,
+    prevScoreYou: 1,
+    prevScoreAi: 1,
+    isLongRange: false,
+    isPerfectStrike: false,
+    isOneTouch: false,
+    wasWallBounce: false,
+    spinMagnitude: 0,
+    flowCombo: 1,
+    isGoldenGoal: false,
+    matchTimeRemaining: 70,
+    opponentTag: 'Zico_99',
+    playerName: 'Leo',
+    pitchTheme: 'RIO_CLAY',
+    variationIndex: 2,
+  });
+  assert.match(profileGoal.headline, /LEO/);
+  assert.match(profileGoal.subheadline, /LEO LEADS/);
+  assert.ok(profileGoal.pitchCallouts.some((c) => c.text.includes('LEO')));
 });
+
+test('calculateMatchMoneyReward scales payouts by game mode, win/loss, goals scored, and Mercy Rule KO', () => {
+  const casualLoss = calculateMatchMoneyReward({
+    gameMode: 'CASUAL',
+    didWin: false,
+    goalsFor: 1,
+    goalsAgainst: 3,
+  });
+  assert.ok(casualLoss.totalReward >= 9);
+
+  const casualWin = calculateMatchMoneyReward({
+    gameMode: 'CASUAL',
+    didWin: true,
+    goalsFor: 3,
+    goalsAgainst: 1,
+  });
+  assert.ok(casualWin.totalReward > casualLoss.totalReward);
+
+  const rankedMercyWin = calculateMatchMoneyReward({
+    gameMode: 'RANKED',
+    didWin: true,
+    goalsFor: 3,
+    goalsAgainst: 0,
+    isMercyRule: true,
+  });
+  assert.ok(rankedMercyWin.totalReward > casualWin.totalReward);
+  assert.equal(rankedMercyWin.specialBonus, 13); // +8 Mercy Rule +5 Clean Sheet
+
+  const tournamentFinalWin = calculateMatchMoneyReward({
+    gameMode: 'TOURNAMENT',
+    didWin: true,
+    goalsFor: 4,
+    goalsAgainst: 1,
+    tournamentRound: 2,
+  });
+  assert.ok(tournamentFinalWin.totalReward >= 70);
+});
+
+test('redeemCouponCode grants 10 spins ($100) for HACK code and rejects invalid codes', () => {
+  const resHack = redeemCouponCode('  hack ', 25);
+  assert.equal(resHack.valid, true);
+  assert.equal(resHack.normalizedCode, 'HACK');
+  assert.equal(resHack.rewardAmount, COUPON_HACK_REWARD);
+  assert.equal(resHack.spinsGranted, 10);
+  assert.equal(resHack.rewardAmount, SLOT_SPIN_COST * 10);
+  assert.equal(resHack.newBalance, 25 + COUPON_HACK_REWARD);
+
+  const resInvalid = redeemCouponCode('WRONG', 25);
+  assert.equal(resInvalid.valid, false);
+  assert.equal(resInvalid.rewardAmount, 0);
+  assert.equal(resInvalid.newBalance, 25);
+});
+
+test('evaluatePokieGrid and spinPokieReels implement authentic 5-payline, 2x Wild Star, Scatter, and Grand Jackpot pokie math', () => {
+  // 1. Center line 3x MEGA_TROPHY hits the Progressive Grand Jackpot and resets pool
+  const jackpotEval = evaluatePokieGrid(
+    [
+      ['CHERRY_CARD', 'MEGA_TROPHY', 'WHISTLE'],
+      ['WHISTLE', 'MEGA_TROPHY', 'CHERRY_CARD'],
+      ['FIRE_FLAME', 'MEGA_TROPHY', 'WHISTLE'],
+    ],
+    SLOT_SPIN_COST,
+    1250
+  );
+  assert.equal(jackpotEval.isJackpot, true);
+  assert.equal(jackpotEval.winTier, 'JACKPOT');
+  assert.ok(jackpotEval.totalPayout >= 1252);
+  assert.equal(jackpotEval.updatedJackpotPool, BASE_JACKPOT_POOL);
+
+  // 2. Wild Star (⭐) substitutes and doubles (2x) payline win for DIAMOND_BALL on Top Line
+  const wildSubEval = evaluatePokieGrid(
+    [
+      ['DIAMOND_BALL', 'WHISTLE', 'FIRE_FLAME'],
+      ['WILD_STAR', 'CHERRY_CARD', 'WHISTLE'],
+      ['DIAMOND_BALL', 'FIRE_FLAME', 'GOLD_BOOT'],
+    ],
+    SLOT_SPIN_COST,
+    1000
+  );
+  assert.equal(wildSubEval.isJackpot, false);
+  const topLineWin = wildSubEval.winningLines.find((w) => w.lineId === 2);
+  assert.ok(topLineWin, 'Expected Top Line win with Wild Star substitution');
+  assert.equal(topLineWin?.hasWildMultiplier, true);
+  assert.equal(topLineWin?.payout, SLOT_SPIN_COST * 20 * 2); // 20x base * 2x Wild = 40x ($400)
+
+  // 3. 3x SCATTER_CROWN anywhere on the 3x3 window pays 15x total bet
+  const scatterEval = evaluatePokieGrid(
+    [
+      ['SCATTER_CROWN', 'WHISTLE', 'FIRE_FLAME'],
+      ['GOLD_BOOT', 'SCATTER_CROWN', 'WHISTLE'],
+      ['WHISTLE', 'FIRE_FLAME', 'SCATTER_CROWN'],
+    ],
+    SLOT_SPIN_COST,
+    1000
+  );
+  assert.equal(scatterEval.scatterCount, 3);
+  assert.equal(scatterEval.scatterPayout, SLOT_SPIN_COST * 15);
+  assert.equal(scatterEval.isTeaserTwoReels, true);
+
+  // 4. Deterministic forced stops on spinPokieReels (stop 18 on all 3 reels = MEGA_TROPHY on middle row!)
+  const forcedJackpot = spinPokieReels(SLOT_SPIN_COST, 1100, Math.random, [18, 17, 18]);
+  assert.equal(forcedJackpot.isJackpot, true);
+  assert.equal(forcedJackpot.grid[0][1], 'MEGA_TROPHY');
+  assert.equal(forcedJackpot.grid[1][1], 'MEGA_TROPHY');
+  assert.equal(forcedJackpot.grid[2][1], 'MEGA_TROPHY');
+});
+
 
 
 

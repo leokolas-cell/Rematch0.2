@@ -1277,6 +1277,9 @@ export interface GoalCelebrationInput {
   isGoldenGoal: boolean;
   matchTimeRemaining: number;
   opponentTag: string;
+  playerName?: string;
+  pitchTheme?: string;
+  variationIndex?: number;
 }
 
 export interface GoalCelebrationSpec {
@@ -1290,11 +1293,103 @@ export interface GoalCelebrationSpec {
   ledMessage: string;
 }
 
+const CELEBRATION_COLOR_PALETTES: {
+  primaryColor: string;
+  secondaryColor: string;
+  glowColor: string;
+}[] = [
+  { primaryColor: '#fde047', secondaryColor: '#f59e0b', glowColor: '#eab308' }, // Arcade Solar Gold
+  { primaryColor: '#38bdf8', secondaryColor: '#22d3ee', glowColor: '#0284c7' }, // Electric Sky Cyan
+  { primaryColor: '#34d399', secondaryColor: '#fde047', glowColor: '#059669' }, // Emerald Mint & Gold
+  { primaryColor: '#f472b6', secondaryColor: '#c084fc', glowColor: '#db2777' }, // Hyper Neon Magenta
+  { primaryColor: '#fb923c', secondaryColor: '#fde047', glowColor: '#ea580c' }, // Blazing Sunset Amber
+  { primaryColor: '#a78bfa', secondaryColor: '#38bdf8', glowColor: '#7c3aed' }, // Cyber Violet & Cyan
+  { primaryColor: '#4ade80', secondaryColor: '#22d3ee', glowColor: '#16a34a' }, // Turbo Lime & Aqua
+];
+
+const STADIUM_GOAL_SLOGANS: Record<
+  string,
+  { headlines: string[]; badge: string; primaryColor: string; secondaryColor: string; glowColor: string }
+> = {
+  COSMIC_SPACE: {
+    headlines: ['ORBITAL LASER STRIKE!', 'GALACTIC SCREAMER!', 'SUPERNOVA FINISH!', 'ZERO-G BANGER!'],
+    badge: '🪐 COSMIC ORBIT ARENA',
+    primaryColor: '#38bdf8',
+    secondaryColor: '#e879f9',
+    glowColor: '#7c3aed',
+  },
+  URBAN_CONCRETE: {
+    headlines: ['CONCRETE JUNGLE KING!', 'ROOFTOP BANGER!', 'STREET CAGE LEGEND!', 'BLACKTOP BULLSEYE!'],
+    badge: '🏙️ ROOFTOP BLOCK PARTY',
+    primaryColor: '#facc15',
+    secondaryColor: '#38bdf8',
+    glowColor: '#ea580c',
+  },
+  RIO_CLAY: {
+    headlines: ['COPACABANA JOGA BONITO!', 'SAMBA SCREAMER!', 'RIO CARNIVAL MAGIC!', 'SUNSET BEACH BANGER!'],
+    badge: '🌴 COPACABANA SUNSET CLAY',
+    primaryColor: '#fde047',
+    secondaryColor: '#2dd4bf',
+    glowColor: '#f97316',
+  },
+  TWILIGHT_SYNTH: {
+    headlines: ['NEON OVERDRIVE!', 'CYBERPUNK LASER!', 'SYNTHWAVE SCREAMER!', 'OUTRUN THE KEEPER!'],
+    badge: '🌆 CYBER METROPOLIS',
+    primaryColor: '#f472b6',
+    secondaryColor: '#22d3ee',
+    glowColor: '#9333ea',
+  },
+  ARCTIC_ICE: {
+    headlines: ['SUB-ZERO ICEBREAKER!', 'GLACIER FROST BANGER!', 'ABSOLUTE ZERO FINISH!', 'AURORA SCREAMER!'],
+    badge: '❄️ GLACIER FROST FJORD',
+    primaryColor: '#67e8f9',
+    secondaryColor: '#e0f2fe',
+    glowColor: '#0284c7',
+  },
+  VOLCANO_FORGE: {
+    headlines: ['MAGMA ERUPTION!', 'FORGED IN DRAGON FIRE!', 'VOLCANIC CANNONBALL!', 'MOLTEN LAVA STRIKE!'],
+    badge: '🌋 MAGMA CALDERA FORGE',
+    primaryColor: '#fb923c',
+    secondaryColor: '#fde047',
+    glowColor: '#dc2626',
+  },
+  TURF_AUTUMN: {
+    headlines: ['HARVEST FESTIVAL BANGER!', 'GOLDEN MAPLE STRIKE!', 'AUTUMN GALE THUNDER!', 'CRISP OCTOBER FINISH!'],
+    badge: '🍁 AUTUMN HARVEST PARK',
+    primaryColor: '#fb923c',
+    secondaryColor: '#fde047',
+    glowColor: '#b45309',
+  },
+  TURF_SAKURA: {
+    headlines: ['SAKURA STORM STRIKE!', 'KYOTO BLOSSOM MAGIC!', 'IMPERIAL ZEN FINISH!', 'PETAL TORNADO GOAL!'],
+    badge: '🌸 KYOTO SAKURA GARDEN',
+    primaryColor: '#f472b6',
+    secondaryColor: '#fef08a',
+    glowColor: '#db2777',
+  },
+  TURF_CHAMPIONS: {
+    headlines: ['CHAMPIONS CATHEDRAL ROAR!', 'EUROPEAN NIGHTS MAGIC!', 'IMMORTAL TROPHY FINISH!', 'HALL OF FAME STRIKE!'],
+    badge: '🏆 CHAMPIONS CATHEDRAL',
+    primaryColor: '#fde047',
+    secondaryColor: '#60a5fa',
+    glowColor: '#1d4ed8',
+  },
+  CLASSIC_TURF: {
+    headlines: ['ROYAL PARK SCREAMER!', 'BOTANICAL BANGER!', 'OLYMPIC STADIUM CLASS!', 'PURE ARCADE MAGIC!'],
+    badge: '⚽ ROYAL BOTANICAL ARENA',
+    primaryColor: '#34d399',
+    secondaryColor: '#fde047',
+    glowColor: '#059669',
+  },
+};
+
 /**
- * Generates dynamic, expressive goal celebration messages depending on both
- * the overall match score state (opening goal, equalizer, comeback lead, mercy KO, golden goal, buzzer beater)
- * and the specific type of goal scored (long-range Ronaldo screamer, curved bender, wall bank shot,
- * one-touch volley, tiki-taka Super Flow teamwork, or sweet-spot laser).
+ * Generates dynamic, expressive goal celebration messages depending on:
+ * - overall match score state (opening goal, equalizer, comeback lead, mercy KO, golden goal, buzzer beater)
+ * - specific type of goal scored (long-range Ronaldo screamer, curved bender, wall bank shot, one-touch volley, Super Flow)
+ * - stadium-specific themed slogans (`pitchTheme`)
+ * - personalized player profile name slogans (`playerName`)
+ * - vibrant multi-color celebration palettes
  */
 export function buildGoalCelebrationMessage(input: GoalCelebrationInput): GoalCelebrationSpec {
   const {
@@ -1312,7 +1407,19 @@ export function buildGoalCelebrationMessage(input: GoalCelebrationInput): GoalCe
     isGoldenGoal,
     matchTimeRemaining,
     opponentTag,
+    playerName,
+    pitchTheme,
+    variationIndex,
   } = input;
+
+  const cleanPlayerName = (playerName || '').trim();
+  const hasCustomPlayerName = cleanPlayerName.length > 0;
+  const nameUpper = (cleanPlayerName || 'PLAYER').toUpperCase();
+  const stadiumSpec = pitchTheme ? STADIUM_GOAL_SLOGANS[pitchTheme] : undefined;
+  const seed =
+    typeof variationIndex === 'number'
+      ? Math.abs(Math.floor(variationIndex))
+      : scoreYou * 7 + scoreAi * 13 + Math.floor(Math.max(0, matchTimeRemaining));
 
   const isCurved = spinMagnitude > 0.0032;
   const isSuperFlow = flowCombo >= PASSES_FOR_FLOW_BOOST;
@@ -1349,11 +1456,15 @@ export function buildGoalCelebrationMessage(input: GoalCelebrationInput): GoalCe
   } else if (isSuperFlow) {
     styleTag = `${flowCombo}-PASS TIKI-TAKA FLOW`;
     styleCallout = `LIQUID FOOTBALL! x${flowCombo} 🔥`;
-    styleColor = '#fde047';
+    styleColor = '#34d399';
   } else if (isPerfectStrike) {
     styleTag = 'SWEET-SPOT LASER MISSILE';
     styleCallout = 'TOP BINS LASER! 🎯';
     styleColor = '#34d399';
+  } else if (stadiumSpec) {
+    styleTag = stadiumSpec.headlines[seed % stadiumSpec.headlines.length].replace(/!$/, '');
+    styleCallout = stadiumSpec.headlines[(seed + 1) % stadiumSpec.headlines.length];
+    styleColor = stadiumSpec.primaryColor;
   }
 
   // 2. Describe the Overall Score Situation
@@ -1366,13 +1477,19 @@ export function buildGoalCelebrationMessage(input: GoalCelebrationInput): GoalCe
     scoreSituationTag = scoreYou >= 2 ? `HIGH-OCTANE EQUALIZER (${scoreDisplay})` : `ALL LEVEL (${scoreDisplay})`;
   } else if (scoringTeam === 'YOU') {
     if (prevScoreYou === 0 && prevScoreAi === 0) {
-      scoreSituationTag = `OPENING GOAL • YOU LEAD ${scoreDisplay}`;
+      scoreSituationTag = hasCustomPlayerName
+        ? `OPENING GOAL • ${nameUpper} LEADS ${scoreDisplay}`
+        : `OPENING GOAL • YOU LEAD ${scoreDisplay}`;
     } else if (prevScoreYou <= prevScoreAi && scoreYou > scoreAi && prevScoreAi >= 1) {
-      scoreSituationTag = `COMEBACK LEAD • YOU LEAD ${scoreDisplay}`;
+      scoreSituationTag = hasCustomPlayerName
+        ? `COMEBACK LEAD • ${nameUpper} LEADS ${scoreDisplay}`
+        : `COMEBACK LEAD • YOU LEAD ${scoreDisplay}`;
     } else if (leadDiff === 2) {
       scoreSituationTag = `2-GOAL CUSHION • 1 AWAY FROM MERCY (${scoreDisplay})`;
     } else {
-      scoreSituationTag = `YOU LEAD ${opponentTag.toUpperCase()} ${scoreDisplay}`;
+      scoreSituationTag = hasCustomPlayerName
+        ? `${nameUpper} LEADS ${opponentTag.toUpperCase()} ${scoreDisplay}`
+        : `YOU LEAD ${opponentTag.toUpperCase()} ${scoreDisplay}`;
     }
   } else {
     if (prevScoreYou === 0 && prevScoreAi === 0) {
@@ -1384,47 +1501,70 @@ export function buildGoalCelebrationMessage(input: GoalCelebrationInput): GoalCe
     }
   }
 
-  // 3. Combine Goal Type + Match Score Context into Headline, Subheadline & Pitch Callouts
+  // 3. Combine Goal Type + Match Score + Stadium & Profile Name Slogans
   if (scoringTeam === 'YOU') {
+    const pal = CELEBRATION_COLOR_PALETTES[seed % CELEBRATION_COLOR_PALETTES.length];
     let headline = 'GOOOAAAL!';
-    let kickerBadge = '⚽ GOAL SCORED';
-    let primaryColor = '#fde047';
-    let secondaryColor = '#38bdf8';
-    let glowColor = '#f59e0b';
+    let kickerBadge = hasCustomPlayerName ? `⚽ ${nameUpper} SCORES!` : '⚽ GOAL SCORED';
+    let primaryColor = pal.primaryColor;
+    let secondaryColor = pal.secondaryColor;
+    let glowColor = pal.glowColor;
+
+    const profileSlogans = [
+      `${nameUpper} IS UNSTOPPABLE!`,
+      `TAKE A BOW, ${nameUpper}!`,
+      `${nameUpper} BREAKS THE CAGE!`,
+      `${nameUpper} ON FIRE!`,
+      `KING OF THE CAGE: ${nameUpper}!`,
+      `${nameUpper} MAGIC!`,
+    ];
 
     if (isGoldenGoal) {
-      headline = isLongRange ? 'RONALDO GOLDEN GOAL!' : 'GOLDEN GOAL WINNER!';
-      kickerBadge = '👑 OVERTIME WALK-OFF';
+      headline = isLongRange
+        ? 'RONALDO GOLDEN GOAL!'
+        : hasCustomPlayerName && seed % 2 === 1
+          ? `${nameUpper} GOLDEN GOAL!`
+          : 'GOLDEN GOAL WINNER!';
+      kickerBadge = hasCustomPlayerName ? `👑 ${nameUpper} WALK-OFF WINNER` : '👑 OVERTIME WALK-OFF';
       primaryColor = '#fde047';
       secondaryColor = '#fbbf24';
       glowColor = '#eab308';
     } else if (isMercyKnockout) {
-      headline = isLongRange ? 'RONALDO MERCY KO!' : 'MERCY RULE KO!';
+      headline = isLongRange
+        ? 'RONALDO MERCY KO!'
+        : hasCustomPlayerName && seed % 2 === 1
+          ? `${nameUpper} MERCY KO!`
+          : 'MERCY RULE KO!';
       kickerBadge = `💥 +${MERCY_RULE_LEAD} WALK-OFF VICTORY`;
       primaryColor = '#fde047';
       secondaryColor = '#34d399';
       glowColor = '#f59e0b';
     } else if (isLongRange) {
       headline = 'RONALDO GOAL!';
-      kickerBadge = '🚀 LONG-RANGE SCREAMER';
+      kickerBadge = hasCustomPlayerName
+        ? `🚀 ${nameUpper} FROM DOWNTOWN!`
+        : '🚀 LONG-RANGE SCREAMER';
       primaryColor = '#fde047';
       secondaryColor = '#f97316';
       glowColor = '#eab308';
     } else if (wasWallBounce) {
-      headline = 'PINBALL WIZARD!';
+      headline =
+        hasCustomPlayerName && seed % 3 === 1
+          ? `${nameUpper}: PINBALL WIZARD!`
+          : 'PINBALL WIZARD!';
       kickerBadge = '🎱 CAGE BANK SHOT';
       primaryColor = '#38bdf8';
       secondaryColor = '#fde047';
       glowColor = '#0284c7';
     } else if (isCurved && isPerfectStrike) {
       headline = 'BEND IT LIKE BECKHAM!';
-      kickerBadge = '🌀 SWEET-SPOT CURVE';
+      kickerBadge = hasCustomPlayerName ? `🌀 ${nameUpper} CURVE LASER` : '🌀 SWEET-SPOT CURVE';
       primaryColor = '#e879f9';
       secondaryColor = '#fde047';
       glowColor = '#a855f7';
     } else if (isOneTouch) {
       headline = 'THUNDERVOLLEY!';
-      kickerBadge = '⚡ ONE-TOUCH FINISH';
+      kickerBadge = hasCustomPlayerName ? `⚡ ${nameUpper} ONE-TOUCH` : '⚡ ONE-TOUCH FINISH';
       primaryColor = '#fde047';
       secondaryColor = '#38bdf8';
       glowColor = '#f59e0b';
@@ -1436,7 +1576,7 @@ export function buildGoalCelebrationMessage(input: GoalCelebrationInput): GoalCe
       glowColor = '#059669';
     } else if (isBuzzerBeater) {
       headline = 'BUZZER BEATER!';
-      kickerBadge = '⏰ LAST-SECOND CLUTCH';
+      kickerBadge = hasCustomPlayerName ? `⏰ ${nameUpper} CLUTCH!` : '⏰ LAST-SECOND CLUTCH';
       primaryColor = '#fde047';
       secondaryColor = '#fb7185';
       glowColor = '#f59e0b';
@@ -1446,6 +1586,22 @@ export function buildGoalCelebrationMessage(input: GoalCelebrationInput): GoalCe
       primaryColor = '#38bdf8';
       secondaryColor = '#fde047';
       glowColor = '#0284c7';
+    } else if (stadiumSpec && (hasCustomPlayerName || typeof variationIndex === 'number') && seed % 3 === 1) {
+      // Stadium-specific headline variation!
+      headline = stadiumSpec.headlines[seed % stadiumSpec.headlines.length];
+      kickerBadge = `${stadiumSpec.badge} • ${scoreDisplay}`;
+      primaryColor = stadiumSpec.primaryColor;
+      secondaryColor = stadiumSpec.secondaryColor;
+      glowColor = stadiumSpec.glowColor;
+    } else if (hasCustomPlayerName && seed % 3 === 2) {
+      // Player profile name slogan variation!
+      headline = profileSlogans[seed % profileSlogans.length];
+      kickerBadge = stadiumSpec
+        ? `${stadiumSpec.badge} • ${scoreDisplay}`
+        : `🌟 ${nameUpper} SHOWTIME • ${scoreDisplay}`;
+      primaryColor = pal.primaryColor;
+      secondaryColor = pal.secondaryColor;
+      glowColor = pal.glowColor;
     } else if (prevScoreYou <= prevScoreAi && scoreYou > scoreAi && prevScoreAi >= 1) {
       headline = 'COMEBACK KINGS!';
       kickerBadge = `🔥 TURNED THE TABLES • ${scoreDisplay}`;
@@ -1453,13 +1609,23 @@ export function buildGoalCelebrationMessage(input: GoalCelebrationInput): GoalCe
       secondaryColor = '#34d399';
       glowColor = '#f59e0b';
     } else if (prevScoreYou === 0 && prevScoreAi === 0) {
-      headline = isPerfectStrike ? 'TOP BINS LASER!' : 'FIRST BLOOD!';
-      kickerBadge = `⚡ OPENING STRIKE • ${scoreDisplay}`;
-      primaryColor = '#fde047';
-      secondaryColor = '#38bdf8';
-      glowColor = '#eab308';
+      headline = isPerfectStrike
+        ? 'TOP BINS LASER!'
+        : stadiumSpec && typeof variationIndex === 'number' && seed % 2 === 1
+          ? stadiumSpec.headlines[seed % stadiumSpec.headlines.length]
+          : 'FIRST BLOOD!';
+      kickerBadge = stadiumSpec
+        ? `${stadiumSpec.badge} • ${scoreDisplay}`
+        : `⚡ OPENING STRIKE • ${scoreDisplay}`;
+      primaryColor = stadiumSpec ? stadiumSpec.primaryColor : pal.primaryColor;
+      secondaryColor = stadiumSpec ? stadiumSpec.secondaryColor : pal.secondaryColor;
+      glowColor = stadiumSpec ? stadiumSpec.glowColor : pal.glowColor;
     } else if (leadDiff === 2) {
-      headline = isPerfectStrike ? 'TOP BINS LASER!' : 'CRUISING! +2 LEAD!';
+      headline = isPerfectStrike
+        ? 'TOP BINS LASER!'
+        : hasCustomPlayerName
+          ? `${nameUpper} IS CRUISING! +2!`
+          : 'CRUISING! +2 LEAD!';
       kickerBadge = `🌊 TWO-GOAL CUSHION • ${scoreDisplay}`;
       primaryColor = '#34d399';
       secondaryColor = '#fde047';
@@ -1470,20 +1636,37 @@ export function buildGoalCelebrationMessage(input: GoalCelebrationInput): GoalCe
       primaryColor = '#fde047';
       secondaryColor = '#34d399';
       glowColor = '#eab308';
+    } else if (stadiumSpec) {
+      headline = stadiumSpec.headlines[seed % stadiumSpec.headlines.length];
+      kickerBadge = `${stadiumSpec.badge} • ${scoreDisplay}`;
+      primaryColor = stadiumSpec.primaryColor;
+      secondaryColor = stadiumSpec.secondaryColor;
+      glowColor = stadiumSpec.glowColor;
     }
 
-    const subheadline = `${styleTag} • ${scoreSituationTag}`;
+    const stadiumFlavorSub = stadiumSpec
+      ? ` • ${stadiumSpec.headlines[(seed + 2) % stadiumSpec.headlines.length].replace(/!$/, '')}`
+      : '';
+    const subheadline = `${styleTag} • ${scoreSituationTag}${stadiumFlavorSub}`;
     const pitchCallouts: { text: string; color: string }[] = [
-      { text: styleCallout, color: styleColor },
+      { text: styleCallout, color: primaryColor },
       {
         text: isMercyKnockout
           ? `MERCY KO! ${scoreDisplay}`
-          : scoreYou === scoreAi
-            ? `TIED UP ${scoreDisplay}!`
-            : `YOU LEAD ${scoreDisplay}!`,
-        color: '#34d399',
+          : hasCustomPlayerName
+            ? `${nameUpper} GOAL! (${scoreDisplay})`
+            : scoreYou === scoreAi
+              ? `TIED UP ${scoreDisplay}!`
+              : `YOU LEAD ${scoreDisplay}!`,
+        color: secondaryColor,
       },
     ];
+    if (stadiumSpec) {
+      pitchCallouts.push({
+        text: stadiumSpec.headlines[seed % stadiumSpec.headlines.length],
+        color: stadiumSpec.primaryColor,
+      });
+    }
 
     return {
       headline,
@@ -1518,5 +1701,554 @@ export function buildGoalCelebrationMessage(input: GoalCelebrationInput): GoalCe
     ledMessage: `${aiHeadline} • ${aiSub}`,
   };
 }
+
+// ============================================================================
+// MATCH ECONOMY, COUPON CODES & REAL POKIE MACHINE MATHS (REMATCH POKIES)
+// ============================================================================
+
+export const SLOT_SPIN_COST = 10;
+export const INITIAL_PLAYER_BALANCE = 30;
+export const BASE_JACKPOT_POOL = 1000;
+export const COUPON_HACK_CODE = 'HACK';
+export const COUPON_HACK_SPINS = 10;
+export const COUPON_HACK_REWARD = SLOT_SPIN_COST * COUPON_HACK_SPINS; // $100 (10 spins)
+
+export interface MatchMoneyRewardInput {
+  gameMode: 'CASUAL' | 'RANKED' | 'TOURNAMENT';
+  didWin: boolean;
+  isDraw?: boolean;
+  goalsFor: number;
+  goalsAgainst: number;
+  isMercyRule?: boolean;
+  tournamentRound?: number; // 0 = QF, 1 = SF, 2 = Final
+}
+
+export interface MatchMoneyRewardResult {
+  totalReward: number;
+  basePay: number;
+  winBonus: number;
+  goalBonus: number;
+  specialBonus: number;
+  modeMultiplierLabel: string;
+  summaryText: string;
+}
+
+/**
+ * Calculates money earned from completing a match based on performance and game mode.
+ */
+export function calculateMatchMoneyReward(input: MatchMoneyRewardInput): MatchMoneyRewardResult {
+  const {
+    gameMode,
+    didWin,
+    isDraw = false,
+    goalsFor,
+    goalsAgainst,
+    isMercyRule = false,
+    tournamentRound = 0,
+  } = input;
+
+  // Base participation payout by mode
+  const basePay =
+    gameMode === 'TOURNAMENT'
+      ? 12 + Math.max(0, tournamentRound) * 4
+      : gameMode === 'RANKED'
+        ? 10
+        : 6;
+
+  // Win / Draw bonus by mode
+  const winBonus = didWin
+    ? gameMode === 'TOURNAMENT'
+      ? 18 + Math.max(0, tournamentRound) * 10
+      : gameMode === 'RANKED'
+        ? 16
+        : 10
+    : isDraw
+      ? 4
+      : 0;
+
+  // Per-goal bonus ($3 in Casual, $4 in Ranked, $5 in Tournament)
+  const perGoalRate = gameMode === 'TOURNAMENT' ? 5 : gameMode === 'RANKED' ? 4 : 3;
+  const goalBonus = Math.max(0, goalsFor) * perGoalRate;
+
+  // Special performance bonuses (Mercy Rule KO +$8, Clean Sheet Win +$5)
+  let specialBonus = 0;
+  if (didWin && isMercyRule) specialBonus += 8;
+  if (didWin && goalsAgainst === 0 && goalsFor > 0) specialBonus += 5;
+
+  const totalReward = basePay + winBonus + goalBonus + specialBonus;
+  const modeMultiplierLabel =
+    gameMode === 'TOURNAMENT'
+      ? tournamentRound >= 2
+        ? 'CUP FINAL BONUS'
+        : tournamentRound === 1
+          ? 'SEMI-FINAL BONUS'
+          : 'TOURNAMENT PAY'
+      : gameMode === 'RANKED'
+        ? 'RANKED STAKES'
+        : 'CASUAL MATCH PAY';
+
+  const spinsEarned = Math.floor(totalReward / SLOT_SPIN_COST);
+  const summaryText =
+    spinsEarned >= 1
+      ? `+$${totalReward} EARNED (${spinsEarned} POKIE SPIN${spinsEarned > 1 ? 'S' : ''})`
+      : `+$${totalReward} MATCH CASH`;
+
+  return {
+    totalReward,
+    basePay,
+    winBonus,
+    goalBonus,
+    specialBonus,
+    modeMultiplierLabel,
+    summaryText,
+  };
+}
+
+export interface CouponRedemptionResult {
+  valid: boolean;
+  normalizedCode: string;
+  rewardAmount: number;
+  spinsGranted: number;
+  newBalance: number;
+  message: string;
+}
+
+/**
+ * Validates a profile coupon code. Entering "HACK" grants enough money for 10 spins ($100).
+ */
+export function redeemCouponCode(rawCode: string, currentBalance: number): CouponRedemptionResult {
+  const normalizedCode = (rawCode || '').trim().toUpperCase();
+  if (normalizedCode === COUPON_HACK_CODE) {
+    const rewardAmount = COUPON_HACK_REWARD;
+    const newBalance = Math.max(0, currentBalance) + rewardAmount;
+    return {
+      valid: true,
+      normalizedCode,
+      rewardAmount,
+      spinsGranted: COUPON_HACK_SPINS,
+      newBalance,
+      message: `COUPON "HACK" APPLIED! +$${rewardAmount} (${COUPON_HACK_SPINS} FREE SPINS) ADDED!`,
+    };
+  }
+  return {
+    valid: false,
+    normalizedCode,
+    rewardAmount: 0,
+    spinsGranted: 0,
+    newBalance: Math.max(0, currentBalance),
+    message: normalizedCode ? `INVALID COUPON "${normalizedCode}"` : 'ENTER A COUPON CODE',
+  };
+}
+
+export type PokieSymbolId =
+  | 'MEGA_TROPHY'
+  | 'WILD_STAR'
+  | 'DIAMOND_BALL'
+  | 'GOLD_BOOT'
+  | 'FIRE_FLAME'
+  | 'WHISTLE'
+  | 'CHERRY_CARD'
+  | 'SCATTER_CROWN';
+
+export interface PokieSymbolSpec {
+  id: PokieSymbolId;
+  name: string;
+  icon: string;
+  color: string;
+  bgHex: string;
+  borderHex: string;
+  payout3x: number; // Multiplier on total bet for 3-of-a-kind on a payline (or 3 scatters)
+  payout2x: number; // Multiplier on total bet for 2-of-a-kind from left (or 2 scatters)
+  isWild?: boolean;
+  isScatter?: boolean;
+  isJackpot?: boolean;
+}
+
+export const POKIE_SYMBOLS: Record<PokieSymbolId, PokieSymbolSpec> = {
+  MEGA_TROPHY: {
+    id: 'MEGA_TROPHY',
+    name: 'GRAND CUP',
+    icon: '🏆',
+    color: '#fde047',
+    bgHex: '#422006',
+    borderHex: '#facc15',
+    payout3x: 100, // Grand Jackpot trigger!
+    payout2x: 0,
+    isJackpot: true,
+  },
+  WILD_STAR: {
+    id: 'WILD_STAR',
+    name: '2X WILD STAR',
+    icon: '⭐',
+    color: '#38bdf8',
+    bgHex: '#082f49',
+    borderHex: '#38bdf8',
+    payout3x: 40,
+    payout2x: 0,
+    isWild: true,
+  },
+  DIAMOND_BALL: {
+    id: 'DIAMOND_BALL',
+    name: 'GOLDEN BALL',
+    icon: '⚽',
+    color: '#f8fafc',
+    bgHex: '#1e293b',
+    borderHex: '#94a3b8',
+    payout3x: 20,
+    payout2x: 0,
+  },
+  GOLD_BOOT: {
+    id: 'GOLD_BOOT',
+    name: 'STRIKER BOOT',
+    icon: '👟',
+    color: '#fb923c',
+    bgHex: '#431407',
+    borderHex: '#f97316',
+    payout3x: 12,
+    payout2x: 0,
+  },
+  FIRE_FLAME: {
+    id: 'FIRE_FLAME',
+    name: 'SUPER FLOW',
+    icon: '🔥',
+    color: '#f43f5e',
+    bgHex: '#4c0519',
+    borderHex: '#fb7185',
+    payout3x: 6,
+    payout2x: 0,
+  },
+  WHISTLE: {
+    id: 'WHISTLE',
+    name: 'REF WHISTLE',
+    icon: '📯',
+    color: '#a7f3d0',
+    bgHex: '#064e3b',
+    borderHex: '#34d399',
+    payout3x: 3,
+    payout2x: 0,
+  },
+  CHERRY_CARD: {
+    id: 'CHERRY_CARD',
+    name: 'LUCKY CHERRY',
+    icon: '🍒',
+    color: '#fda4af',
+    bgHex: '#3b0764',
+    borderHex: '#e879f9',
+    payout3x: 2,
+    payout2x: 1, // Pays 1x bet for 2-of-a-kind on any payline (classic pokie hit-frequency booster)
+  },
+  SCATTER_CROWN: {
+    id: 'SCATTER_CROWN',
+    name: 'CROWN SCATTER',
+    icon: '👑',
+    color: '#fcd34d',
+    bgHex: '#311042',
+    borderHex: '#f472b6',
+    payout3x: 15, // 3 anywhere on the 3x3 window pays 15x bet
+    payout2x: 1,  // 2 anywhere on the 3x3 window pays 1x bet
+    isScatter: true,
+  },
+};
+
+/**
+ * Real PAR-sheet weighted virtual reel strips (24 stops per reel).
+ * High-frequency low symbols keep hit rate ~34%, while rare Trophy & Wild Star stops create authentic high-volatility jackpot spikes.
+ */
+export const VIRTUAL_REEL_STRIPS: [PokieSymbolId[], PokieSymbolId[], PokieSymbolId[]] = [
+  // Reel 1 (Left)
+  [
+    'CHERRY_CARD', 'WHISTLE', 'FIRE_FLAME', 'CHERRY_CARD', 'GOLD_BOOT', 'WHISTLE',
+    'SCATTER_CROWN', 'CHERRY_CARD', 'FIRE_FLAME', 'DIAMOND_BALL', 'WHISTLE', 'CHERRY_CARD',
+    'WILD_STAR', 'FIRE_FLAME', 'CHERRY_CARD', 'WHISTLE', 'GOLD_BOOT', 'CHERRY_CARD',
+    'MEGA_TROPHY', 'WHISTLE', 'FIRE_FLAME', 'SCATTER_CROWN', 'DIAMOND_BALL', 'CHERRY_CARD',
+  ],
+  // Reel 2 (Center)
+  [
+    'WHISTLE', 'CHERRY_CARD', 'FIRE_FLAME', 'GOLD_BOOT', 'CHERRY_CARD', 'SCATTER_CROWN',
+    'WHISTLE', 'DIAMOND_BALL', 'CHERRY_CARD', 'FIRE_FLAME', 'WHISTLE', 'WILD_STAR',
+    'CHERRY_CARD', 'GOLD_BOOT', 'WHISTLE', 'FIRE_FLAME', 'CHERRY_CARD', 'MEGA_TROPHY',
+    'WHISTLE', 'SCATTER_CROWN', 'CHERRY_CARD', 'DIAMOND_BALL', 'FIRE_FLAME', 'WHISTLE',
+  ],
+  // Reel 3 (Right)
+  [
+    'FIRE_FLAME', 'CHERRY_CARD', 'WHISTLE', 'GOLD_BOOT', 'CHERRY_CARD', 'WHISTLE',
+    'SCATTER_CROWN', 'FIRE_FLAME', 'CHERRY_CARD', 'DIAMOND_BALL', 'WHISTLE', 'CHERRY_CARD',
+    'FIRE_FLAME', 'WILD_STAR', 'WHISTLE', 'CHERRY_CARD', 'GOLD_BOOT', 'FIRE_FLAME',
+    'MEGA_TROPHY', 'CHERRY_CARD', 'WHISTLE', 'SCATTER_CROWN', 'DIAMOND_BALL', 'WHISTLE',
+  ],
+];
+
+export interface PokiePaylineDefinition {
+  id: number;
+  name: string;
+  color: string;
+  /** Row index (0 = Top, 1 = Middle, 2 = Bottom) for [Reel0, Reel1, Reel2] */
+  rows: [number, number, number];
+}
+
+export const POKIE_PAYLINES: PokiePaylineDefinition[] = [
+  { id: 1, name: 'CENTER LINE', color: '#fde047', rows: [1, 1, 1] },
+  { id: 2, name: 'TOP LINE', color: '#38bdf8', rows: [0, 0, 0] },
+  { id: 3, name: 'BOTTOM LINE', color: '#fb7185', rows: [2, 2, 2] },
+  { id: 4, name: 'DIAG DOWN', color: '#34d399', rows: [0, 1, 2] },
+  { id: 5, name: 'DIAG UP', color: '#e879f9', rows: [2, 1, 0] },
+];
+
+export interface PokieWinningLine {
+  lineId: number;
+  lineName: string;
+  color: string;
+  symbol: PokieSymbolId;
+  matchCount: 2 | 3;
+  hasWildMultiplier: boolean;
+  payout: number;
+  rows: [number, number, number];
+}
+
+export type PokieWinTier = 'NONE' | 'SMALL' | 'BIG' | 'MEGA' | 'JACKPOT';
+
+export interface PokieEvaluationResult {
+  /** 3x3 matrix indexed as grid[reelIdx][rowIdx] where rowIdx 0=top, 1=mid, 2=bot */
+  grid: [
+    [PokieSymbolId, PokieSymbolId, PokieSymbolId],
+    [PokieSymbolId, PokieSymbolId, PokieSymbolId],
+    [PokieSymbolId, PokieSymbolId, PokieSymbolId]
+  ];
+  stopIndices: [number, number, number];
+  betAmount: number;
+  totalPayout: number;
+  netProfit: number;
+  winTier: PokieWinTier;
+  isJackpot: boolean;
+  winningLines: PokieWinningLine[];
+  scatterCount: number;
+  scatterPayout: number;
+  scatterPositions: { reel: number; row: number }[];
+  isTeaserTwoReels: boolean;
+  updatedJackpotPool: number;
+  headline: string;
+}
+
+/**
+ * Extracts a 3x3 visible symbol window from 3 virtual reel stop indices (representing the middle row stop on each reel).
+ */
+export function getPokieGridFromStops(
+  stops: [number, number, number]
+): [
+  [PokieSymbolId, PokieSymbolId, PokieSymbolId],
+  [PokieSymbolId, PokieSymbolId, PokieSymbolId],
+  [PokieSymbolId, PokieSymbolId, PokieSymbolId]
+] {
+  const buildColumn = (reelIdx: 0 | 1 | 2, midStop: number): [PokieSymbolId, PokieSymbolId, PokieSymbolId] => {
+    const strip = VIRTUAL_REEL_STRIPS[reelIdx];
+    const len = strip.length;
+    const normMid = ((midStop % len) + len) % len;
+    const topIdx = (normMid - 1 + len) % len;
+    const botIdx = (normMid + 1) % len;
+    return [strip[topIdx], strip[normMid], strip[botIdx]];
+  };
+
+  return [
+    buildColumn(0, stops[0]),
+    buildColumn(1, stops[1]),
+    buildColumn(2, stops[2]),
+  ];
+}
+
+/**
+ * Evaluates a 3x3 pokie symbol grid using authentic 5-payline + Scatter + 2x Wild Star + Progressive Grand Jackpot math.
+ */
+export function evaluatePokieGrid(
+  grid: [
+    [PokieSymbolId, PokieSymbolId, PokieSymbolId],
+    [PokieSymbolId, PokieSymbolId, PokieSymbolId],
+    [PokieSymbolId, PokieSymbolId, PokieSymbolId]
+  ],
+  betAmount = SLOT_SPIN_COST,
+  currentJackpotPool = BASE_JACKPOT_POOL,
+  stopIndices: [number, number, number] = [0, 0, 0]
+): PokieEvaluationResult {
+  const winningLines: PokieWinningLine[] = [];
+  let totalPayout = 0;
+  let isJackpot = false;
+  let isTeaserTwoReels = false;
+
+  // Progressive jackpot pool grows by 20% of each bet prior to evaluation
+  let updatedJackpotPool = Math.round(currentJackpotPool + Math.max(1, betAmount * 0.2));
+
+  // 1. Evaluate all 5 active paylines
+  for (const line of POKIE_PAYLINES) {
+    const s0 = grid[0][line.rows[0]];
+    const s1 = grid[1][line.rows[1]];
+    const s2 = grid[2][line.rows[2]];
+    const lineSyms = [s0, s1, s2];
+
+    // Check if first 2 reels align on a high-value symbol or wild (triggers Reel 3 teaser drumroll!)
+    if (
+      (s0 === s1 && s0 !== 'SCATTER_CROWN' && s0 !== 'CHERRY_CARD') ||
+      (s0 === 'WILD_STAR' && s1 !== 'SCATTER_CROWN') ||
+      (s1 === 'WILD_STAR' && s0 !== 'SCATTER_CROWN')
+    ) {
+      isTeaserTwoReels = true;
+    }
+
+    // Scatters do not form line wins; they pay anywhere
+    if (s0 === 'SCATTER_CROWN') continue;
+
+    // Determine target base symbol for the line (first non-wild symbol, or WILD_STAR if all wilds)
+    let baseSym: PokieSymbolId = 'WILD_STAR';
+    for (const sym of lineSyms) {
+      if (sym !== 'WILD_STAR') {
+        baseSym = sym;
+        break;
+      }
+    }
+
+    const spec = POKIE_SYMBOLS[baseSym];
+    // MEGA_TROPHY cannot be substituted by WILD_STAR for the Grand Jackpot (pure 3x Trophy = Grand Jackpot, with Wild = 40x Major)
+    const canSubWild = baseSym !== 'SCATTER_CROWN' && baseSym !== 'MEGA_TROPHY';
+
+    const matchesReel = (sym: PokieSymbolId) =>
+      sym === baseSym || (canSubWild && sym === 'WILD_STAR');
+
+    if (s0 === 'MEGA_TROPHY' && s1 === 'MEGA_TROPHY' && s2 === 'MEGA_TROPHY') {
+      // Pure 3x Trophy hits the progressive Grand Jackpot!
+      isJackpot = true;
+      const jpWin = Math.max(betAmount * spec.payout3x, updatedJackpotPool);
+      totalPayout += jpWin;
+      winningLines.push({
+        lineId: line.id,
+        lineName: line.name,
+        color: line.color,
+        symbol: 'MEGA_TROPHY',
+        matchCount: 3,
+        hasWildMultiplier: false,
+        payout: jpWin,
+        rows: line.rows,
+      });
+    } else if (matchesReel(s0) && matchesReel(s1) && matchesReel(s2)) {
+      const hasWildSub = baseSym !== 'WILD_STAR' && lineSyms.includes('WILD_STAR');
+      // Wild Star substitution doubles the payline win (classic pokie 2x Wild rule)
+      const wildMult = hasWildSub ? 2 : 1;
+      const lineWin = betAmount * spec.payout3x * wildMult;
+      totalPayout += lineWin;
+      winningLines.push({
+        lineId: line.id,
+        lineName: line.name,
+        color: line.color,
+        symbol: baseSym,
+        matchCount: 3,
+        hasWildMultiplier: hasWildSub,
+        payout: lineWin,
+        rows: line.rows,
+      });
+    } else if (matchesReel(s0) && matchesReel(s1) && spec.payout2x > 0) {
+      const hasWildSub = baseSym !== 'WILD_STAR' && (s0 === 'WILD_STAR' || s1 === 'WILD_STAR');
+      const wildMult = hasWildSub ? 2 : 1;
+      const lineWin = betAmount * spec.payout2x * wildMult;
+      totalPayout += lineWin;
+      winningLines.push({
+        lineId: line.id,
+        lineName: line.name,
+        color: line.color,
+        symbol: baseSym,
+        matchCount: 2,
+        hasWildMultiplier: hasWildSub,
+        payout: lineWin,
+        rows: line.rows,
+      });
+    }
+  }
+
+  // 2. Evaluate Anywhere Crown Scatters across all 9 cells
+  const scatterPositions: { reel: number; row: number }[] = [];
+  for (let r = 0; r < 3; r++) {
+    for (let row = 0; row < 3; row++) {
+      if (grid[r][row] === 'SCATTER_CROWN') {
+        scatterPositions.push({ reel: r, row });
+      }
+    }
+  }
+  const scatterCount = scatterPositions.length;
+  const scatterSpec = POKIE_SYMBOLS.SCATTER_CROWN;
+  let scatterPayout = 0;
+  if (scatterCount >= 3) {
+    scatterPayout = betAmount * scatterSpec.payout3x;
+  } else if (scatterCount === 2) {
+    scatterPayout = betAmount * scatterSpec.payout2x;
+  }
+  totalPayout += scatterPayout;
+
+  // Check if reels 1 & 2 have 2 scatters (teaser for 3rd scatter!)
+  const scattersInFirstTwoReels = scatterPositions.filter((p) => p.reel < 2).length;
+  if (scattersInFirstTwoReels >= 2) {
+    isTeaserTwoReels = true;
+  }
+
+  if (isJackpot) {
+    updatedJackpotPool = BASE_JACKPOT_POOL;
+  }
+
+  const mult = betAmount > 0 ? totalPayout / betAmount : 0;
+  const winTier: PokieWinTier = isJackpot
+    ? 'JACKPOT'
+    : mult >= 20
+      ? 'MEGA'
+      : mult >= 6
+        ? 'BIG'
+        : totalPayout > 0
+          ? 'SMALL'
+          : 'NONE';
+
+  const headline = isJackpot
+    ? `🏆 GRAND JACKPOT! +$${totalPayout}! 🏆`
+    : winTier === 'MEGA'
+      ? `🔥 MEGA PAYDAY! +$${totalPayout}! 🔥`
+      : winTier === 'BIG'
+        ? `⚡ BIG WIN! +$${totalPayout}! ⚡`
+        : winTier === 'SMALL'
+          ? `💰 WINNER! +$${totalPayout}`
+          : isTeaserTwoReels
+            ? 'SO CLOSE! SPIN AGAIN!'
+            : 'NO WIN • TRY AGAIN!';
+
+  return {
+    grid,
+    stopIndices,
+    betAmount,
+    totalPayout,
+    netProfit: totalPayout - betAmount,
+    winTier,
+    isJackpot,
+    winningLines,
+    scatterCount,
+    scatterPayout,
+    scatterPositions,
+    isTeaserTwoReels,
+    updatedJackpotPool,
+    headline,
+  };
+}
+
+/**
+ * Spins the 3 virtual reels using either an RNG function or explicit forced stop indices (for deterministic testing).
+ */
+export function spinPokieReels(
+  betAmount = SLOT_SPIN_COST,
+  currentJackpotPool = BASE_JACKPOT_POOL,
+  rng: () => number = Math.random,
+  forcedStops?: [number, number, number]
+): PokieEvaluationResult {
+  const stops: [number, number, number] = forcedStops
+    ? [forcedStops[0], forcedStops[1], forcedStops[2]]
+    : [
+        Math.floor(rng() * VIRTUAL_REEL_STRIPS[0].length),
+        Math.floor(rng() * VIRTUAL_REEL_STRIPS[1].length),
+        Math.floor(rng() * VIRTUAL_REEL_STRIPS[2].length),
+      ];
+  const grid = getPokieGridFromStops(stops);
+  return evaluatePokieGrid(grid, betAmount, currentJackpotPool, stops);
+}
+
 
 
