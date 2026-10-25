@@ -19,7 +19,8 @@ body,
   overflow: hidden;
   overscroll-behavior: none;
   background-color: #63d297;
-  font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-family: 'Chakra Petch', -apple-system, BlinkMacSystemFont, sans-serif;
+  letter-spacing: 0.01em;
   color: #0f172a;
   touch-action: none;
 }
@@ -29,16 +30,18 @@ h2,
 h3,
 #menuTitleVisible,
 #splashScreen {
-  font-family: 'Bricolage Grotesque', 'DM Sans', sans-serif;
-}
-
-.font-display {
-  font-family: 'Barlow Condensed', 'Bricolage Grotesque', sans-serif;
+  font-family: 'Russo One', 'Chakra Petch', sans-serif;
   letter-spacing: 0.03em;
 }
 
+.font-display {
+  font-family: 'Russo One', 'Chakra Petch', sans-serif;
+  letter-spacing: 0.04em;
+}
+
 .font-heading {
-  font-family: 'Bricolage Grotesque', 'DM Sans', sans-serif;
+  font-family: 'Russo One', 'Chakra Petch', sans-serif;
+  letter-spacing: 0.025em;
 }
 
 .app-viewport {
@@ -60,25 +63,57 @@ canvas {
 }
 
 .font-mono-num {
-  font-family: 'IBM Plex Mono', monospace;
+  font-family: 'Space Mono', monospace;
   font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
 }
 
-/* Crisp Indie Pixel-Sports UI Pills & Modals */
+/* Tactile Arcade Sports Broadcast Panels & Tags (Non-AI Angular Aesthetic) */
 .glass-pill {
-  background: rgba(255, 255, 255, 0.96);
+  background: #f7f6f0;
   border: 2.5px solid #0f172a;
+  border-radius: 0.55rem !important;
   box-shadow: 0 3px 0 #0f172a;
 }
 
 .glass-modal {
-  background: #ffffff;
+  background: linear-gradient(180deg, #faf9f4 0%, #f1efe6 100%);
   border: 3px solid #0f172a;
-  box-shadow: 0 8px 0 #0f172a, 0 20px 35px -10px rgba(15, 23, 42, 0.35);
+  border-radius: 0.85rem !important;
+  box-shadow: 0 7px 0 #0f172a, inset 0 2px 0 rgba(255, 255, 255, 0.9);
+}
+
+/* Sharpen generic rounded utilities inside modals & HUD for an authentic arcade broadcast look */
+#menuOverlay .rounded-3xl,
+#menuOverlay .rounded-2xl,
+#preMatchVsOverlay .rounded-3xl,
+#preMatchVsOverlay .rounded-2xl,
+#editProfileModal .rounded-3xl,
+#editProfileModal .rounded-2xl,
+#clubShopModal .rounded-3xl,
+#clubShopModal .rounded-2xl,
+#onlineLeaderboardModal .rounded-3xl,
+#onlineLeaderboardModal .rounded-2xl,
+#slotMachineModal .rounded-3xl,
+#slotMachineModal .rounded-2xl,
+#tournamentWinOverlay .rounded-3xl,
+#tournamentWinOverlay .rounded-2xl {
+  border-radius: 0.65rem !important;
+}
+
+#menuOverlay .rounded-full,
+#preMatchVsOverlay .rounded-full,
+#editProfileModal .rounded-full,
+#clubShopModal .rounded-full,
+#onlineLeaderboardModal .rounded-full,
+#slotMachineModal .rounded-full {
+  border-radius: 0.38rem !important;
 }
 
 .btn-clean {
-  transition: transform 0.1s ease, background-color 0.12s ease, box-shadow 0.1s ease;
+  font-family: 'Chakra Petch', sans-serif;
+  letter-spacing: 0.03em;
+  transition: transform 0.08s ease, background-color 0.12s ease, box-shadow 0.08s ease;
 }
 .btn-clean:hover {
   transform: translateY(-1px);
@@ -88,13 +123,16 @@ canvas {
 }
 
 .indie-cta-btn {
+  font-family: 'Russo One', 'Chakra Petch', sans-serif;
+  letter-spacing: 0.045em;
   border: 3px solid #0f172a;
-  box-shadow: 0 4px 0 #0f172a;
+  border-radius: 0.6rem !important;
+  box-shadow: 0 4px 0 #0f172a, inset 0 2px 0 rgba(255, 255, 255, 0.45);
   transition: transform 0.08s ease, box-shadow 0.08s ease, background-color 0.12s ease;
 }
 .indie-cta-btn:hover {
   transform: translateY(-1px);
-  box-shadow: 0 5px 0 #0f172a;
+  box-shadow: 0 5px 0 #0f172a, inset 0 2px 0 rgba(255, 255, 255, 0.55);
 }
 .indie-cta-btn:active {
   transform: translateY(3px);
@@ -447,7 +485,11 @@ canvas {
   #matchmakingCard,
   #menuBottomBar {
     padding: 0.65rem 0.75rem !important;
-    border-radius: 1.15rem !important;
+    border-radius: 0.85rem !important;
+  }
+
+  #homeStadiumTrueRatioPreview {
+    width: 4.5rem !important;
   }
 
   .arena-theme-btn {
@@ -527,24 +569,23 @@ canvas {
   #preMatchVsOverlay,
   #tournamentWinOverlay,
   #editProfileModal {
-    padding-top: max(0.3rem, calc(env(safe-area-inset-top) + 0.2rem)) !important;
-    padding-bottom: max(0.3rem, calc(env(safe-area-inset-bottom) + 0.2rem)) !important;
-    padding-left: max(0.75rem, calc(env(safe-area-inset-left) + 0.5rem)) !important;
-    padding-right: max(0.75rem, calc(env(safe-area-inset-right) + 0.5rem)) !important;
+    padding-top: max(0.25rem, calc(env(safe-area-inset-top) + 0.15rem)) !important;
+    padding-bottom: max(0.25rem, calc(env(safe-area-inset-bottom) + 0.15rem)) !important;
+    padding-left: max(0.65rem, calc(env(safe-area-inset-left) + 0.4rem)) !important;
+    padding-right: max(0.65rem, calc(env(safe-area-inset-right) + 0.4rem)) !important;
   }
 
-  /* Centered, well-proportioned 2-column Home Menu & Post-Match UI in Phone Landscape (never stretched full-width) */
+  /* Centered, well-proportioned 2-column Home Menu & Post-Match UI in Phone Landscape */
   #menuModalCard {
-    gap: 0.32rem !important;
-    max-width: 42rem !important;
+    gap: 0.3rem !important;
+    max-width: 48rem !important;
     margin-left: auto !important;
     margin-right: auto !important;
   }
 
   #menuTopBar {
-    padding: 0.3rem 0.7rem !important;
-    margin-bottom: 0.15rem !important;
-    border-radius: 1.05rem !important;
+    padding: 0.28rem 0.65rem !important;
+    margin-bottom: 0.1rem !important;
   }
 
   #menuMainGrid:not(.hidden):not(:has(#menuLeftCol.hidden)) {
@@ -557,13 +598,15 @@ canvas {
     grid-column: span 7 / span 7 !important;
     padding: 0.45rem 0.65rem !important;
     gap: 0.3rem !important;
-    border-radius: 1.05rem !important;
   }
 
   #matchmakingCard {
     grid-column: span 5 / span 5 !important;
     padding: 0.45rem 0.6rem !important;
-    border-radius: 1.05rem !important;
+  }
+
+  #homeStadiumTrueRatioPreview {
+    width: 4.25rem !important;
   }
 
   #mmYouAvatar,
@@ -573,40 +616,41 @@ canvas {
   }
 
   #menuBottomBar {
-    padding: 0.35rem 0.65rem !important;
-    border-radius: 1.05rem !important;
+    padding: 0.32rem 0.6rem !important;
   }
 
   #menuActionsRow {
     flex-direction: row !important;
     flex-wrap: wrap !important;
     justify-content: center !important;
-    gap: 0.45rem !important;
+    gap: 0.35rem !important;
   }
 
   #startBtn {
     width: auto !important;
-    min-width: 170px !important;
+    min-width: 155px !important;
     max-width: none !important;
-    min-height: 36px !important;
-    padding: 0.32rem 1rem !important;
-    font-size: 0.72rem !important;
+    min-height: 34px !important;
+    padding: 0.28rem 0.85rem !important;
+    font-size: 0.7rem !important;
     margin-left: 0 !important;
     margin-right: 0 !important;
   }
 
   #openSlotMachineBtn,
+  #openShopBtn,
+  #openLeaderboardBtn,
   #rematchSameBtn,
   #mainMenuBtn,
   #resumeBtn,
   #forfeitBtn,
   #howToPlayBtn {
     width: auto !important;
-    min-width: 120px !important;
+    min-width: 96px !important;
     max-width: none !important;
     min-height: 34px !important;
-    padding: 0.25rem 0.85rem !important;
-    font-size: 0.7rem !important;
+    padding: 0.24rem 0.68rem !important;
+    font-size: 0.68rem !important;
   }
 
   #howToPlayWrap {

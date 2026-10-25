@@ -12,6 +12,7 @@ import {
   getDoc,
   setDoc,
   updateDoc,
+  deleteDoc,
   getDocFromServer,
   collection,
   query,
@@ -219,3 +220,18 @@ export function subscribeToOnlineLeaderboard(
     }
   );
 }
+
+export async function deleteProfileFromFirestoreLeaderboard(): Promise<boolean> {
+  const currentUser = auth.currentUser;
+  if (!currentUser) return false;
+  const uid = currentUser.uid;
+  const path = `${FIREBASE_COLLECTION_NAME}/${uid}`;
+  try {
+    await deleteDoc(doc(db, FIREBASE_COLLECTION_NAME, uid));
+    return true;
+  } catch (err) {
+    handleFirestoreError(err, OperationType.DELETE, path);
+    return false;
+  }
+}
+

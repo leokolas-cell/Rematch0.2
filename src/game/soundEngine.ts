@@ -4,6 +4,7 @@
  */
 
 import type { PitchThemeId } from './graphicsConfig';
+import type { PokieMachineId } from './rules';
 
 declare global {
   interface Window {
@@ -691,6 +692,166 @@ export const STADIUM_MUSIC_PROFILES: Record<PitchThemeId, StadiumMusicProfile> =
   },
 };
 
+export interface PokieSoundProfile {
+  id: PokieMachineId;
+  title: string;
+  spinClunkStart: number;
+  spinClunkEnd: number;
+  spinWave: OscillatorType;
+  spinNotes: number[];
+  spinNoiseFreq: number;
+  tickWave: OscillatorType;
+  tickBaseFreq: number;
+  tickReelStep: number;
+  stopWave: OscillatorType;
+  stopPitches: [number, number, number];
+  stopPingMult: number;
+  teaserNotes: number[];
+  winWave: OscillatorType;
+  winNotes: {
+    SMALL: number[];
+    BIG: number[];
+    MEGA: number[];
+    JACKPOT: number[];
+  };
+  holdSirenWave: OscillatorType;
+  holdSirenStart: number;
+  holdSirenEnd: number;
+  holdTriggerNotes: number[];
+  orbLockScale: number[];
+}
+
+export const POKIE_SOUND_PROFILES: Record<PokieMachineId, PokieSoundProfile> = {
+  CHAMPIONS_GOLD: {
+    id: 'CHAMPIONS_GOLD',
+    title: 'Royal Stadium Brass & Marimba',
+    spinClunkStart: 150,
+    spinClunkEnd: 48,
+    spinWave: 'triangle',
+    spinNotes: [330, 440, 587.33, 783.99, 1046.5],
+    spinNoiseFreq: 1950,
+    tickWave: 'triangle',
+    tickBaseFreq: 680,
+    tickReelStep: 105,
+    stopWave: 'triangle',
+    stopPitches: [196.0, 246.94, 329.63],
+    stopPingMult: 3.0,
+    teaserNotes: [587.33, 783.99, 1046.5, 1318.5],
+    winWave: 'triangle',
+    winNotes: {
+      SMALL: [523.25, 659.25, 783.99, 1046.5],
+      BIG: [523.25, 659.25, 783.99, 1046.5, 1318.51, 1567.98],
+      MEGA: [523.25, 659.25, 783.99, 1046.5, 987.77, 1174.66, 1318.51, 1567.98, 2093.0],
+      JACKPOT: [
+        523.25, 659.25, 783.99, 1046.5, 783.99, 1046.5, 1318.51, 1567.98,
+        1318.51, 1567.98, 2093.0, 2637.02,
+      ],
+    },
+    holdSirenWave: 'sawtooth',
+    holdSirenStart: 320,
+    holdSirenEnd: 960,
+    holdTriggerNotes: [523.25, 659.25, 783.99, 1046.5, 1318.51, 1567.98, 2093.0],
+    orbLockScale: [523.25, 587.33, 659.25, 783.99, 880.0, 1046.5, 1174.66, 1318.51, 1567.98],
+  },
+  COSMIC_NEON: {
+    id: 'COSMIC_NEON',
+    title: 'Zero-G Cyber Laser & FM Synth',
+    spinClunkStart: 420,
+    spinClunkEnd: 110,
+    spinWave: 'sine',
+    spinNotes: [493.88, 659.25, 783.99, 987.77, 1318.51],
+    spinNoiseFreq: 3400,
+    tickWave: 'sine',
+    tickBaseFreq: 1140,
+    tickReelStep: 165,
+    stopWave: 'sine',
+    stopPitches: [293.66, 369.99, 493.88],
+    stopPingMult: 3.6,
+    teaserNotes: [659.25, 987.77, 1174.66, 1567.98],
+    winWave: 'sine',
+    winNotes: {
+      SMALL: [659.25, 783.99, 987.77, 1318.51],
+      BIG: [659.25, 783.99, 987.77, 1174.66, 1318.51, 1975.53],
+      MEGA: [493.88, 659.25, 783.99, 987.77, 1174.66, 1318.51, 1567.98, 1975.53, 2637.02],
+      JACKPOT: [
+        659.25, 987.77, 1174.66, 1318.51, 987.77, 1318.51, 1567.98, 1975.53,
+        1567.98, 1975.53, 2349.32, 2959.96,
+      ],
+    },
+    holdSirenWave: 'sine',
+    holdSirenStart: 480,
+    holdSirenEnd: 1680,
+    holdTriggerNotes: [659.25, 783.99, 987.77, 1174.66, 1318.51, 1975.53, 2637.02],
+    orbLockScale: [659.25, 739.99, 783.99, 987.77, 1174.66, 1318.51, 1479.98, 1567.98, 1975.53],
+  },
+  VOLCANO_INFERNO: {
+    id: 'VOLCANO_INFERNO',
+    title: 'Molten Caldera Forge Anvil & Sub-Bass',
+    spinClunkStart: 112,
+    spinClunkEnd: 34,
+    spinWave: 'sawtooth',
+    spinNotes: [246.94, 329.63, 349.23, 415.3, 493.88],
+    spinNoiseFreq: 1150,
+    tickWave: 'square',
+    tickBaseFreq: 460,
+    tickReelStep: 75,
+    stopWave: 'sawtooth',
+    stopPitches: [130.81, 164.81, 207.65],
+    stopPingMult: 2.5,
+    teaserNotes: [329.63, 415.3, 493.88, 659.25],
+    winWave: 'sawtooth',
+    winNotes: {
+      SMALL: [329.63, 415.3, 493.88, 659.25],
+      BIG: [329.63, 349.23, 415.3, 493.88, 659.25, 830.61],
+      MEGA: [329.63, 349.23, 415.3, 493.88, 523.25, 659.25, 830.61, 987.77, 1318.51],
+      JACKPOT: [
+        329.63, 415.3, 493.88, 659.25, 493.88, 659.25, 830.61, 987.77,
+        830.61, 987.77, 1318.51, 1661.22,
+      ],
+    },
+    holdSirenWave: 'sawtooth',
+    holdSirenStart: 180,
+    holdSirenEnd: 640,
+    holdTriggerNotes: [329.63, 349.23, 415.3, 493.88, 659.25, 830.61, 1318.51],
+    orbLockScale: [329.63, 349.23, 415.3, 440.0, 493.88, 523.25, 659.25, 830.61, 987.77],
+  },
+  HIGH_ROLLER_ROYAL: {
+    id: 'HIGH_ROLLER_ROYAL',
+    title: 'VIP 24K Bullion Vault & Crystal Harp',
+    spinClunkStart: 220,
+    spinClunkEnd: 68,
+    spinWave: 'triangle',
+    spinNotes: [622.25, 783.99, 932.33, 1174.66, 1567.98],
+    spinNoiseFreq: 2800,
+    tickWave: 'sine',
+    tickBaseFreq: 1380,
+    tickReelStep: 140,
+    stopWave: 'triangle',
+    stopPitches: [311.13, 392.0, 523.25],
+    stopPingMult: 4.0,
+    teaserNotes: [783.99, 932.33, 1174.66, 1567.98],
+    winWave: 'triangle',
+    winNotes: {
+      SMALL: [622.25, 783.99, 932.33, 1244.51],
+      BIG: [622.25, 783.99, 932.33, 1174.66, 1567.98, 1864.66],
+      MEGA: [622.25, 783.99, 932.33, 1174.66, 1244.51, 1567.98, 1864.66, 2349.32, 2489.02],
+      JACKPOT: [
+        622.25, 783.99, 932.33, 1244.51, 932.33, 1244.51, 1567.98, 1864.66,
+        1567.98, 1864.66, 2489.02, 3135.96,
+      ],
+    },
+    holdSirenWave: 'triangle',
+    holdSirenStart: 392,
+    holdSirenEnd: 1244.51,
+    holdTriggerNotes: [622.25, 783.99, 932.33, 1174.66, 1567.98, 1864.66, 2489.02],
+    orbLockScale: [622.25, 698.46, 783.99, 932.33, 1046.5, 1174.66, 1244.51, 1567.98, 1864.66],
+  },
+};
+
+export function getPokieSoundProfile(machineId: PokieMachineId): PokieSoundProfile {
+  return POKIE_SOUND_PROFILES[machineId] || POKIE_SOUND_PROFILES.CHAMPIONS_GOLD;
+}
+
 export function getStadiumMusicProfile(themeId: PitchThemeId): StadiumMusicProfile {
   return STADIUM_MUSIC_PROFILES[themeId] || STADIUM_MUSIC_PROFILES.CLASSIC_TURF;
 }
@@ -707,6 +868,7 @@ export class IndieSoundEngine {
   musicTimer: ReturnType<typeof setInterval> | null = null;
   toneReady = false;
   currentPitchTheme: PitchThemeId = 'CLASSIC_TURF';
+  currentPokieMachine: PokieMachineId = 'CHAMPIONS_GOLD';
   getGameState: () => string;
   getFlowCombo: () => number;
   getPitchTheme: () => PitchThemeId;
@@ -733,6 +895,10 @@ export class IndieSoundEngine {
       // Align step to start of bar so stadium theme switches feel immediately musical
       this.stepIndex = 0;
     }
+  }
+
+  setPokieMachine(machineId: PokieMachineId) {
+    this.currentPokieMachine = machineId;
   }
 
   private getSilentWavUrl(): string {
@@ -1766,51 +1932,54 @@ export class IndieSoundEngine {
     this.playNoiseBurst(0.55, 1600, 0.22, 1.2);
   }
 
-  playSlotSpin() {
+  playSlotSpin(machineOverride?: PokieMachineId) {
     this.unlock();
+    if (machineOverride) this.currentPokieMachine = machineOverride;
     if (!this.ensureReady() || !this.ctx || !this.master) return;
     const now = this.ctx.currentTime;
-    // Mechanical arcade lever clunk + ascending 16-bit synth sweep
+    const prof = getPokieSoundProfile(this.currentPokieMachine);
+
+    // Machine-themed lever clunk / warp / anvil / vault lock + ascending synth sweep
     const clunk = this.ctx.createOscillator();
     const cg = this.ctx.createGain();
-    clunk.type = 'Sawtooth'.toLowerCase() as OscillatorType;
-    clunk.frequency.setValueAtTime(150, now);
-    clunk.frequency.exponentialRampToValueAtTime(48, now + 0.065);
+    clunk.type = prof.id === 'COSMIC_NEON' ? 'sine' : 'sawtooth';
+    clunk.frequency.setValueAtTime(prof.spinClunkStart, now);
+    clunk.frequency.exponentialRampToValueAtTime(prof.spinClunkEnd, now + 0.068);
     cg.gain.setValueAtTime(0.24, now);
-    cg.gain.exponentialRampToValueAtTime(0.0001, now + 0.075);
+    cg.gain.exponentialRampToValueAtTime(0.0001, now + 0.078);
     clunk.connect(cg);
     cg.connect(this.master);
     clunk.start(now);
-    clunk.stop(now + 0.08);
+    clunk.stop(now + 0.085);
 
-    [330, 440, 587.33, 783.99, 1046.5].forEach((freq, idx) => {
+    prof.spinNotes.forEach((freq, idx) => {
       if (!this.ctx || !this.master) return;
       const osc = this.ctx.createOscillator();
       const g = this.ctx.createGain();
-      osc.type = 'triangle';
+      osc.type = prof.spinWave;
       osc.frequency.setValueAtTime(freq, now + idx * 0.024);
       g.gain.setValueAtTime(0.0001, now + idx * 0.024);
-      g.gain.linearRampToValueAtTime(0.2, now + idx * 0.024 + 0.006);
+      g.gain.linearRampToValueAtTime(prof.spinWave === 'sawtooth' ? 0.14 : 0.2, now + idx * 0.024 + 0.006);
       g.gain.exponentialRampToValueAtTime(0.0001, now + idx * 0.024 + 0.085);
       osc.connect(g);
       g.connect(this.master);
       osc.start(now + idx * 0.024);
       osc.stop(now + idx * 0.024 + 0.09);
     });
-    this.playNoiseBurst(0.055, 1950, 0.16, 1.6);
+    this.playNoiseBurst(0.055, prof.spinNoiseFreq, 0.15, 1.6);
   }
 
   playSlotReelTick(reelIdx = 0) {
     if (!this.ensureReady() || !this.ctx || !this.master) return;
     const now = this.ctx.currentTime;
-    // Crisp 16-bit mechanical reel ratchet click
+    const prof = getPokieSoundProfile(this.currentPokieMachine);
     const osc = this.ctx.createOscillator();
     const g = this.ctx.createGain();
-    osc.type = 'triangle';
-    const baseFreq = 680 + reelIdx * 105 + (Math.random() - 0.5) * 40;
+    osc.type = prof.tickWave;
+    const baseFreq = prof.tickBaseFreq + reelIdx * prof.tickReelStep + (Math.random() - 0.5) * 40;
     osc.frequency.setValueAtTime(baseFreq, now);
     osc.frequency.exponentialRampToValueAtTime(baseFreq * 0.55, now + 0.024);
-    g.gain.setValueAtTime(0.08, now);
+    g.gain.setValueAtTime(prof.tickWave === 'square' ? 0.055 : 0.08, now);
     g.gain.exponentialRampToValueAtTime(0.0001, now + 0.026);
     osc.connect(g);
     g.connect(this.master);
@@ -1822,41 +1991,41 @@ export class IndieSoundEngine {
     this.unlock();
     if (!this.ensureReady() || !this.ctx || !this.master) return;
     const now = this.ctx.currentTime;
-    // Crisp mechanical reel lock thud + pitched arcade bell click
+    const prof = getPokieSoundProfile(this.currentPokieMachine);
+
     const thud = this.ctx.createOscillator();
     const tg = this.ctx.createGain();
-    thud.type = 'triangle';
-    const pitch = [196.0, 246.94, 329.63][reelIdx % 3] || 220;
+    thud.type = prof.stopWave;
+    const pitch = prof.stopPitches[reelIdx % 3] || 220;
     thud.frequency.setValueAtTime(pitch * 1.45, now);
-    thud.frequency.exponentialRampToValueAtTime(58, now + 0.085);
-    tg.gain.setValueAtTime(0.32, now);
+    thud.frequency.exponentialRampToValueAtTime(54, now + 0.085);
+    tg.gain.setValueAtTime(prof.stopWave === 'sawtooth' ? 0.24 : 0.32, now);
     tg.gain.exponentialRampToValueAtTime(0.0001, now + 0.095);
     thud.connect(tg);
     tg.connect(this.master);
     thud.start(now);
     thud.stop(now + 0.1);
 
-    // Metallic lock harmonic click
+    // Machine-themed harmonic lock ping
     const ping = this.ctx.createOscillator();
     const pg = this.ctx.createGain();
-    ping.type = 'sine';
-    ping.frequency.setValueAtTime(pitch * 3.0, now);
-    pg.gain.setValueAtTime(0.14, now);
-    pg.gain.exponentialRampToValueAtTime(0.0001, now + 0.06);
+    ping.type = prof.id === 'VOLCANO_INFERNO' ? 'square' : 'sine';
+    ping.frequency.setValueAtTime(pitch * prof.stopPingMult, now);
+    pg.gain.setValueAtTime(prof.id === 'VOLCANO_INFERNO' ? 0.09 : 0.14, now);
+    pg.gain.exponentialRampToValueAtTime(0.0001, now + 0.065);
     ping.connect(pg);
     pg.connect(this.master);
     ping.start(now);
-    ping.stop(now + 0.065);
+    ping.stop(now + 0.07);
 
     if (isTeaser) {
-      // Rising tension chime when Reels 1 & 2 align for a potential big win!
-      [587.33, 783.99, 1046.5, 1318.5].forEach((freq, i) => {
+      prof.teaserNotes.forEach((freq, i) => {
         if (!this.ctx || !this.master) return;
         const osc = this.ctx.createOscillator();
         const g = this.ctx.createGain();
-        osc.type = 'sine';
+        osc.type = prof.winWave;
         osc.frequency.setValueAtTime(freq, now + i * 0.045);
-        g.gain.setValueAtTime(0.22, now + i * 0.045);
+        g.gain.setValueAtTime(0.2, now + i * 0.045);
         g.gain.exponentialRampToValueAtTime(0.0001, now + i * 0.045 + 0.15);
         osc.connect(g);
         g.connect(this.master);
@@ -1870,26 +2039,18 @@ export class IndieSoundEngine {
     this.unlock();
     if (!this.ensureReady() || !this.ctx || !this.master) return;
     const now = this.ctx.currentTime;
-    const sequences: Record<'SMALL' | 'BIG' | 'MEGA' | 'JACKPOT', number[]> = {
-      SMALL: [523.25, 659.25, 783.99, 1046.5],
-      BIG: [523.25, 659.25, 783.99, 1046.5, 1318.51, 1567.98],
-      MEGA: [523.25, 659.25, 783.99, 1046.5, 987.77, 1174.66, 1318.51, 1567.98, 2093.0],
-      JACKPOT: [
-        523.25, 659.25, 783.99, 1046.5, 783.99, 1046.5, 1318.51, 1567.98,
-        1318.51, 1567.98, 2093.0, 2637.02,
-      ],
-    };
-    const notes = sequences[tier] || sequences.SMALL;
+    const prof = getPokieSoundProfile(this.currentPokieMachine);
+    const notes = prof.winNotes[tier] || prof.winNotes.SMALL;
     const stepTime = tier === 'JACKPOT' ? 0.065 : tier === 'MEGA' ? 0.055 : 0.048;
 
     notes.forEach((freq, idx) => {
       if (!this.ctx || !this.master) return;
       const osc = this.ctx.createOscillator();
       const g = this.ctx.createGain();
-      osc.type = tier === 'JACKPOT' || tier === 'MEGA' ? 'triangle' : 'sine';
+      osc.type = tier === 'JACKPOT' || tier === 'MEGA' ? prof.winWave : 'sine';
       osc.frequency.setValueAtTime(freq, now + idx * stepTime);
       g.gain.setValueAtTime(0.0001, now + idx * stepTime);
-      g.gain.linearRampToValueAtTime(0.3, now + idx * stepTime + 0.01);
+      g.gain.linearRampToValueAtTime(prof.winWave === 'sawtooth' ? 0.2 : 0.28, now + idx * stepTime + 0.01);
       g.gain.exponentialRampToValueAtTime(0.0001, now + idx * stepTime + 0.36);
       osc.connect(g);
       g.connect(this.master);
@@ -1898,7 +2059,7 @@ export class IndieSoundEngine {
     });
 
     if (tier === 'JACKPOT' || tier === 'MEGA') {
-      this.playNoiseBurst(0.65, 2200, 0.28, 1.1);
+      this.playNoiseBurst(0.65, prof.spinNoiseFreq, 0.26, 1.1);
     }
   }
 
@@ -1980,12 +2141,14 @@ export class IndieSoundEngine {
     this.unlock();
     if (!this.ensureReady() || !this.ctx || !this.master) return;
     const now = this.ctx.currentTime;
-    // Dramatic stadium bonus siren + ascending golden synth fanfare
+    const prof = getPokieSoundProfile(this.currentPokieMachine);
+
+    // Machine-themed bonus siren + ascending synth fanfare
     const siren = this.ctx.createOscillator();
     const sg = this.ctx.createGain();
-    siren.type = 'sawtooth';
-    siren.frequency.setValueAtTime(320, now);
-    siren.frequency.exponentialRampToValueAtTime(960, now + 0.34);
+    siren.type = prof.holdSirenWave;
+    siren.frequency.setValueAtTime(prof.holdSirenStart, now);
+    siren.frequency.exponentialRampToValueAtTime(prof.holdSirenEnd, now + 0.34);
     sg.gain.setValueAtTime(0.18, now);
     sg.gain.exponentialRampToValueAtTime(0.0001, now + 0.38);
     siren.connect(sg);
@@ -1993,50 +2156,50 @@ export class IndieSoundEngine {
     siren.start(now);
     siren.stop(now + 0.4);
 
-    const notes = [523.25, 659.25, 783.99, 1046.5, 1318.51, 1567.98, 2093.0];
-    notes.forEach((freq, idx) => {
+    prof.holdTriggerNotes.forEach((freq, idx) => {
       if (!this.ctx || !this.master) return;
       const osc = this.ctx.createOscillator();
       const g = this.ctx.createGain();
-      osc.type = 'triangle';
+      osc.type = prof.winWave;
       const t0 = now + 0.08 + idx * 0.055;
       osc.frequency.setValueAtTime(freq, t0);
       g.gain.setValueAtTime(0.0001, t0);
-      g.gain.linearRampToValueAtTime(0.28, t0 + 0.01);
+      g.gain.linearRampToValueAtTime(prof.winWave === 'sawtooth' ? 0.2 : 0.28, t0 + 0.01);
       g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.32);
       osc.connect(g);
       g.connect(this.master);
       osc.start(t0);
       osc.stop(t0 + 0.34);
     });
-    this.playNoiseBurst(0.45, 2100, 0.24, 1.3);
+    this.playNoiseBurst(0.45, prof.spinNoiseFreq, 0.24, 1.3);
   }
 
   playHoldOrbLock(lockedCount = 3) {
     this.unlock();
     if (!this.ensureReady() || !this.ctx || !this.master) return;
     const now = this.ctx.currentTime;
-    // Heavy sub-bass magnetic lock thump + rising crystal bell pitched to lockedCount (3..9)
+    const prof = getPokieSoundProfile(this.currentPokieMachine);
+
     const thump = this.ctx.createOscillator();
     const tg = this.ctx.createGain();
-    thump.type = 'triangle';
-    thump.frequency.setValueAtTime(190, now);
-    thump.frequency.exponentialRampToValueAtTime(52, now + 0.11);
-    tg.gain.setValueAtTime(0.35, now);
+    thump.type = prof.stopWave;
+    thump.frequency.setValueAtTime(prof.spinClunkStart, now);
+    thump.frequency.exponentialRampToValueAtTime(48, now + 0.11);
+    tg.gain.setValueAtTime(0.32, now);
     tg.gain.exponentialRampToValueAtTime(0.0001, now + 0.13);
     thump.connect(tg);
     tg.connect(this.master);
     thump.start(now);
     thump.stop(now + 0.14);
 
-    const scaleNotes = [523.25, 587.33, 659.25, 783.99, 880.0, 1046.5, 1174.66, 1318.51, 1567.98];
+    const scaleNotes = prof.orbLockScale;
     const baseNote = scaleNotes[Math.max(0, Math.min(scaleNotes.length - 1, lockedCount - 1))] || 783.99;
 
     [baseNote, baseNote * 1.5].forEach((freq, idx) => {
       if (!this.ctx || !this.master) return;
       const bell = this.ctx.createOscillator();
       const bg = this.ctx.createGain();
-      bell.type = 'sine';
+      bell.type = prof.id === 'VOLCANO_INFERNO' ? 'triangle' : 'sine';
       bell.frequency.setValueAtTime(freq, now + idx * 0.035);
       bg.gain.setValueAtTime(0.24, now + idx * 0.035);
       bg.gain.exponentialRampToValueAtTime(0.0001, now + idx * 0.035 + 0.24);

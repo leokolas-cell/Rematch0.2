@@ -1865,10 +1865,10 @@ export const POKIE_MACHINES: Record<PokieMachineId, PokieMachineConfig> = {
     allowedBets: [10, 100],
     defaultBet: 10,
     unlockPrice: 0,
-    headerGradient: 'linear-gradient(135deg, #064e3b 0%, #0f172a 55%, #713f12 100%)',
-    cabinetBg: 'linear-gradient(180deg, #ffffff 0%, #f0fdf4 55%, #fef9c3 100%)',
-    cabinetBorderHex: '#facc15',
-    reelHousingBg: '#064e3b',
+    headerGradient: 'linear-gradient(135deg, #022c22 0%, #065f46 52%, #713f12 100%)',
+    cabinetBg: 'repeating-linear-gradient(90deg, #ecfdf5 0px, #ecfdf5 24px, #d1fae5 24px, #d1fae5 48px)',
+    cabinetBorderHex: '#eab308',
+    reelHousingBg: 'linear-gradient(180deg, #022c22 0%, #064e3b 50%, #022c22 100%)',
     reelBorderHex: '#facc15',
     accentHex: '#facc15',
     secondaryHex: '#34d399',
@@ -1892,20 +1892,20 @@ export const POKIE_MACHINES: Record<PokieMachineId, PokieMachineConfig> = {
     allowedBets: [10, 100],
     defaultBet: 10,
     unlockPrice: 1500,
-    headerGradient: 'linear-gradient(135deg, #090d16 0%, #1e1b4b 52%, #4a044e 100%)',
-    cabinetBg: 'linear-gradient(180deg, #f8fafc 0%, #e0f2fe 55%, #fae8ff 100%)',
-    cabinetBorderHex: '#38bdf8',
-    reelHousingBg: '#1e1b4b',
-    reelBorderHex: '#38bdf8',
+    headerGradient: 'linear-gradient(135deg, #030712 0%, #1e1b4b 48%, #581c87 100%)',
+    cabinetBg: 'radial-gradient(circle at 50% 25%, #e0f2fe 0%, #ede9fe 52%, #cffafe 100%)',
+    cabinetBorderHex: '#22d3ee',
+    reelHousingBg: 'radial-gradient(circle at 50% 50%, #1e1b4b 0%, #090d24 65%, #030614 100%)',
+    reelBorderHex: '#22d3ee',
     accentHex: '#38bdf8',
     secondaryHex: '#e879f9',
-    badgeBgHex: '#e0f2fe',
-    badgeTextHex: '#0c4a6e',
-    bulbColors: ['#38bdf8', '#e879f9', '#818cf8'],
+    badgeBgHex: '#cffafe',
+    badgeTextHex: '#083344',
+    bulbColors: ['#22d3ee', '#e879f9', '#818cf8'],
     orbName: 'PLASMA ORB',
-    orbGradient: 'linear-gradient(180deg, #e0f2fe 0%, #38bdf8 50%, #7e22ce 100%)',
-    orbBorderHex: '#38bdf8',
-    orbGlowRgba: 'rgba(56, 189, 248, 0.9)',
+    orbGradient: 'linear-gradient(180deg, #e0f2fe 0%, #22d3ee 50%, #9333ea 100%)',
+    orbBorderHex: '#22d3ee',
+    orbGlowRgba: 'rgba(34, 211, 238, 0.92)',
   },
   VOLCANO_INFERNO: {
     id: 'VOLCANO_INFERNO',
@@ -1919,16 +1919,16 @@ export const POKIE_MACHINES: Record<PokieMachineId, PokieMachineConfig> = {
     allowedBets: [10, 100],
     defaultBet: 10,
     unlockPrice: 12000,
-    headerGradient: 'linear-gradient(135deg, #1c0a0a 0%, #450a0a 52%, #7c2d12 100%)',
-    cabinetBg: 'linear-gradient(180deg, #fff7ed 0%, #ffedd5 55%, #ffe4e6 100%)',
-    cabinetBorderHex: '#fb923c',
-    reelHousingBg: '#450a0a',
-    reelBorderHex: '#fb923c',
+    headerGradient: 'linear-gradient(135deg, #180504 0%, #7f1d1d 50%, #c2410c 100%)',
+    cabinetBg: 'repeating-linear-gradient(135deg, #fff7ed 0px, #fff7ed 20px, #ffedd5 20px, #fed7aa 40px)',
+    cabinetBorderHex: '#f97316',
+    reelHousingBg: 'linear-gradient(180deg, #1c0704 0%, #450a0a 50%, #1c0704 100%)',
+    reelBorderHex: '#f97316',
     accentHex: '#fb923c',
-    secondaryHex: '#f43f5e',
+    secondaryHex: '#ef4444',
     badgeBgHex: '#ffedd5',
     badgeTextHex: '#7c2d12',
-    bulbColors: ['#fb923c', '#f43f5e', '#fde047'],
+    bulbColors: ['#f97316', '#ef4444', '#fde047'],
     orbName: 'MAGMA ORB',
     orbGradient: 'linear-gradient(180deg, #fef08a 0%, #f97316 50%, #dc2626 100%)',
     orbBorderHex: '#fb923c',
@@ -1947,11 +1947,11 @@ export const POKIE_MACHINES: Record<PokieMachineId, PokieMachineConfig> = {
     defaultBet: 1000,
     unlockPrice: 80000,
     isHighRoller: true,
-    headerGradient: 'linear-gradient(135deg, #0f172a 0%, #3b0764 50%, #854d0e 100%)',
-    cabinetBg: 'linear-gradient(180deg, #fefce8 0%, #fae8ff 52%, #fef08a 100%)',
+    headerGradient: 'linear-gradient(135deg, #1e0936 0%, #4c1d95 48%, #854d0e 100%)',
+    cabinetBg: 'repeating-linear-gradient(45deg, #fefce8 0px, #fefce8 18px, #fae8ff 18px, #fef08a 36px)',
     cabinetBorderHex: '#facc15',
-    reelHousingBg: '#2e1065',
-    reelBorderHex: '#facc15',
+    reelHousingBg: 'linear-gradient(180deg, #17072b 0%, #3b0764 52%, #17072b 100%)',
+    reelBorderHex: '#fde047',
     accentHex: '#fde047',
     secondaryHex: '#e879f9',
     badgeBgHex: '#fef08a',
@@ -3285,8 +3285,343 @@ export interface LeaderboardEntry {
   rankedWins: number;
   rankedMatches: number;
   balance: number;
+  rankName?: string;
+  rankTierIndex?: number;
+  updatedAt?: number;
+  avatarBgHex?: string;
   isSelf?: boolean;
   isOnline?: boolean;
+  isCpuSeeded?: boolean;
+}
+
+/**
+ * Seeded CPU playerbase profiles (drawn from the game's Oceania / Global CPU roster)
+ * so the Online Leaderboard has a lively competitive ladder from Star League down to Bronze I.
+ */
+export const SEEDED_CPU_LEADERBOARD_PROFILES: readonly LeaderboardEntry[] = [
+  {
+    uid: 'cpu-dinho-10',
+    name: 'Dinho_10',
+    iconType: 'preset',
+    presetIcon: 'soccer',
+    photoDataUrl: null,
+    rankedWins: 14,
+    rankedMatches: 16,
+    balance: 148500,
+    rankName: 'Star League',
+    rankTierIndex: 6,
+    avatarBgHex: '#f59e0b',
+    isCpuSeeded: true,
+  },
+  {
+    uid: 'cpu-leo-messy',
+    name: 'Leo_Messy',
+    iconType: 'preset',
+    presetIcon: 'soccer',
+    photoDataUrl: null,
+    rankedWins: 11,
+    rankedMatches: 13,
+    balance: 112400,
+    rankName: 'Star League',
+    rankTierIndex: 6,
+    avatarBgHex: '#38bdf8',
+    isCpuSeeded: true,
+  },
+  {
+    uid: 'cpu-pixel-pele',
+    name: 'PixelPele',
+    iconType: 'preset',
+    presetIcon: 'soccer',
+    photoDataUrl: null,
+    rankedWins: 8,
+    rankedMatches: 10,
+    balance: 86200,
+    rankName: 'Star League',
+    rankTierIndex: 6,
+    avatarBgHex: '#10b981',
+    isCpuSeeded: true,
+  },
+  {
+    uid: 'cpu-joga-bonito',
+    name: 'JogaBonito',
+    iconType: 'preset',
+    presetIcon: 'soccer',
+    photoDataUrl: null,
+    rankedWins: 6,
+    rankedMatches: 8,
+    balance: 64900,
+    rankName: 'Star League',
+    rankTierIndex: 6,
+    avatarBgHex: '#eab308',
+    isCpuSeeded: true,
+  },
+  {
+    uid: 'cpu-bondi-curve-99',
+    name: 'BondiCurve_99',
+    iconType: 'preset',
+    presetIcon: 'soccer',
+    photoDataUrl: null,
+    rankedWins: 5,
+    rankedMatches: 7,
+    balance: 49500,
+    rankName: 'Diamond I',
+    rankTierIndex: 5,
+    avatarBgHex: '#6366f1',
+    isCpuSeeded: true,
+  },
+  {
+    uid: 'cpu-top-bins-only',
+    name: 'TopBinsOnly',
+    iconType: 'preset',
+    presetIcon: 'soccer',
+    photoDataUrl: null,
+    rankedWins: 5,
+    rankedMatches: 8,
+    balance: 37800,
+    rankName: 'Diamond I',
+    rankTierIndex: 5,
+    avatarBgHex: '#ec4899',
+    isCpuSeeded: true,
+  },
+  {
+    uid: 'cpu-kiwi-tikitaka',
+    name: 'KiwiTikiTaka',
+    iconType: 'preset',
+    presetIcon: 'soccer',
+    photoDataUrl: null,
+    rankedWins: 4,
+    rankedMatches: 6,
+    balance: 28400,
+    rankName: 'Platinum I',
+    rankTierIndex: 4,
+    avatarBgHex: '#06b6d4',
+    isCpuSeeded: true,
+  },
+  {
+    uid: 'cpu-nutmeg-king',
+    name: 'NutmegKing',
+    iconType: 'preset',
+    presetIcon: 'soccer',
+    photoDataUrl: null,
+    rankedWins: 4,
+    rankedMatches: 7,
+    balance: 19650,
+    rankName: 'Platinum I',
+    rankTierIndex: 4,
+    avatarBgHex: '#8b5cf6',
+    isCpuSeeded: true,
+  },
+  {
+    uid: 'cpu-veloce-fc',
+    name: 'VeloceFC',
+    iconType: 'preset',
+    presetIcon: 'soccer',
+    photoDataUrl: null,
+    rankedWins: 3,
+    rankedMatches: 5,
+    balance: 14200,
+    rankName: 'Gold II',
+    rankTierIndex: 3,
+    avatarBgHex: '#f97316',
+    isCpuSeeded: true,
+  },
+  {
+    uid: 'cpu-kairo-x',
+    name: 'KairoX',
+    iconType: 'preset',
+    presetIcon: 'soccer',
+    photoDataUrl: null,
+    rankedWins: 3,
+    rankedMatches: 6,
+    balance: 9450,
+    rankName: 'Gold II',
+    rankTierIndex: 3,
+    avatarBgHex: '#14b8a6',
+    isCpuSeeded: true,
+  },
+  {
+    uid: 'cpu-brissie-baller',
+    name: 'BrissieBaller',
+    iconType: 'preset',
+    presetIcon: 'soccer',
+    photoDataUrl: null,
+    rankedWins: 2,
+    rankedMatches: 4,
+    balance: 5200,
+    rankName: 'Silver I',
+    rankTierIndex: 2,
+    avatarBgHex: '#f43f5e',
+    isCpuSeeded: true,
+  },
+  {
+    uid: 'cpu-rafa-curl',
+    name: 'Rafa_Curl',
+    iconType: 'preset',
+    presetIcon: 'soccer',
+    photoDataUrl: null,
+    rankedWins: 2,
+    rankedMatches: 5,
+    balance: 3150,
+    rankName: 'Silver I',
+    rankTierIndex: 2,
+    avatarBgHex: '#0ea5e9',
+    isCpuSeeded: true,
+  },
+  {
+    uid: 'cpu-sunny-kicks',
+    name: 'SunnyKicks',
+    iconType: 'preset',
+    presetIcon: 'soccer',
+    photoDataUrl: null,
+    rankedWins: 1,
+    rankedMatches: 3,
+    balance: 1280,
+    rankName: 'Bronze II',
+    rankTierIndex: 1,
+    avatarBgHex: '#d97706',
+    isCpuSeeded: true,
+  },
+  {
+    uid: 'cpu-smithstreamer007',
+    name: 'smithstreamer007',
+    iconType: 'preset',
+    presetIcon: 'soccer',
+    photoDataUrl: null,
+    rankedWins: 0,
+    rankedMatches: 2,
+    balance: 240,
+    rankName: 'Bronze I',
+    rankTierIndex: 0,
+    avatarBgHex: '#64748b',
+    isCpuSeeded: true,
+  },
+] as const;
+
+export interface MatchDifficultyProfile {
+  cpuSpeed: number;
+  cpuDribble: number;
+  standOff: number;
+  tackleChance: number;
+  decisionDelay: number;
+  keeperSpeed: number;
+  passCreativity: number;
+  interceptScale: number;
+  rankLabel: string;
+  userRankLabel: string;
+}
+
+/**
+ * Computes the CPU difficulty profile for the active match, scaling progressively:
+ * 1) As the player climbs higher ranks (Bronze I -> Star League + extra wins above 6)
+ * 2) As the player advances deeper into a Tournament (Quarter-Final Round 0 -> Semi-Final Round 1 -> Grand Final Round 2)
+ *    and across higher Tournament Tiers ($100 Cup -> $1,000 Cup -> $10,000 Championship).
+ */
+export function computeMatchDifficultyProfile(
+  gameMode: GameMode,
+  rankedWins: number,
+  tournamentRound = 0,
+  tournamentTier: TournamentTierId = 'CUP_100'
+): MatchDifficultyProfile {
+  const safeWins = Math.max(0, Math.floor(Number.isFinite(rankedWins) ? rankedWins : 0));
+  const rankInfo = getUserRankInfo(safeWins);
+  const rankIdx = rankInfo.index; // 0..6
+  const extraStarWins = Math.max(0, safeWins - 6);
+  const clampedRound = Math.max(0, Math.min(2, Math.floor(Number.isFinite(tournamentRound) ? tournamentRound : 0)));
+
+  if (gameMode === 'CASUAL') {
+    // Casual starts relaxed at Bronze I and scales gently as the player climbs higher ranks
+    const rankFactor = rankIdx * 0.055 + Math.min(4, extraStarWins) * 0.015;
+    return {
+      cpuSpeed: Number((3.12 + rankFactor * 1.1).toFixed(3)),
+      cpuDribble: Number((1.68 + rankFactor * 0.65).toFixed(3)),
+      standOff: Math.max(150, Math.round(225 - rankIdx * 9 - Math.min(4, extraStarWins) * 2)),
+      tackleChance: Number((0.015 + rankIdx * 0.0025 + Math.min(4, extraStarWins) * 0.0008).toFixed(4)),
+      decisionDelay: Math.max(16, Math.round(33 - rankIdx * 2 - Math.min(4, extraStarWins) * 0.5)),
+      keeperSpeed: Number((1.74 + rankIdx * 0.045).toFixed(3)),
+      passCreativity: Number(Math.min(0.92, 0.76 + rankIdx * 0.02).toFixed(3)),
+      interceptScale: Number((0.88 + rankIdx * 0.022).toFixed(3)),
+      rankLabel: rankInfo.name,
+      userRankLabel: rankInfo.name,
+    };
+  }
+
+  if (gameMode === 'RANKED') {
+    // Ranked uses the exact RankTierInfo difficulty curve + slight extra edge for wins above Star League
+    const bonusWins = Math.min(8, extraStarWins);
+    return {
+      cpuSpeed: Number((rankInfo.cpuSpeed + bonusWins * 0.022).toFixed(3)),
+      cpuDribble: Number((rankInfo.cpuDribble + bonusWins * 0.015).toFixed(3)),
+      standOff: Math.max(98, Math.round(rankInfo.standOff - bonusWins * 1.5)),
+      tackleChance: Number((rankInfo.tackleChance + bonusWins * 0.0012).toFixed(4)),
+      decisionDelay: Math.max(7, Math.round(rankInfo.decisionDelay - bonusWins * 0.25)),
+      keeperSpeed: Number((rankInfo.keeperSpeed + bonusWins * 0.015).toFixed(3)),
+      passCreativity: Number(Math.min(0.98, rankInfo.passCreativity + bonusWins * 0.003).toFixed(3)),
+      interceptScale: Number((rankInfo.interceptScale + bonusWins * 0.008).toFixed(3)),
+      rankLabel: rankInfo.name,
+      userRankLabel: rankInfo.name,
+    };
+  }
+
+  // TOURNAMENT MODE: scales both with Tournament Round (QF -> SF -> GF), Tournament Tier, AND Player Rank!
+  const roundBase = [
+    {
+      cpuSpeed: 3.48,
+      cpuDribble: 1.90,
+      standOff: 186,
+      tackleChance: 0.024,
+      decisionDelay: 22,
+      keeperSpeed: 1.88,
+      passCreativity: 0.82,
+      interceptScale: 0.95,
+      defaultRankLabel: 'Gold II',
+    },
+    {
+      cpuSpeed: 3.88,
+      cpuDribble: 2.16,
+      standOff: 154,
+      tackleChance: 0.035,
+      decisionDelay: 16,
+      keeperSpeed: 2.06,
+      passCreativity: 0.89,
+      interceptScale: 1.05,
+      defaultRankLabel: 'Platinum I',
+    },
+    {
+      cpuSpeed: 4.28,
+      cpuDribble: 2.42,
+      standOff: 124,
+      tackleChance: 0.048,
+      decisionDelay: 11,
+      keeperSpeed: 2.26,
+      passCreativity: 0.94,
+      interceptScale: 1.14,
+      defaultRankLabel: 'Star League',
+    },
+  ][clampedRound];
+
+  const tierIndex = tournamentTier === 'CUP_10000' ? 2 : tournamentTier === 'CUP_1000' ? 1 : 0;
+  const rankBonusSpeed = rankIdx * 0.048 + Math.min(6, extraStarWins) * 0.012;
+  const tierBonusSpeed = tierIndex * 0.065;
+
+  const oppRankIndex = Math.min(
+    RANK_TIERS.length - 1,
+    Math.max(clampedRound + 2, rankIdx + (clampedRound === 2 ? 1 : 0))
+  );
+
+  return {
+    cpuSpeed: Number(Math.min(4.78, roundBase.cpuSpeed + rankBonusSpeed + tierBonusSpeed).toFixed(3)),
+    cpuDribble: Number(Math.min(2.72, roundBase.cpuDribble + rankIdx * 0.032 + tierIndex * 0.04).toFixed(3)),
+    standOff: Math.max(96, Math.round(roundBase.standOff - rankIdx * 4.5 - tierIndex * 5)),
+    tackleChance: Number(
+      Math.min(0.065, roundBase.tackleChance + rankIdx * 0.0022 + tierIndex * 0.0025).toFixed(4)
+    ),
+    decisionDelay: Math.max(7, Math.round(roundBase.decisionDelay - rankIdx * 0.85 - tierIndex * 1.0)),
+    keeperSpeed: Number(Math.min(2.52, roundBase.keeperSpeed + rankIdx * 0.028 + tierIndex * 0.035).toFixed(3)),
+    passCreativity: Number(Math.min(0.98, roundBase.passCreativity + rankIdx * 0.008 + tierIndex * 0.01).toFixed(3)),
+    interceptScale: Number(Math.min(1.26, roundBase.interceptScale + rankIdx * 0.014 + tierIndex * 0.018).toFixed(3)),
+    rankLabel: RANK_TIERS[oppRankIndex].name,
+    userRankLabel: rankInfo.name,
+  };
 }
 
 /**
@@ -3309,4 +3644,971 @@ export function sortLeaderboardEntries(
     return a.name.localeCompare(b.name);
   });
 }
+
+// ============================================================================
+// ACCOUNT RESET / DELETE ACCOUNT & MACHINE-SPECIFIC POKIE SYMBOL THEMING
+// ============================================================================
+
+export interface DefaultPlayerProfileState {
+  name: string;
+  iconType: 'preset' | 'photo';
+  presetIcon: string;
+  photoDataUrl: string | null;
+  rankedWins: number;
+  rankedMatches: number;
+  balance: number;
+  jackpotPool: number;
+  selectedPokieMachine: PokieMachineId;
+  selectedPokieBet: PokieBetAmount;
+  selectedTournamentTier: TournamentTierId;
+  unlockedStadiums: PitchThemeId[];
+  unlockedPokieMachines: PokieMachineId[];
+  stadiumShuffleEnabled: boolean;
+  selectedStadiumId: PitchThemeId;
+}
+
+/**
+ * Returns a fresh default player profile state used when resetting / deleting an account.
+ */
+export function createDefaultPlayerProfile(): DefaultPlayerProfileState {
+  return {
+    name: 'Player',
+    iconType: 'preset',
+    presetIcon: 'soccer',
+    photoDataUrl: null,
+    rankedWins: 0,
+    rankedMatches: 0,
+    balance: INITIAL_PLAYER_BALANCE,
+    jackpotPool: BASE_JACKPOT_POOL,
+    selectedPokieMachine: 'CHAMPIONS_GOLD',
+    selectedPokieBet: 10,
+    selectedTournamentTier: 'CUP_100',
+    unlockedStadiums: [...DEFAULT_UNLOCKED_STADIUMS],
+    unlockedPokieMachines: [...DEFAULT_UNLOCKED_POKIES],
+    stadiumShuffleEnabled: false,
+    selectedStadiumId: 'CLASSIC_TURF',
+  };
+}
+
+export interface PokieMachineSymbolThemeSpec {
+  machineId: PokieMachineId;
+  symbolId: PokieSymbolId;
+  shortTag: string;
+  displayName: string;
+  tileBg: string;
+  pillBg: string;
+  pillText: string;
+  borderHex: string;
+  primaryColor: string;
+  secondaryColor: string;
+}
+
+/**
+ * Returns machine-specific visual styling, short labels, tile backgrounds, and palette colors
+ * for each of the 8 pokie symbols across all 4 pokie machines so every machine feels genuinely distinct.
+ */
+export function getPokieMachineSymbolTheme(
+  machineId: PokieMachineId,
+  symbolId: PokieSymbolId
+): PokieMachineSymbolThemeSpec {
+  if (machineId === 'COSMIC_NEON') {
+    switch (symbolId) {
+      case 'MEGA_TROPHY':
+        return {
+          machineId,
+          symbolId,
+          shortTag: 'NOVA',
+          displayName: 'SUPERNOVA CORE',
+          tileBg: 'radial-gradient(circle at 50% 35%, #164e63 0%, #090d24 72%, #3b0764 100%)',
+          pillBg: '#22d3ee',
+          pillText: '#083344',
+          borderHex: '#22d3ee',
+          primaryColor: '#22d3ee',
+          secondaryColor: '#e879f9',
+        };
+      case 'WILD_STAR':
+        return {
+          machineId,
+          symbolId,
+          shortTag: '2X WARP',
+          displayName: '2X PULSAR WILD',
+          tileBg: 'radial-gradient(circle at 50% 35%, #4a044e 0%, #0f172a 75%, #083344 100%)',
+          pillBg: '#e879f9',
+          pillText: '#2e1065',
+          borderHex: '#e879f9',
+          primaryColor: '#e879f9',
+          secondaryColor: '#38bdf8',
+        };
+      case 'DIAMOND_BALL':
+        return {
+          machineId,
+          symbolId,
+          shortTag: 'ORBIT',
+          displayName: 'PLASMA SPHERE',
+          tileBg: 'linear-gradient(180deg, #1e1b4b 0%, #090d24 100%)',
+          pillBg: '#818cf8',
+          pillText: '#0f172a',
+          borderHex: '#6366f1',
+          primaryColor: '#67e8f9',
+          secondaryColor: '#818cf8',
+        };
+      case 'GOLD_BOOT':
+        return {
+          machineId,
+          symbolId,
+          shortTag: 'JET',
+          displayName: 'GRAV THRUSTER',
+          tileBg: 'linear-gradient(180deg, #172554 0%, #0f172a 100%)',
+          pillBg: '#38bdf8',
+          pillText: '#082f49',
+          borderHex: '#38bdf8',
+          primaryColor: '#38bdf8',
+          secondaryColor: '#c084fc',
+        };
+      case 'FIRE_FLAME':
+        return {
+          machineId,
+          symbolId,
+          shortTag: 'SOLAR',
+          displayName: 'SOLAR FLARE',
+          tileBg: 'linear-gradient(180deg, #3b0764 0%, #1e1b4b 100%)',
+          pillBg: '#f472b6',
+          pillText: '#3b0764',
+          borderHex: '#f472b6',
+          primaryColor: '#f472b6',
+          secondaryColor: '#22d3ee',
+        };
+      case 'WHISTLE':
+        return {
+          machineId,
+          symbolId,
+          shortTag: 'BEAM',
+          displayName: 'SONIC LASER',
+          tileBg: 'linear-gradient(180deg, #083344 0%, #090d24 100%)',
+          pillBg: '#2dd4bf',
+          pillText: '#042f2e',
+          borderHex: '#2dd4bf',
+          primaryColor: '#2dd4bf',
+          secondaryColor: '#38bdf8',
+        };
+      case 'CHERRY_CARD':
+        return {
+          machineId,
+          symbolId,
+          shortTag: 'PRISM',
+          displayName: 'NEON PRISM',
+          tileBg: 'linear-gradient(180deg, #2e1065 0%, #090d24 100%)',
+          pillBg: '#c084fc',
+          pillText: '#1e1b4b',
+          borderHex: '#c084fc',
+          primaryColor: '#e879f9',
+          secondaryColor: '#67e8f9',
+        };
+      case 'SCATTER_CROWN':
+      default:
+        return {
+          machineId,
+          symbolId,
+          shortTag: 'PLASMA',
+          displayName: 'PLASMA ORB',
+          tileBg: 'radial-gradient(circle at 50% 45%, #0284c7 0%, #1e1b4b 68%, #4a044e 100%)',
+          pillBg: '#67e8f9',
+          pillText: '#083344',
+          borderHex: '#22d3ee',
+          primaryColor: '#67e8f9',
+          secondaryColor: '#e879f9',
+        };
+    }
+  }
+
+  if (machineId === 'VOLCANO_INFERNO') {
+    switch (symbolId) {
+      case 'MEGA_TROPHY':
+        return {
+          machineId,
+          symbolId,
+          shortTag: 'FORGE',
+          displayName: 'CALDERA CHALICE',
+          tileBg: 'radial-gradient(circle at 50% 35%, #9a3412 0%, #450a0a 72%, #1c0704 100%)',
+          pillBg: '#fde047',
+          pillText: '#450a0a',
+          borderHex: '#f97316',
+          primaryColor: '#fde047',
+          secondaryColor: '#ef4444',
+        };
+      case 'WILD_STAR':
+        return {
+          machineId,
+          symbolId,
+          shortTag: '2X FIRE',
+          displayName: '2X DRAGON STAR',
+          tileBg: 'radial-gradient(circle at 50% 35%, #7f1d1d 0%, #431407 72%, #1c0704 100%)',
+          pillBg: '#fb923c',
+          pillText: '#431407',
+          borderHex: '#ef4444',
+          primaryColor: '#fb923c',
+          secondaryColor: '#fde047',
+        };
+      case 'DIAMOND_BALL':
+        return {
+          machineId,
+          symbolId,
+          shortTag: 'METEOR',
+          displayName: 'METEOR FIREBALL',
+          tileBg: 'linear-gradient(180deg, #431407 0%, #1c0704 100%)',
+          pillBg: '#fdba74',
+          pillText: '#431407',
+          borderHex: '#f97316',
+          primaryColor: '#fb923c',
+          secondaryColor: '#fef08a',
+        };
+      case 'GOLD_BOOT':
+        return {
+          machineId,
+          symbolId,
+          shortTag: 'ARMOR',
+          displayName: 'MOLTEN GREAVE',
+          tileBg: 'linear-gradient(180deg, #571808 0%, #270905 100%)',
+          pillBg: '#f97316',
+          pillText: '#fff7ed',
+          borderHex: '#ea580c',
+          primaryColor: '#f97316',
+          secondaryColor: '#fde047',
+        };
+      case 'FIRE_FLAME':
+        return {
+          machineId,
+          symbolId,
+          shortTag: 'MAGMA',
+          displayName: 'MAGMA ERUPTION',
+          tileBg: 'linear-gradient(180deg, #7f1d1d 0%, #2a0606 100%)',
+          pillBg: '#ef4444',
+          pillText: '#fff1f2',
+          borderHex: '#ef4444',
+          primaryColor: '#ef4444',
+          secondaryColor: '#fde047',
+        };
+      case 'WHISTLE':
+        return {
+          machineId,
+          symbolId,
+          shortTag: 'ANVIL',
+          displayName: 'FORGE HORN',
+          tileBg: 'linear-gradient(180deg, #44403c 0%, #1c1917 100%)',
+          pillBg: '#fbbf24',
+          pillText: '#1c1917',
+          borderHex: '#d97706',
+          primaryColor: '#fbbf24',
+          secondaryColor: '#f97316',
+        };
+      case 'CHERRY_CARD':
+        return {
+          machineId,
+          symbolId,
+          shortTag: 'RUBY',
+          displayName: 'EMBER RUBY',
+          tileBg: 'linear-gradient(180deg, #4c0519 0%, #1f040a 100%)',
+          pillBg: '#fda4af',
+          pillText: '#4c0519',
+          borderHex: '#fb7185',
+          primaryColor: '#fb7185',
+          secondaryColor: '#fde047',
+        };
+      case 'SCATTER_CROWN':
+      default:
+        return {
+          machineId,
+          symbolId,
+          shortTag: 'LAVA',
+          displayName: 'MAGMA ORB',
+          tileBg: 'radial-gradient(circle at 50% 45%, #ea580c 0%, #7c2d12 65%, #3b0764 100%)',
+          pillBg: '#fde047',
+          pillText: '#431407',
+          borderHex: '#fb923c',
+          primaryColor: '#fde047',
+          secondaryColor: '#ef4444',
+        };
+    }
+  }
+
+  if (machineId === 'HIGH_ROLLER_ROYAL') {
+    switch (symbolId) {
+      case 'MEGA_TROPHY':
+        return {
+          machineId,
+          symbolId,
+          shortTag: '$100K+',
+          displayName: 'IMPERIAL VAULT CUP',
+          tileBg: 'radial-gradient(circle at 50% 35%, #fef08a 0%, #ca8a04 65%, #3b0764 100%)',
+          pillBg: '#3b0764',
+          pillText: '#fde047',
+          borderHex: '#fde047',
+          primaryColor: '#fde047',
+          secondaryColor: '#e879f9',
+        };
+      case 'WILD_STAR':
+        return {
+          machineId,
+          symbolId,
+          shortTag: '2X VIP',
+          displayName: '2X DIAMOND WILD',
+          tileBg: 'radial-gradient(circle at 50% 35%, #e9d5ff 0%, #6b21a8 68%, #1e1b4b 100%)',
+          pillBg: '#fde047',
+          pillText: '#3b0764',
+          borderHex: '#e879f9',
+          primaryColor: '#f5d0fe',
+          secondaryColor: '#fde047',
+        };
+      case 'DIAMOND_BALL':
+        return {
+          machineId,
+          symbolId,
+          shortTag: 'PLATINUM',
+          displayName: 'PLATINUM ORB',
+          tileBg: 'linear-gradient(180deg, #f8fafc 0%, #cbd5e1 55%, #475569 100%)',
+          pillBg: '#0f172a',
+          pillText: '#f8fafc',
+          borderHex: '#e2e8f0',
+          primaryColor: '#f8fafc',
+          secondaryColor: '#38bdf8',
+        };
+      case 'GOLD_BOOT':
+        return {
+          machineId,
+          symbolId,
+          shortTag: '24K BAR',
+          displayName: 'BULLION CLEAT',
+          tileBg: 'linear-gradient(180deg, #fef08a 0%, #eab308 60%, #713f12 100%)',
+          pillBg: '#422006',
+          pillText: '#fef08a',
+          borderHex: '#facc15',
+          primaryColor: '#fef08a',
+          secondaryColor: '#a855f7',
+        };
+      case 'FIRE_FLAME':
+        return {
+          machineId,
+          symbolId,
+          shortTag: 'VELVET',
+          displayName: 'ROYAL TORCH',
+          tileBg: 'linear-gradient(180deg, #86198f 0%, #3b0764 100%)',
+          pillBg: '#f0abfc',
+          pillText: '#3b0764',
+          borderHex: '#e879f9',
+          primaryColor: '#e879f9',
+          secondaryColor: '#fde047',
+        };
+      case 'WHISTLE':
+        return {
+          machineId,
+          symbolId,
+          shortTag: 'VAULT',
+          displayName: 'VAULT CHIME',
+          tileBg: 'linear-gradient(180deg, #312e81 0%, #1e1b4b 100%)',
+          pillBg: '#fde047',
+          pillText: '#1e1b4b',
+          borderHex: '#fde047',
+          primaryColor: '#fde047',
+          secondaryColor: '#c084fc',
+        };
+      case 'CHERRY_CARD':
+        return {
+          machineId,
+          symbolId,
+          shortTag: 'JEWEL',
+          displayName: 'CROWN JEWEL',
+          tileBg: 'linear-gradient(180deg, #581c87 0%, #2e1065 100%)',
+          pillBg: '#fde047',
+          pillText: '#3b0764',
+          borderHex: '#c084fc',
+          primaryColor: '#f472b6',
+          secondaryColor: '#fde047',
+        };
+      case 'SCATTER_CROWN':
+      default:
+        return {
+          machineId,
+          symbolId,
+          shortTag: 'DIAMOND',
+          displayName: 'DIAMOND ORB',
+          tileBg: 'radial-gradient(circle at 50% 45%, #ffffff 0%, #fde047 52%, #7e22ce 100%)',
+          pillBg: '#3b0764',
+          pillText: '#fde047',
+          borderHex: '#fde047',
+          primaryColor: '#ffffff',
+          secondaryColor: '#a855f7',
+        };
+    }
+  }
+
+  // Default: CHAMPIONS_GOLD (Royal Emerald Turf & Brushed Gold Cathedral)
+  switch (symbolId) {
+    case 'MEGA_TROPHY':
+      return {
+        machineId: 'CHAMPIONS_GOLD',
+        symbolId,
+        shortTag: 'CUP',
+        displayName: 'CHAMPIONS CUP',
+        tileBg: 'radial-gradient(circle at 50% 35%, #fef08a 0%, #f59e0b 68%, #78350f 100%)',
+        pillBg: '#451a03',
+        pillText: '#fde047',
+        borderHex: '#facc15',
+        primaryColor: '#fde047',
+        secondaryColor: '#10b981',
+      };
+    case 'WILD_STAR':
+      return {
+        machineId: 'CHAMPIONS_GOLD',
+        symbolId,
+        shortTag: '2X WILD',
+        displayName: '2X CAPTAIN STAR',
+        tileBg: 'radial-gradient(circle at 50% 35%, #bae6fd 0%, #0284c7 65%, #0c4a6e 100%)',
+        pillBg: '#082f49',
+        pillText: '#7dd3fc',
+        borderHex: '#38bdf8',
+        primaryColor: '#fde047',
+        secondaryColor: '#38bdf8',
+      };
+    case 'DIAMOND_BALL':
+      return {
+        machineId: 'CHAMPIONS_GOLD',
+        symbolId,
+        shortTag: 'BALL',
+        displayName: 'MATCH BALL',
+        tileBg: 'linear-gradient(180deg, #ecfdf5 0%, #a7f3d0 65%, #059669 100%)',
+        pillBg: '#064e3b',
+        pillText: '#ecfdf5',
+        borderHex: '#34d399',
+        primaryColor: '#ffffff',
+        secondaryColor: '#059669',
+      };
+    case 'GOLD_BOOT':
+      return {
+        machineId: 'CHAMPIONS_GOLD',
+        symbolId,
+        shortTag: 'BOOT',
+        displayName: 'GOLDEN BOOT',
+        tileBg: 'linear-gradient(180deg, #ffedd5 0%, #fdba74 55%, #ea580c 100%)',
+        pillBg: '#431407',
+        pillText: '#fed7aa',
+        borderHex: '#f97316',
+        primaryColor: '#f59e0b',
+        secondaryColor: '#10b981',
+      };
+    case 'FIRE_FLAME':
+      return {
+        machineId: 'CHAMPIONS_GOLD',
+        symbolId,
+        shortTag: 'FLAME',
+        displayName: 'TOP BINS FIRE',
+        tileBg: 'linear-gradient(180deg, #ffe4e6 0%, #fda4af 55%, #e11d48 100%)',
+        pillBg: '#4c0519',
+        pillText: '#fecdd3',
+        borderHex: '#fb7185',
+        primaryColor: '#f97316',
+        secondaryColor: '#fde047',
+      };
+    case 'WHISTLE':
+      return {
+        machineId: 'CHAMPIONS_GOLD',
+        symbolId,
+        shortTag: 'REF',
+        displayName: 'REF WHISTLE',
+        tileBg: 'linear-gradient(180deg, #d1fae5 0%, #6ee7b7 58%, #059669 100%)',
+        pillBg: '#064e3b',
+        pillText: '#a7f3d0',
+        borderHex: '#34d399',
+        primaryColor: '#cbd5e1',
+        secondaryColor: '#10b981',
+      };
+    case 'CHERRY_CARD':
+      return {
+        machineId: 'CHAMPIONS_GOLD',
+        symbolId,
+        shortTag: 'CLUB',
+        displayName: 'DERBY CHERRY',
+        tileBg: 'linear-gradient(180deg, #fae8ff 0%, #f0abfc 58%, #c026d3 100%)',
+        pillBg: '#4a044e',
+        pillText: '#f5d0fe',
+        borderHex: '#e879f9',
+        primaryColor: '#e11d48',
+        secondaryColor: '#22c55e',
+      };
+    case 'SCATTER_CROWN':
+    default:
+      return {
+        machineId: 'CHAMPIONS_GOLD',
+        symbolId,
+        shortTag: 'ORB',
+        displayName: 'CROWN ORB',
+        tileBg: 'radial-gradient(circle at 50% 45%, #fef08a 0%, #f59e0b 55%, #7e22ce 100%)',
+        pillBg: '#3b0764',
+        pillText: '#fde047',
+        borderHex: '#fde047',
+        primaryColor: '#fde047',
+        secondaryColor: '#a855f7',
+      };
+  }
+}
+
+export interface StadiumQuadrantZoneSpec {
+  quadrant: 'WEST' | 'EAST' | 'NORTH' | 'SOUTH';
+  title: string;
+  primaryLandmark: string;
+  secondaryLandmark: string;
+  groundStyle: string;
+}
+
+export interface StadiumSurroundingsDiorama {
+  id: PitchThemeId;
+  dioramaTitle: string;
+  isAsymmetric: boolean;
+  quadrants: {
+    west: StadiumQuadrantZoneSpec;
+    east: StadiumQuadrantZoneSpec;
+    north: StadiumQuadrantZoneSpec;
+    south: StadiumQuadrantZoneSpec;
+  };
+  floraOrPropVarieties: string[];
+  dynamicAmbientElements: string[];
+}
+
+export const STADIUM_SURROUNDINGS_DIORAMAS: Record<PitchThemeId, StadiumSurroundingsDiorama> = {
+  CLASSIC_TURF: {
+    id: 'CLASSIC_TURF',
+    dioramaTitle: 'Royal Botanical Canal, Broadcast Compound & Champions Fan Plaza',
+    isAsymmetric: true,
+    quadrants: {
+      west: {
+        quadrant: 'WEST',
+        title: 'VIP Team Arrival & TV Broadcast Compound',
+        primaryLandmark: 'Team Coach Bus & OB Satellite Van',
+        secondaryLandmark: 'Supporters Espresso & Merch Kiosk',
+        groundStyle: 'Cobblestone Roundabout & Velvet VIP Lane',
+      },
+      east: {
+        quadrant: 'EAST',
+        title: 'Serpentine Botanical River & Conservatory',
+        primaryLandmark: 'Winding Park Canal & Arched Brick Footbridge',
+        secondaryLandmark: 'Victorian Glasshouse Dome & Rowboat Pier',
+        groundStyle: 'Riparian Meadow, Lily Pads & Stepping Stones',
+      },
+      north: {
+        quadrant: 'NORTH',
+        title: 'Grand Champions Fan Plaza & Street Mini-Pitch',
+        primaryLandmark: 'Golden Legend Statue & Mosaic Rotunda',
+        secondaryLandmark: '1v1 Warm-Up Cage & Artisanal Food Trucks',
+        groundStyle: 'Sunlit Sandstone Fan Promenade',
+      },
+      south: {
+        quadrant: 'SOUTH',
+        title: 'Stadium Metro Station & Lawn Amphitheater',
+        primaryLandmark: 'Glass-Canopy Commuter Rail Platform',
+        secondaryLandmark: 'Sunken Fan-Zone Screen & Rose Labyrinth',
+        groundStyle: 'Terraced Parkland & Railway Embankment',
+      },
+    },
+    floraOrPropVarieties: ['MULTI_OAK', 'TALL_CYPRESS', 'WEEPING_WILLOW', 'BLOSSOM_JACARANDA', 'TOPIARY_SPIRAL'],
+    dynamicAmbientElements: [
+      'DRIFTING_CANAL_ROWBOAT_AND_DUCKS',
+      'ROTATING_TV_OB_SATELLITE_DISH',
+      'KIDS_MINI_PITCH_RALLY_BALL',
+      'GLIDING_COMMUTER_METRO_TRAIN',
+      'FLOCK_OF_PARK_SWALLOWS',
+    ],
+  },
+  TURF_AUTUMN: {
+    id: 'TURF_AUTUMN',
+    dioramaTitle: 'Old Cider Mill Stream, Covered Bridge & Harvest Balloon Meadow',
+    isAsymmetric: true,
+    quadrants: {
+      west: {
+        quadrant: 'WEST',
+        title: 'Harvest Farmers Market & Vintage Orchard',
+        primaryLandmark: 'Hot Cider Cauldron & Timber Market Plaza',
+        secondaryLandmark: 'Vintage Red Farm Tractor & Hay Wagon',
+        groundStyle: 'Leaf-Strewn Cobblestone & Split-Rail Fence',
+      },
+      east: {
+        quadrant: 'EAST',
+        title: 'Old Waterwheel Cider Mill & Covered Bridge',
+        primaryLandmark: 'Stone Millhouse with Turning Wooden Waterwheel',
+        secondaryLandmark: 'New England Red Covered Bridge & Pumpkin Maze',
+        groundStyle: 'Babbling Autumn Brook & Mossy Boulders',
+      },
+      north: {
+        quadrant: 'NORTH',
+        title: 'Harvest Bonfire Amphitheater & Clocktower',
+        primaryLandmark: 'Roaring Festival Bonfire & Timber Folk Stage',
+        secondaryLandmark: 'Rustic Stone Clocktower & String Lanterns',
+        groundStyle: 'Warm Sandstone Festival Circle',
+      },
+      south: {
+        quadrant: 'SOUTH',
+        title: 'Hot-Air Balloon Meadow & Vineyard Terraces',
+        primaryLandmark: 'Tethered Striped Harvest Hot-Air Balloon',
+        secondaryLandmark: 'Oak Wine Cask Cellar & Vineyard Trellises',
+        groundStyle: 'Golden Ochre Rolling Pasture',
+      },
+    },
+    floraOrPropVarieties: ['CRIMSON_MAPLE', 'GOLDEN_GINKGO', 'AMBER_POPLAR', 'SILVER_BIRCH', 'HAY_BALE_STACK'],
+    dynamicAmbientElements: [
+      'TURNING_CIDER_MILL_WATERWHEEL',
+      'BOBBING_HOT_AIR_BALLOON_BURNER',
+      'RISING_BONFIRE_SMOKE_RINGS',
+      'SWIRLING_AUTUMN_MAPLE_LEAVES',
+      'BROOK_WATER_RIPPLES',
+    ],
+  },
+  TURF_SAKURA: {
+    id: 'TURF_SAKURA',
+    dioramaTitle: 'Kyoto Five-Tier Pagoda, Arched Taiko Bridge & Emerald Bamboo Grove',
+    isAsymmetric: true,
+    quadrants: {
+      west: {
+        quadrant: 'WEST',
+        title: 'Arashiyama Emerald Bamboo Grove & Yatai Alley',
+        primaryLandmark: 'Towering Segmented Green Bamboo Forest',
+        secondaryLandmark: 'Senbon Torii Shrine Walk & Ramen Yatai Stalls',
+        groundStyle: 'Mossy Stone Path & Raked Zen Gravel',
+      },
+      east: {
+        quadrant: 'EAST',
+        title: 'Winding Imperial Koi River & Five-Tier Pagoda',
+        primaryLandmark: 'Vermilion Taiko-Bashi Arched Drum Bridge',
+        secondaryLandmark: 'Five-Tiered Timber Pagoda & Matcha Tea House',
+        groundStyle: 'Turquoise Koi Stream & Iris Banks',
+      },
+      north: {
+        quadrant: 'NORTH',
+        title: 'Karesansui Zen Rock Sanctuary & Bell Pavilion',
+        primaryLandmark: 'Bronze Bonsho Temple Bell & Raked Wave Stones',
+        secondaryLandmark: 'Ancient Weeping Cherry Blossom Sanctuary',
+        groundStyle: 'White Karesansui Raked Pebble Patterns',
+      },
+      south: {
+        quadrant: 'SOUTH',
+        title: 'Toro Nagashi Floating Lantern Dock & Moon Viewing Deck',
+        primaryLandmark: 'Cedar Moon-Viewing Pier & Red Palanquin',
+        secondaryLandmark: 'Stone Toro Lantern Garden & Bonsai Plinths',
+        groundStyle: 'Stepped Timber Veranda & Lotus Shallows',
+      },
+    },
+    floraOrPropVarieties: ['WEEPING_SAKURA', 'ANCIENT_GNARLED_CHERRY', 'EMERALD_BAMBOO_CLUSTER', 'PINE_BONSAI', 'STONE_TORO_LANTERN'],
+    dynamicAmbientElements: [
+      'FIGURE_EIGHT_SWIMMING_KOI_SCHOOL',
+      'DRIFTING_TORO_NAGASHI_PAPER_LANTERNS',
+      'SWAYING_BAMBOO_GROVE_CRESTS',
+      'SWIRLING_SAKURA_PETAL_BREEZE',
+      'TEMPLE_BELL_SONIC_RIPPLE',
+    ],
+  },
+  TURF_CHAMPIONS: {
+    id: 'TURF_CHAMPIONS',
+    dioramaTitle: 'European Triumphal Arch, VIP Red Carpet & High-Speed Rail Viaduct',
+    isAsymmetric: true,
+    quadrants: {
+      west: {
+        quadrant: 'WEST',
+        title: 'Champions VIP Red-Carpet & Hologram Rotunda',
+        primaryLandmark: 'Starlight Team Coaches & Press Flash Wall',
+        secondaryLandmark: 'Rotating Golden Cup Hologram Plinth & OB Compound',
+        groundStyle: 'Royal Navy Granite & Crimson Velvet Carpet',
+      },
+      east: {
+        quadrant: 'EAST',
+        title: 'UEFA Fan-Fest Pavilion & Hall of Fame Dome',
+        primaryLandmark: 'Glass-Domed Champions Museum & Trophy Vault',
+        secondaryLandmark: 'Giant Fan-Zone Jumbotron & Festival Tables',
+        groundStyle: 'Inlaid Gold Starball Marble Piazza',
+      },
+      north: {
+        quadrant: 'NORTH',
+        title: 'Monumental Triumphal Arch & Heraldic Colonnade',
+        primaryLandmark: 'Neoclassical Triumphal Archway & Pyro Braziers',
+        secondaryLandmark: 'Colonnade of 10 Distinct Club Heraldic Banners',
+        groundStyle: 'Grand Ceremonial Processional Boulevard',
+      },
+      south: {
+        quadrant: 'SOUTH',
+        title: 'Arched Stone Metro Viaduct & Fountain Esplanade',
+        primaryLandmark: 'Illuminated European High-Speed Express Viaduct',
+        secondaryLandmark: 'Synchronized Golden Choreographed Fountains',
+        groundStyle: 'Polished Slate Esplanade & Viaduct Arches',
+      },
+    },
+    floraOrPropVarieties: ['ROYAL_CYPRESS', 'GOLD_LAUREL_TOPIARY', 'HERALDIC_BANNER_PILLAR', 'PYRO_FLAME_OBELISK'],
+    dynamicAmbientElements: [
+      'SWEEPING_CHAMPIONS_SKY_SEARCHLIGHTS',
+      'GLIDING_EUROPEAN_EXPRESS_TRAIN',
+      'VIP_RED_CARPET_PAPARAZZI_FLASHES',
+      'PULSING_GOLDEN_CUP_HOLOGRAM',
+    ],
+  },
+  URBAN_CONCRETE: {
+    id: 'URBAN_CONCRETE',
+    dioramaTitle: 'Concrete Skatepark Bowl, Elevated El-Train, Streetball & Lowrider Meet',
+    isAsymmetric: true,
+    quadrants: {
+      west: {
+        quadrant: 'WEST',
+        title: 'Sunken Skatepark Bowl & Lowrider Taco Plaza',
+        primaryLandmark: 'Concrete Kidney Skate Bowl with Grind Rails & Graffiti',
+        secondaryLandmark: 'Bouncing Hydraulic Lowriders & Neon Taco Truck',
+        groundStyle: 'Painted Street-Art Asphalt & Checkered Curb',
+      },
+      east: {
+        quadrant: 'EAST',
+        title: 'Rucker-Style Streetball Court & Rooftop Block Party',
+        primaryLandmark: 'Full-Key Asphalt Basketball Court & Chain-Link Hoop',
+        secondaryLandmark: 'Shipping Container DJ Stage & Breakdance Cypher Mat',
+        groundStyle: 'Distressed Concrete & Spray-Painted Stencils',
+      },
+      north: {
+        quadrant: 'NORTH',
+        title: 'Elevated Steel Subway Viaduct & Tenement Skyline',
+        primaryLandmark: 'Riveted Steel El-Train Track & Graffiti Billboard',
+        secondaryLandmark: 'Red-Brick Fire-Escape Tenements & Rooftop Water Towers',
+        groundStyle: 'Industrial Girder Underpass & Cobblestone Alley',
+      },
+      south: {
+        quadrant: 'SOUTH',
+        title: 'Downtown Two-Lane Avenue & Subway Entrance',
+        primaryLandmark: 'Crosswalk Intersection, Bus Shelter & Steaming Manholes',
+        secondaryLandmark: 'Subway Stairs, Newsstand & Streetlight Row',
+        groundStyle: 'Striped City Asphalt & Yellow Tactile Curbs',
+      },
+    },
+    floraOrPropVarieties: ['STREET_OAK_GRATE', 'GRAFFITI_WATER_TOWER', 'SHIPPING_CONTAINER_STACK', 'STEAM_MANHOLE_VENT'],
+    dynamicAmbientElements: [
+      'RUMBLING_SUBWAY_EL_TRAIN_CARS',
+      'CARVING_SKATEBOARDER_IN_BOWL',
+      'BOUNCING_HYDRAULIC_LOWRIDER',
+      'RISING_MANHOLE_STEAM_PLUMES',
+      'TWO_LANE_DOWNTOWN_TRAFFIC',
+    ],
+  },
+  RIO_CLAY: {
+    id: 'RIO_CLAY',
+    dioramaTitle: 'Copacabana Ocean Marina, Sugarloaf Waterfall & Carnival Samba Promenade',
+    isAsymmetric: true,
+    quadrants: {
+      west: {
+        quadrant: 'WEST',
+        title: 'Portuguese Wave Calçadão, Footvolley & Samba Stage',
+        primaryLandmark: 'Mosaic Wave Boardwalk & Carnival Percussion Float',
+        secondaryLandmark: 'Footvolley Sand Court & Coconut Tiki Bar',
+        groundStyle: 'Black-and-White Portuguese Mosaic & Golden Sand',
+      },
+      east: {
+        quadrant: 'EAST',
+        title: 'Atlantic Ocean Surf Bay & Timber Marina Pier',
+        primaryLandmark: 'Wooden Yacht & Fishing Boat Marina Pier',
+        secondaryLandmark: 'Curved Breaking Surf Shoreline & Jet-Ski Buoys',
+        groundStyle: 'Deep Turquoise Atlantic Swell & Foaming Tide',
+      },
+      north: {
+        quadrant: 'NORTH',
+        title: 'Sugarloaf Granite Cliffs & Rainforest Waterfall Lagoon',
+        primaryLandmark: 'Tropical Cliff Cascade & Emerald Plunge Lagoon',
+        secondaryLandmark: 'Lifeguard Watchtower & Sunbather Loungers',
+        groundStyle: 'Volcanic Coastal Rock & Lush Jungle Ferns',
+      },
+      south: {
+        quadrant: 'SOUTH',
+        title: 'Surfboard Shack, Giant Sandcastle & Palm Cove',
+        primaryLandmark: 'Bamboo Surfboard Rental Hut & Sculpted Sandcastle',
+        secondaryLandmark: 'Hammock Palm Grove & Beach Frescobol Zone',
+        groundStyle: 'Sun-Baked Copacabana Dunes & Seashells',
+      },
+    },
+    floraOrPropVarieties: ['LEANING_COCONUT_PALM', 'TALL_ROYAL_PALM', 'TROPICAL_HIBISCUS_BUSH', 'STRIPED_BEACH_PARASOL'],
+    dynamicAmbientElements: [
+      'ROLLING_ATLANTIC_SHORELINE_SURF',
+      'CRUISING_MARINA_SAILBOATS_AND_JETSKIS',
+      'CASCADING_SUGARLOAF_WATERFALL_MIST',
+      'PULSING_SAMBA_CARNIVAL_STAGE',
+      'GLIDING_COASTAL_SEAGULLS',
+    ],
+  },
+  COSMIC_SPACE: {
+    id: 'COSMIC_SPACE',
+    dioramaTitle: 'Orbital Starfighter Hangar, Geodesic Biodome & Lunar Rover Outpost',
+    isAsymmetric: true,
+    quadrants: {
+      west: {
+        quadrant: 'WEST',
+        title: 'Orbital Starfighter Hangar & Cargo Deck',
+        primaryLandmark: 'Forcefield Hangar Bay with Landed Starfighter Shuttle',
+        secondaryLandmark: 'Plasma Fuel Umbilicals & Robotic Loader Cranes',
+        groundStyle: 'Titanium Hull Plating & Magnetic Tractor Strips',
+      },
+      east: {
+        quadrant: 'EAST',
+        title: 'Geodesic Arboretum Biodome & Deep-Space Comms Array',
+        primaryLandmark: 'Glass Hydroponic Biodome with Bioluminescent Flora',
+        secondaryLandmark: 'Rotating Quantum Dish Array & Airlock EVA Dock',
+        groundStyle: 'Hexagonal Solar Grid & Illuminated Catwalks',
+      },
+      north: {
+        quadrant: 'NORTH',
+        title: 'Twin Fusion Reactor Cores & Spiral Galaxy Vista',
+        primaryLandmark: 'Pulsing Tokamak Plasma Reactors & Energy Bridges',
+        secondaryLandmark: 'Deep-Space Spiral Galaxy & Nebula Observatory',
+        groundStyle: 'Reinforced Starbase Spine & Conduit Trenches',
+      },
+      south: {
+        quadrant: 'SOUTH',
+        title: 'Tethered Lunar Outpost Ridge & Rover Track',
+        primaryLandmark: 'Cratered Moon Ridge with 6-Wheeled Lunar Rover',
+        secondaryLandmark: 'Glowing Kyber Crystal Cluster & Ringed Gas Giant',
+        groundStyle: 'Regolith Craters & Pressurized Habitat Tubes',
+      },
+    },
+    floraOrPropVarieties: ['BIOLUMINESCENT_CRYSTAL', 'HEX_SOLAR_WING', 'ORBITAL_COMMS_DISH', 'ASTEROID_BOULDER'],
+    dynamicAmbientElements: [
+      'TETHERED_ZERO_G_SPACEWALK_ASTRONAUT',
+      'DRIVING_SIX_WHEEL_LUNAR_ROVER',
+      'ROTATING_QUANTUM_RADAR_DISH',
+      'CRUISING_ALIEN_UFOS_AND_COMETS',
+      'PULSING_FUSION_REACTOR_CONDUITS',
+    ],
+  },
+  TWILIGHT_SYNTH: {
+    id: 'TWILIGHT_SYNTH',
+    dioramaTitle: 'Outrun Wireframe Peaks, 80s Neon Drive-In, Cyber Helipad & Maglev Track',
+    isAsymmetric: true,
+    quadrants: {
+      west: {
+        quadrant: 'WEST',
+        title: 'Retro 80s Neon Drive-In Diner & Gullwing Car Meet',
+        primaryLandmark: 'Chrome Neon Diner with Roller-Carhop Canopy',
+        secondaryLandmark: 'Parked Gullwing DeLoreans & Outdoor Arcade Cabinets',
+        groundStyle: 'Magenta-Cyan Laser Grid & Checkered Neon Tile',
+      },
+      east: {
+        quadrant: 'EAST',
+        title: 'Rooftop Cyber-Helipad & Hologram DJ Megatower',
+        primaryLandmark: 'Glowing H-Ring Helipad with Stealth Tilt-Rotor Craft',
+        secondaryLandmark: 'Giant Equalizer Hologram Tower & Laser Pylons',
+        groundStyle: 'Carbon-Fiber Megablock Roof & Neon Conduit Pipes',
+      },
+      north: {
+        quadrant: 'NORTH',
+        title: 'Outrun Sunset Horizon, Wireframe Mountains & Neo-Skyline',
+        primaryLandmark: 'Segmented Retro Sun & 3D Cyan/Purple Wireframe Peaks',
+        secondaryLandmark: 'Asymmetric Cyberpunk Skyscrapers with Kanji Billboards',
+        groundStyle: 'Synthwave Horizon Grid & Highway Overpass',
+      },
+      south: {
+        quadrant: 'SOUTH',
+        title: 'Elevated Neon Maglev Monorail & Hover-Freeway',
+        primaryLandmark: 'Trans-City Neon Maglev Monorail Beamway',
+        secondaryLandmark: 'Dual-Level Cyber Hover-Spinner Skyway',
+        groundStyle: 'Glowing Fibre-Optic Viaduct & Synth Palms',
+      },
+    },
+    floraOrPropVarieties: ['NEON_MAGENTA_PALM', 'CYBER_HOLOGRAM_PYLON', 'WIREFRAME_MOUNTAIN_PEAK', 'SYNTH_ARCADE_CABINET'],
+    dynamicAmbientElements: [
+      'STREAKING_NEON_MAGLEV_MONORAIL',
+      'SPINNING_HELIPAD_ROTOR_AND_BEACON',
+      'ANIMATED_SKYSCRAPER_NEON_BILLBOARDS',
+      'SWEEPING_SYNTH_LASER_SEARCHLIGHTS',
+      'CRUISING_CYBER_HOVER_SPINNERS',
+    ],
+  },
+  ARCTIC_ICE: {
+    id: 'ARCTIC_ICE',
+    dioramaTitle: 'Alpine Ski Gondola Lift, Icebreaker Bay, Geothermal Hot Springs & Igloos',
+    isAsymmetric: true,
+    quadrants: {
+      west: {
+        quadrant: 'WEST',
+        title: 'Alpine Ski Slope, Gondola Chairlift & Nordic Lodge',
+        primaryLandmark: 'Overhead Cable Gondola Chairlift with Red/Gold Cabins',
+        secondaryLandmark: 'Timber Apres-Ski Lodge with Smoking Stone Chimney',
+        groundStyle: 'Groomed Powder Ski Run & Snowdrift Banks',
+      },
+      east: {
+        quadrant: 'EAST',
+        title: 'Glacial Iceberg Bay, Icebreaker Ship & Hot Springs',
+        primaryLandmark: 'Anchored Red-Hull Polar Icebreaker & Floating Icebergs',
+        secondaryLandmark: 'Steaming Turquoise Geothermal Hot Springs & Igloo Village',
+        groundStyle: 'Dark Arctic Fjord Water & Cracked Pack Ice',
+      },
+      north: {
+        quadrant: 'NORTH',
+        title: 'Jagged Glacial Mountain Range & Ice-Crystal Citadel Gate',
+        primaryLandmark: 'Towering Frosted Quartz Spires & Ice Archway',
+        secondaryLandmark: 'Shimmering Aurora Borealis Horizon Curtains',
+        groundStyle: 'Glacial Crevasse Bridge & Permafrost Ridge',
+      },
+      south: {
+        quadrant: 'SOUTH',
+        title: 'Polar Research Geodome, Snowmobiles & Penguin Rookery',
+        primaryLandmark: 'Orange Arctic Research Dome & Tracked Snowcats',
+        secondaryLandmark: 'Penguin Diving Ice Floe & Weather Radar Mast',
+        groundStyle: 'Packed Snow Runway & Ice Lantern Trail',
+      },
+    },
+    floraOrPropVarieties: ['FROSTED_BLUE_SPRUCE', 'TALL_SNOW_PINE', 'GLACIAL_QUARTZ_MONOLITH', 'IGLOO_DOME'],
+    dynamicAmbientElements: [
+      'GLIDING_SKI_GONDOLA_CHAIRLIFT_CABINS',
+      'RISING_GEOTHERMAL_HOT_SPRING_STEAM',
+      'PUFFING_NORDIC_LODGE_CHIMNEY_SMOKE',
+      'WADDLING_PENGUIN_ROOKERY',
+      'SHIMMERING_AURORA_AND_SNOWFLAKES',
+    ],
+  },
+  VOLCANO_FORGE: {
+    id: 'VOLCANO_FORGE',
+    dioramaTitle: 'Dwarven Titan Smeltery, Dragon Skeleton Caldera & Magma Minecart Rail',
+    isAsymmetric: true,
+    quadrants: {
+      west: {
+        quadrant: 'WEST',
+        title: 'Great Titan Crucible Smeltery & Anvil Foundry',
+        primaryLandmark: 'Giant Tilted Crucible Pouring Molten Gold into Runes',
+        secondaryLandmark: 'Colossal Forge Anvil, Bellows & Obsidian Chains',
+        groundStyle: 'Inlaid Basalt Foundry Floor & Lava Channels',
+      },
+      east: {
+        quadrant: 'EAST',
+        title: 'Ancient Dragon Skeleton Ribcage & Ore Minecart Track',
+        primaryLandmark: 'Bleached Colossal Dragon Skull & Ribcage in Lava Lake',
+        secondaryLandmark: 'Iron Trestle Rail Track with Glowing Magma Ore Carts',
+        groundStyle: 'Bubbling Magma Shore & Scorched Obsidian Shelves',
+      },
+      north: {
+        quadrant: 'NORTH',
+        title: 'Erupting Caldera Throne Gate & Gargoyle Bastion',
+        primaryLandmark: 'Twin Lava Waterfalls & Horned Basalt Gargoyle Statues',
+        secondaryLandmark: 'Runic Obsidian Portal & Roaring Dragon Braziers',
+        groundStyle: 'Jagged Volcanic Crater Rim & Ash Terraces',
+      },
+      south: {
+        quadrant: 'SOUTH',
+        title: 'Iron Chain Drawbridge, Sulfur Geysers & Ruby Veins',
+        primaryLandmark: 'Heavy Iron-Chain Fortress Drawbridge Over Lava Moat',
+        secondaryLandmark: 'Erupting Sulfur Steam Geysers & Crimson Ruby Clusters',
+        groundStyle: 'Cracked Tectonic Plates & Glowing Fissures',
+      },
+    },
+    floraOrPropVarieties: ['CRIMSON_RUBY_CRYSTAL', 'CHARRED_PYROCLAST_SPIRE', 'OBSIDIAN_BRAZIER_PILLAR', 'SULFUR_VENT_CHIMNEY'],
+    dynamicAmbientElements: [
+      'ROLLING_MAGMA_ORE_MINECART',
+      'POURING_MOLTEN_CRUCIBLE_STREAM',
+      'ERUPTING_LAVA_GEYSER_BUBBLES',
+      'ROARING_DRAGON_BRAZIER_FLAMES',
+      'RISING_VOLCANIC_EMBER_SPARKS',
+    ],
+  },
+};
+
+export function getStadiumSurroundingsDiorama(themeId: PitchThemeId): StadiumSurroundingsDiorama {
+  return STADIUM_SURROUNDINGS_DIORAMAS[themeId] || STADIUM_SURROUNDINGS_DIORAMAS.CLASSIC_TURF;
+}
+
+
+
 

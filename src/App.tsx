@@ -64,8 +64,12 @@ import {
   purchaseShopStadium,
   purchaseShopPokieMachine,
   sortLeaderboardEntries,
+  computeMatchDifficultyProfile,
+  SEEDED_CPU_LEADERBOARD_PROFILES,
   GAME_TITLE,
   FIREBASE_CLOUD_TITLE,
+  createDefaultPlayerProfile,
+  getPokieMachineSymbolTheme,
   type RankTierInfo,
   type RankSymbolId,
   type PokieMachineId,
@@ -86,6 +90,7 @@ import {
   subscribeToAuthChanges,
   signInWithGoogleForLeaderboard,
   syncProfileToFirestoreLeaderboard,
+  deleteProfileFromFirestoreLeaderboard,
   subscribeToOnlineLeaderboard,
 } from './firebase';
 import {
@@ -148,56 +153,322 @@ function getRankCrestSvgHtml(rankInfo: RankTierInfo, sizeClass = 'w-4 h-4'): str
   }
 }
 
+/**
+ * Generates an SVG string of the stadium rendered in the EXACT 1:1 geometric ratio of the real pitch:
+ * PITCH.width = 2720, PITCH.height = 1580, cornerChamfer = 86, boxWidth = 540, boxHeight = 880,
+ * goalWidth = 380, goalDepth = 96, centerCircle = 152, penaltyArc = 95, 12 mowed turf stripes.
+ */
+function getTrueRatioStadiumSvgHtml(stadiumId: PitchThemeId): string {
+  const theme = PITCH_THEMES.find((t) => t.id === stadiumId) || PITCH_THEMES[0];
+  const shopItem = SHOP_STADIUM_ITEMS.find((s) => s.id === stadiumId) || SHOP_STADIUM_ITEMS[0];
+  const { turf, apron } = theme;
+  const lineHex = turf.chalk || theme.swatchLine || '#ffffff';
+  const glowHex = shopItem.accentHex || '#fde047';
+  const w = PITCH.width; // 2720
+  const h = PITCH.height; // 1580
+  const c = PITCH.cornerChamfer; // 86
+  const boxW = PITCH.boxWidth; // 540
+  const boxH = PITCH.boxHeight; // 880
+  const boxTop = (h - boxH) / 2; // 350
+  const goalW = PITCH.goalWidth; // 380
+  const goalD = PITCH.goalDepth; // 96
+  const goalTop = (h - goalW) / 2; // 600
+  const stripeW = w / 12;
+
+  let stripesSvg = '';
+  for (let i = 0; i < 12; i++) {
+    const col = i % 2 === 0 ? turf.stripeLight : turf.stripeDark;
+    stripesSvg += `<rect x="${(i * stripeW).toFixed(1)}" y="0" width="${(stripeW + 2).toFixed(1)}" height="${h}" fill="${col}" />`;
+  }
+
+  const cagePath = `M ${c} 0 L ${w - c} 0 L ${w} ${c} L ${w} ${h - c} L ${w - c} ${h} L ${c} ${h} L 0 ${h - c} L 0 ${c} Z`;
+  const clipId = `pitchClip_${stadiumId}_${Math.random().toString(36).slice(2, 7)}`;
+
+  return `<svg class="w-full h-full block" viewBox="-150 -130 3020 1840" preserveAspectRatio="xMidYMid meet" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <clipPath id="${clipId}">
+        <path d="${cagePath}" />
+      </clipPath>
+    </defs>
+    <!-- Outer Stadium Concourse Apron -->
+    <rect x="-150" y="-130" width="3020" height="1840" rx="64" fill="${apron.base}" />
+    <rect x="-105" y="-88" width="2930" height="1756" rx="48" fill="${apron.concourse}" stroke="#0f172a" stroke-width="24" />
+    <!-- Top & Bottom Bleacher Banks -->
+    <rect x="220" y="-68" width="2280" height="36" rx="10" fill="${apron.bleacherBase}" stroke="#0f172a" stroke-width="14" />
+    <rect x="220" y="${h + 32}" width="2280" height="36" rx="10" fill="${apron.bleacherBase}" stroke="#0f172a" stroke-width="14" />
+    <!-- Clipped 12-Stripe Turf Field -->
+    <g clip-path="url(#${clipId})">
+      ${stripesSvg}
+    </g>
+    <!-- Left & Right Recessed Goal Cages (Exact 96x380 ratio) -->
+    <rect x="${-goalD}" y="${goalTop}" width="${goalD}" height="${goalW}" fill="${lineHex}" fill-opacity="0.28" stroke="#0f172a" stroke-width="26" />
+    <rect x="${w}" y="${goalTop}" width="${goalD}" height="${goalW}" fill="${lineHex}" fill-opacity="0.28" stroke="#0f172a" stroke-width="26" />
+    <!-- Pitch Chalk Lines: Halfway Line, Center Circle (r=152), Penalty Boxes (540x880) & Penalty Arcs -->
+    <line x1="${w / 2}" y1="0" x2="${w / 2}" y2="${h}" stroke="${lineHex}" stroke-width="22" stroke-opacity="0.9" />
+    <circle cx="${w / 2}" cy="${h / 2}" r="152" stroke="${lineHex}" stroke-width="22" stroke-opacity="0.9" />
+    <circle cx="${w / 2}" cy="${h / 2}" r="28" fill="${lineHex}" />
+    <rect x="0" y="${boxTop}" width="${boxW}" height="${boxH}" stroke="${lineHex}" stroke-width="22" stroke-opacity="0.9" />
+    <rect x="${w - boxW}" y="${boxTop}" width="${boxW}" height="${boxH}" stroke="${lineHex}" stroke-width="22" stroke-opacity="0.9" />
+    <path d="M ${boxW} ${h / 2 - 95} A 95 95 0 0 1 ${boxW} ${h / 2 + 95}" stroke="${lineHex}" stroke-width="20" stroke-opacity="0.88" />
+    <path d="M ${w - boxW} ${h / 2 - 95} A 95 95 0 0 0 ${w - boxW} ${h / 2 + 95}" stroke="${lineHex}" stroke-width="20" stroke-opacity="0.88" />
+    <!-- 8-Sided Chamfered Cage Perimeter Wall -->
+    <path d="${cagePath}" stroke="#0f172a" stroke-width="34" />
+    <path d="${cagePath}" stroke="${lineHex}" stroke-width="16" stroke-opacity="0.95" />
+    <!-- 4 Corner Floodlight Pylons -->
+    <circle cx="-52" cy="-46" r="38" fill="${glowHex}" stroke="#0f172a" stroke-width="18" />
+    <circle cx="${w + 52}" cy="-46" r="38" fill="${glowHex}" stroke="#0f172a" stroke-width="18" />
+    <circle cx="-52" cy="${h + 46}" r="38" fill="${glowHex}" stroke="#0f172a" stroke-width="18" />
+    <circle cx="${w + 52}" cy="${h + 46}" r="38" fill="${glowHex}" stroke="#0f172a" stroke-width="18" />
+  </svg>`;
+}
+
+/**
+ * Custom TIKI TAKA 0.2 Tactical Passing-Triangle Crest & Extruded Arcade Wordmark Lockup.
+ */
+function TikiTakaCrestSvg({ className = 'w-12 h-12' }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+      {/* Outer 3D Drop Shadow Hex-Shield */}
+      <polygon
+        points="32,5 57,15 52,47 32,61 12,47 7,15"
+        fill="#0f172a"
+      />
+      {/* Main Chamfered Tactical Crest Plate */}
+      <polygon
+        points="32,2 57,12 52,44 32,58 12,44 7,12"
+        fill="#0f172a"
+        stroke="#0f172a"
+        strokeWidth="3"
+      />
+      <polygon
+        points="32,5.5 53.5,14 49,42 32,54 15,42 10.5,14"
+        fill="url(#tikiCrestGrad)"
+        stroke="#fde047"
+        strokeWidth="2.2"
+      />
+      {/* Mowed Pitch Stripes Inside Crest */}
+      <line x1="21" y1="11" x2="21" y2="46" stroke="#0f172a" strokeOpacity="0.22" strokeWidth="4" />
+      <line x1="32" y1="8" x2="32" y2="51" stroke="#0f172a" strokeOpacity="0.22" strokeWidth="4" />
+      <line x1="43" y1="11" x2="43" y2="46" stroke="#0f172a" strokeOpacity="0.22" strokeWidth="4" />
+
+      {/* Glowing Tiki-Taka One-Touch Passing Triangle Vectors */}
+      <polygon
+        points="18,37 46,35 32,15"
+        fill="rgba(56, 189, 248, 0.22)"
+        stroke="#fde047"
+        strokeWidth="3"
+        strokeLinejoin="round"
+      />
+      <line
+        x1="18"
+        y1="37"
+        x2="46"
+        y2="35"
+        stroke="#38bdf8"
+        strokeWidth="2.5"
+        strokeDasharray="3 2"
+      />
+      {/* Node 1: Left Wing Pass Origin */}
+      <circle cx="18" cy="37" r="4.5" fill="#38bdf8" stroke="#0f172a" strokeWidth="2.2" />
+      {/* Node 2: Right Wing One-Touch Relay */}
+      <circle cx="46" cy="35" r="4.5" fill="#34d399" stroke="#0f172a" strokeWidth="2.2" />
+      {/* Apex Node 3: Striker Golden Soccer Ball */}
+      <circle cx="32" cy="16" r="7.5" fill="#fde047" stroke="#0f172a" strokeWidth="2.5" />
+      <polygon points="32,12.5 35,14.7 33.8,18.2 30.2,18.2 29,14.7" fill="#0f172a" />
+
+      {/* Bottom '3V3 CAGE' Banner Ribbon */}
+      <rect x="15" y="43" width="34" height="9" rx="2" fill="#0f172a" stroke="#fde047" strokeWidth="1.5" />
+      <circle cx="20" cy="47.5" r="1.5" fill="#38bdf8" />
+      <circle cx="32" cy="47.5" r="1.5" fill="#fde047" />
+      <circle cx="44" cy="47.5" r="1.5" fill="#34d399" />
+
+      <defs>
+        <linearGradient id="tikiCrestGrad" x1="32" y1="5" x2="32" y2="54" gradientUnits="userSpaceOnUse">
+          <stop offset="0%" stopColor="#059669" />
+          <stop offset="55%" stopColor="#047857" />
+          <stop offset="100%" stopColor="#0f172a" />
+        </linearGradient>
+      </defs>
+    </svg>
+  );
+}
+
 function ShopPokiePreviewIllustration({ machineId }: { machineId: PokieMachineId }) {
   const m = POKIE_MACHINES[machineId];
-  const reelIcons =
-    machineId === 'HIGH_ROLLER_ROYAL'
-      ? ['👑', '🏆', '💎']
-      : machineId === 'VOLCANO_INFERNO'
-        ? ['🔥', '🏆', '👑']
-        : machineId === 'COSMIC_NEON'
-          ? ['⚡', '👑', '⭐']
-          : ['⚽', '🏆', '👑'];
-  return (
-    <div
-      className="w-full h-24 rounded-xl border-2 border-slate-900 overflow-hidden relative flex flex-col justify-between p-2 shadow-[inset_0_2px_8px_rgba(0,0,0,0.45)]"
-      style={{ background: m.headerGradient }}
-    >
-      {/* Top Marquee Chase Lights */}
-      <div className="flex items-center justify-between px-1">
-        <div className="flex items-center gap-1">
-          {[0, 1, 2, 3, 4].map((d) => (
-            <span
-              key={d}
-              className="w-1.5 h-1.5 rounded-full border border-slate-950"
-              style={{ backgroundColor: d % 2 === 0 ? m.accentHex : '#ffffff' }}
-            />
+
+  if (machineId === 'CHAMPIONS_GOLD') {
+    // 1. CHAMPIONS CATHEDRAL: Royal Emerald Turf & Brushed Gold Trophy Arch Cabinet
+    return (
+      <div
+        className="w-full h-28 rounded-lg border-[2.5px] border-slate-900 overflow-hidden relative flex flex-col justify-between p-2 shadow-[0_3px_0_#0f172a]"
+        style={{ background: 'linear-gradient(180deg, #064e3b 0%, #047857 52%, #022c22 100%)' }}
+      >
+        {/* Golden Cathedral Arch Marquee */}
+        <div className="flex items-center justify-between px-1.5 py-0.5 rounded bg-amber-400 border-2 border-slate-950 shadow-[0_2px_0_#000]">
+          <span className="text-[7.5px] font-display uppercase tracking-wider text-slate-950">
+            🏆 ROYAL STADIUM ARCH
+          </span>
+          <span className="font-mono-num text-[7.5px] font-bold px-1 rounded bg-slate-950 text-amber-300">
+            $10/$100
+          </span>
+        </div>
+
+        {/* 3x1 Gold-Pillar Reel Window */}
+        <div className="my-auto mx-auto w-full max-w-[205px] grid grid-cols-3 gap-1.5 bg-emerald-950 p-1.5 rounded-md border-2 border-amber-400 shadow-[0_3px_0_#000]">
+          {[
+            { icon: '🏆', label: 'CUP', bg: '#fef08a' },
+            { icon: '⚽', label: 'BALL', bg: '#ffffff' },
+            { icon: '👑', label: 'ORB', bg: '#fde68a' },
+          ].map((cell, idx) => (
+            <div
+              key={idx}
+              className="h-10 rounded border-2 border-slate-950 flex flex-col items-center justify-center leading-none shadow-inner"
+              style={{ backgroundColor: cell.bg }}
+            >
+              <span className="text-sm">{cell.icon}</span>
+              <span className="text-[6.5px] font-mono-num font-bold text-slate-900 mt-0.5">{cell.label}</span>
+            </div>
           ))}
         </div>
-        <span
-          className="px-1.5 py-0.2 rounded text-[7.5px] font-mono-num font-black uppercase border border-slate-950"
-          style={{ backgroundColor: m.accentHex, color: '#0f172a' }}
-        >
-          {m.stadiumName}
+
+        <div className="flex items-center justify-between text-[7.5px] font-mono-num font-bold text-amber-200 px-0.5">
+          <span>PITCH TURF CABINET</span>
+          <span className="text-amber-300">JACKPOT $500–$5K</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (machineId === 'COSMIC_NEON') {
+    // 2. COSMIC ORBIT: Zero-G Sci-Fi Hologram Laser Matrix Cabinet
+    return (
+      <div
+        className="w-full h-28 rounded-lg border-[2.5px] border-slate-900 overflow-hidden relative flex flex-col justify-between p-2 shadow-[0_3px_0_#0f172a]"
+        style={{ background: 'radial-gradient(circle at 50% 25%, #311068 0%, #090d24 70%, #030614 100%)' }}
+      >
+        {/* Sci-Fi Laser Scanbar Top */}
+        <div className="flex items-center justify-between px-1.5 py-0.5 rounded bg-cyan-400 border-2 border-slate-950 shadow-[0_0_10px_rgba(34,211,238,0.6)]">
+          <span className="text-[7.5px] font-display uppercase tracking-wider text-slate-950">
+            🪐 ZERO-G HOLO MATRIX
+          </span>
+          <span className="font-mono-num text-[7.5px] font-bold px-1 rounded bg-slate-950 text-fuchsia-300">
+            CYBER
+          </span>
+        </div>
+
+        {/* Dark Obsidian & Cyan Laser Reels */}
+        <div className="my-auto mx-auto w-full max-w-[205px] grid grid-cols-3 gap-1.5 bg-slate-950/95 p-1.5 rounded-md border-2 border-cyan-400 shadow-[0_0_12px_rgba(56,189,248,0.45)]">
+          {[
+            { icon: '⚡', label: 'PLASMA', border: '#22d3ee', text: '#67e8f9' },
+            { icon: '⭐', label: '2X WILD', border: '#e879f9', text: '#f0abfc' },
+            { icon: '👑', label: 'NEBULA', border: '#22d3ee', text: '#fde047' },
+          ].map((cell, idx) => (
+            <div
+              key={idx}
+              className="h-10 rounded bg-[#0b132b] border-2 flex flex-col items-center justify-center leading-none"
+              style={{ borderColor: cell.border }}
+            >
+              <span className="text-sm">{cell.icon}</span>
+              <span className="text-[6.5px] font-mono-num font-bold mt-0.5" style={{ color: cell.text }}>
+                {cell.label}
+              </span>
+            </div>
+          ))}
+        </div>
+
+        <div className="flex items-center justify-between text-[7.5px] font-mono-num font-bold text-cyan-300 px-0.5">
+          <span>ORBITAL LASER REELS</span>
+          <span className="text-fuchsia-300">JACKPOT $750–$7.5K</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (machineId === 'VOLCANO_INFERNO') {
+    // 3. MAGMA CALDERA: Jagged Volcanic Basalt & Molten Dragon Forge Cabinet
+    return (
+      <div
+        className="w-full h-28 rounded-lg border-[2.5px] border-slate-900 overflow-hidden relative flex flex-col justify-between p-2 shadow-[0_3px_0_#0f172a]"
+        style={{ background: 'linear-gradient(180deg, #450a0a 0%, #9a3412 52%, #1c0704 100%)' }}
+      >
+        {/* Molten Forge Header */}
+        <div className="flex items-center justify-between px-1.5 py-0.5 rounded bg-gradient-to-r from-orange-500 via-amber-400 to-red-500 border-2 border-slate-950 shadow-[0_2px_0_#000]">
+          <span className="text-[7.5px] font-display uppercase tracking-wider text-slate-950">
+            🌋 MOLTEN LAVA FORGE
+          </span>
+          <span className="font-mono-num text-[7.5px] font-bold px-1 rounded bg-slate-950 text-orange-300">
+            INFERNO
+          </span>
+        </div>
+
+        {/* Cracked Obsidian & Magma Reels */}
+        <div className="my-auto mx-auto w-full max-w-[205px] grid grid-cols-3 gap-1.5 bg-[#1a0805] p-1.5 rounded-md border-2 border-orange-500 shadow-[0_3px_0_#000]">
+          {[
+            { icon: '🔥', label: 'MAGMA', bg: '#431407', border: '#f97316', text: '#fdba74' },
+            { icon: '🏆', label: 'CALDERA', bg: '#7c2d12', border: '#fde047', text: '#fde047' },
+            { icon: '🔥', label: 'EMBER', bg: '#431407', border: '#ef4444', text: '#fca5a5' },
+          ].map((cell, idx) => (
+            <div
+              key={idx}
+              className="h-10 rounded border-2 flex flex-col items-center justify-center leading-none"
+              style={{ backgroundColor: cell.bg, borderColor: cell.border }}
+            >
+              <span className="text-sm">{cell.icon}</span>
+              <span className="text-[6.5px] font-mono-num font-bold mt-0.5" style={{ color: cell.text }}>
+                {cell.label}
+              </span>
+            </div>
+          ))}
+        </div>
+
+        <div className="flex items-center justify-between text-[7.5px] font-mono-num font-bold text-orange-200 px-0.5">
+          <span>BASALT EMBER SLOTS</span>
+          <span className="text-amber-300">JACKPOT $1K–$10K</span>
+        </div>
+      </div>
+    );
+  }
+
+  // 4. HIGH ROLLER VIP VAULT: Art-Deco Diamond Bullion Bank Vault ($1,000 VIP Spins)
+  return (
+    <div
+      className="w-full h-28 rounded-lg border-[2.5px] border-slate-900 overflow-hidden relative flex flex-col justify-between p-2 shadow-[0_3px_0_#0f172a]"
+      style={{
+        background: 'linear-gradient(135deg, #2e1065 0%, #0f172a 45%, #713f12 100%)',
+        borderColor: m.accentHex,
+      }}
+    >
+      {/* 24K Bullion Plaque */}
+      <div className="flex items-center justify-between px-1.5 py-0.5 rounded bg-gradient-to-r from-amber-300 via-yellow-100 to-amber-400 border-2 border-slate-950 shadow-[0_2px_0_#000]">
+        <span className="text-[7.5px] font-display uppercase tracking-wider text-slate-950">
+          💎 VIP DIAMOND VAULT
+        </span>
+        <span className="font-mono-num text-[7.5px] font-bold px-1 rounded bg-purple-950 text-amber-300">
+          $1K SPIN
         </span>
       </div>
 
-      {/* Mini 3-Reel Arcade Window */}
-      <div className="my-auto mx-auto w-full max-w-[190px] grid grid-cols-3 gap-1.5 bg-slate-950/90 p-1.5 rounded-xl border-2 border-amber-400/80 shadow-[0_2px_0_#000000]">
-        {reelIcons.map((ic, idx) => (
+      {/* Gold Bullion Vault Door Reels */}
+      <div className="my-auto mx-auto w-full max-w-[205px] grid grid-cols-3 gap-1.5 bg-slate-950 p-1.5 rounded-md border-2 border-amber-300 shadow-[0_0_12px_rgba(250,204,21,0.5)]">
+        {[
+          { icon: '👑', label: 'ROYAL', bg: 'linear-gradient(180deg,#fef08a,#f59e0b)' },
+          { icon: '💎', label: '$100K+', bg: 'linear-gradient(180deg,#f5d0fe,#c084fc)' },
+          { icon: '🏆', label: 'VIP CUP', bg: 'linear-gradient(180deg,#fef08a,#f59e0b)' },
+        ].map((cell, idx) => (
           <div
             key={idx}
-            className="h-9 rounded-lg bg-white border border-slate-900 flex items-center justify-center text-base shadow-inner"
+            className="h-10 rounded border-2 border-slate-950 flex flex-col items-center justify-center leading-none shadow-inner"
+            style={{ background: cell.bg }}
           >
-            <span>{ic}</span>
+            <span className="text-sm">{cell.icon}</span>
+            <span className="text-[6.5px] font-mono-num font-bold text-slate-950 mt-0.5">{cell.label}</span>
           </div>
         ))}
       </div>
 
-      {/* Bottom Cabinet Accent Strip */}
-      <div className="flex items-center justify-between text-[7.5px] font-mono-num font-black text-white/90 px-0.5">
-        <span>3x3 • 5 PAYLINES</span>
-        <span style={{ color: m.accentHex }}>HOLD &amp; SPIN</span>
+      <div className="flex items-center justify-between text-[7.5px] font-mono-num font-bold text-amber-300 px-0.5">
+        <span>24K BULLION REELS</span>
+        <span className="text-fuchsia-300">JACKPOT $100,000+</span>
       </div>
     </div>
   );
@@ -205,73 +476,15 @@ function ShopPokiePreviewIllustration({ machineId }: { machineId: PokieMachineId
 
 function ShopStadiumPreviewIllustration({ stadiumId }: { stadiumId: PitchThemeId }) {
   const theme = PITCH_THEMES.find((t) => t.id === stadiumId) || PITCH_THEMES[0];
-  const shopItem = SHOP_STADIUM_ITEMS.find((s) => s.id === stadiumId) || SHOP_STADIUM_ITEMS[0];
-  const { turf, apron } = theme;
-  const lineHex = turf.chalk || theme.swatchLine || '#ffffff';
-  const glowHex = shopItem.accentHex || '#fde047';
   return (
     <div
-      className="w-full h-22 rounded-xl border-2 border-slate-900 overflow-hidden relative p-2 flex items-center justify-center shadow-[inset_0_2px_6px_rgba(0,0,0,0.35)]"
-      style={{ backgroundColor: apron.base }}
-    >
-      {/* Stadium Concourse Frame */}
-      <div
-        className="w-full h-full rounded-lg border-2 border-slate-900 relative overflow-hidden flex items-stretch"
-        style={{ backgroundColor: turf.stripeLight }}
-      >
-        {/* Mowed Turf Stripes */}
-        {[0, 1, 2, 3, 4, 5].map((idx) => (
-          <div
-            key={idx}
-            className="flex-1 h-full"
-            style={{ backgroundColor: idx % 2 === 0 ? turf.stripeLight : turf.stripeDark }}
-          />
-        ))}
-
-        {/* Top-Down Pitch Chalk Lines & Center Circle */}
-        <svg className="absolute inset-0 w-full h-full" viewBox="0 0 160 72" fill="none">
-          <rect
-            x="8"
-            y="6"
-            width="144"
-            height="60"
-            rx="3"
-            stroke={lineHex}
-            strokeWidth="2"
-            strokeOpacity="0.9"
-          />
-          <line x1="80" y1="6" x2="80" y2="66" stroke={lineHex} strokeWidth="1.8" strokeOpacity="0.85" />
-          <circle cx="80" cy="36" r="13" stroke={lineHex} strokeWidth="1.8" strokeOpacity="0.85" />
-          <circle cx="80" cy="36" r="2.2" fill={lineHex} />
-          {/* Left & Right Penalty Boxes */}
-          <rect x="8" y="19" width="18" height="34" stroke={lineHex} strokeWidth="1.6" strokeOpacity="0.85" />
-          <rect x="134" y="19" width="18" height="34" stroke={lineHex} strokeWidth="1.6" strokeOpacity="0.85" />
-          {/* Left & Right Goal Cages */}
-          <rect x="3" y="27" width="5" height="18" fill={lineHex} fillOpacity="0.55" />
-          <rect x="152" y="27" width="5" height="18" fill={lineHex} fillOpacity="0.55" />
-        </svg>
-
-        {/* Corner Floodlight Glow Dots */}
-        <span
-          className="absolute top-1 left-1 w-2 h-2 rounded-full border border-slate-950"
-          style={{ backgroundColor: glowHex }}
-        />
-        <span
-          className="absolute top-1 right-1 w-2 h-2 rounded-full border border-slate-950"
-          style={{ backgroundColor: glowHex }}
-        />
-        <span
-          className="absolute bottom-1 left-1 w-2 h-2 rounded-full border border-slate-950"
-          style={{ backgroundColor: glowHex }}
-        />
-        <span
-          className="absolute bottom-1 right-1 w-2 h-2 rounded-full border border-slate-950"
-          style={{ backgroundColor: glowHex }}
-        />
-      </div>
-    </div>
+      className="w-full aspect-[2720/1580] rounded-lg border-2 border-slate-900 overflow-hidden relative shadow-[0_3px_0_#0f172a]"
+      style={{ backgroundColor: theme.apron.base }}
+      dangerouslySetInnerHTML={{ __html: getTrueRatioStadiumSvgHtml(stadiumId) }}
+    />
   );
 }
+
 
 export default function App() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -312,31 +525,82 @@ export default function App() {
       const s = Math.max(1, Math.round(scale));
       const p = px * s;
       const outline = GRAPHICS_CONFIG.palette.outline;
-      const darkLeaf = variant % 2 === 0 ? '#15803d' : '#0f766e';
-      const midLeaf = variant % 2 === 0 ? '#22c55e' : '#14b8a6';
-      const lightLeaf = variant % 2 === 0 ? '#86efac' : '#5eead4';
+      const v = Math.abs(Math.round(variant)) % 4;
 
-      // Ground drop shadow
+      if (v === 1) {
+        // Variant 1: Tall Sculpted Mediterranean Cypress Spire
+        cCtx.fillStyle = 'rgba(15, 23, 42, 0.24)';
+        cCtx.fillRect(Math.round(tx - p * 3.5), Math.round(ty + p * 4), p * 7, p * 2.5);
+        fillPxRect(cCtx, tx - p * 1.5, ty + p * 1, p * 3, p * 4.5, outline, px);
+        fillPxRect(cCtx, tx - p * 0.8, ty + p * 1, p * 1.6, p * 3.8, '#5c280a', px);
+
+        fillPxRect(cCtx, tx - p * 3.5, ty - p * 3, p * 7, p * 5, outline, px);
+        fillPxRect(cCtx, tx - p * 3, ty - p * 6.5, p * 6, p * 5, outline, px);
+        fillPxRect(cCtx, tx - p * 2, ty - p * 9.5, p * 4, p * 4, outline, px);
+        fillPxRect(cCtx, tx - p * 1, ty - p * 11, p * 2, p * 2.5, outline, px);
+
+        fillPxRect(cCtx, tx - p * 2.8, ty - p * 2.5, p * 5.6, p * 3.8, '#065f46', px);
+        fillPxRect(cCtx, tx - p * 2.2, ty - p * 6, p * 4.4, p * 4.2, '#0d9488', px);
+        fillPxRect(cCtx, tx - p * 1.4, ty - p * 9, p * 2.8, p * 3.5, '#14b8a6', px);
+        fillPxRect(cCtx, tx - p * 0.8, ty - p * 10.2, p * 1.4, p * 2, '#5eead4', px);
+        return;
+      }
+
+      if (v === 2) {
+        // Variant 2: Cascading Weeping Willow with Draped Foliage Curtains
+        cCtx.fillStyle = 'rgba(15, 23, 42, 0.22)';
+        cCtx.fillRect(Math.round(tx - p * 6), Math.round(ty + p * 4), p * 12, p * 3);
+        fillPxRect(cCtx, tx - p * 2, ty, p * 4, p * 5.5, outline, px);
+        fillPxRect(cCtx, tx - p * 1, ty - p * 1, p * 2.5, p * 5.5, '#713f12', px);
+
+        fillPxRect(cCtx, tx - p * 6.5, ty - p * 5.5, p * 13, p * 5, outline, px);
+        fillPxRect(cCtx, tx - p * 5, ty - p * 7.5, p * 10, p * 4, outline, px);
+        fillPxRect(cCtx, tx - p * 5.8, ty - p * 5, p * 11.6, p * 4, '#15803d', px);
+        fillPxRect(cCtx, tx - p * 4.2, ty - p * 7, p * 8.4, p * 3.2, '#4ade80', px);
+        fillPxRect(cCtx, tx - p * 2.5, ty - p * 7.2, p * 5, p * 1.8, '#bef264', px);
+
+        // Hanging willow vine curtains
+        for (let vx = -5; vx <= 5; vx += 2) {
+          const dropH = (Math.abs(vx) % 3 === 1 ? 4.5 : 3.5) * p;
+          fillPxRect(cCtx, tx + vx * p - p * 0.6, ty - p * 2, p * 1.4, dropH, outline, px);
+          fillPxRect(cCtx, tx + vx * p - p * 0.3, ty - p * 2, p * 0.9, dropH - p * 0.5, '#84cc16', px);
+        }
+        return;
+      }
+
+      if (v === 3) {
+        // Variant 3: Blooming Lavender/Gold Jacaranda Ornamental Park Tree
+        cCtx.fillStyle = 'rgba(15, 23, 42, 0.22)';
+        cCtx.fillRect(Math.round(tx - p * 5.5), Math.round(ty + p * 4), p * 11, p * 3);
+        fillPxRect(cCtx, tx - p * 2, ty + p * 0.5, p * 4, p * 5, outline, px);
+        fillPxRect(cCtx, tx - p * 1, ty + p * 0.5, p * 2, p * 4.2, '#5c280a', px);
+
+        fillPxRect(cCtx, tx - p * 5.5, ty - p * 4.5, p * 11, p * 6, outline, px);
+        fillPxRect(cCtx, tx - p * 4, ty - p * 7, p * 8, p * 4, outline, px);
+        fillPxRect(cCtx, tx - p * 4.8, ty - p * 4, p * 9.6, p * 4.8, '#6d28d9', px);
+        fillPxRect(cCtx, tx - p * 3.5, ty - p * 6.2, p * 7, p * 4.2, '#a855f7', px);
+        fillPxRect(cCtx, tx - p * 2, ty - p * 6.5, p * 4, p * 2.2, '#e9d5ff', px);
+        fillPxRect(cCtx, tx - p * 3.5, ty - p * 2.5, p * 1.5, p * 1.5, '#fde047', px);
+        fillPxRect(cCtx, tx + p * 2, ty - p * 3.5, p * 1.5, p * 1.5, '#fde047', px);
+        return;
+      }
+
+      // Variant 0: Asymmetric Multi-Lobe Royal Oak
       cCtx.fillStyle = 'rgba(15, 23, 42, 0.22)';
-      cCtx.fillRect(Math.round(tx - p * 5), Math.round(ty + p * 4), p * 10, p * 3);
+      cCtx.fillRect(Math.round(tx - p * 6), Math.round(ty + p * 4), p * 12, p * 3);
+      fillPxRect(cCtx, tx - p * 2.2, ty + p * 0.5, p * 4.4, p * 5, outline, px);
+      fillPxRect(cCtx, tx - p * 1.2, ty + p * 0.5, p * 2.4, p * 4.2, '#78350f', px);
 
-      // Tree trunk
-      fillPxRect(cCtx, tx - p * 2, ty + p * 1, p * 4, p * 5, outline, px);
-      fillPxRect(cCtx, tx - p * 1, ty + p * 1, p * 2, p * 4, '#78350f', px);
+      // Left & Right asymmetric canopy lobes + top crown
+      fillPxRect(cCtx, tx - p * 6, ty - p * 4, p * 7, p * 5.5, outline, px);
+      fillPxRect(cCtx, tx - p * 1, ty - p * 4.5, p * 7, p * 6, outline, px);
+      fillPxRect(cCtx, tx - p * 4, ty - p * 7.5, p * 8, p * 5, outline, px);
 
-      // Outer dark pixel outline of canopy
-      fillPxRect(cCtx, tx - p * 5, ty - p * 4, p * 10, p * 6, outline, px);
-      fillPxRect(cCtx, tx - p * 4, ty - p * 6, p * 8, p * 8, outline, px);
-      fillPxRect(cCtx, tx - p * 3, ty - p * 7, p * 6, p * 3, outline, px);
-
-      // Shadow foliage layer
-      fillPxRect(cCtx, tx - p * 4, ty - p * 3, p * 8, p * 4, darkLeaf, px);
-      // Mid foliage layer
-      fillPxRect(cCtx, tx - p * 4, ty - p * 5, p * 8, p * 4, midLeaf, px);
-      fillPxRect(cCtx, tx - p * 3, ty - p * 6, p * 6, p * 3, midLeaf, px);
-      // Sunlit top crown highlights
-      fillPxRect(cCtx, tx - p * 2, ty - p * 6, p * 4, p * 2, lightLeaf, px);
-      fillPxRect(cCtx, tx - p * 3, ty - p * 4, p * 3, p * 2, lightLeaf, px);
+      fillPxRect(cCtx, tx - p * 5.2, ty - p * 3.2, p * 5.8, p * 4.2, '#15803d', px);
+      fillPxRect(cCtx, tx - p * 0.4, ty - p * 3.8, p * 5.6, p * 4.6, '#166534', px);
+      fillPxRect(cCtx, tx - p * 3.4, ty - p * 6.8, p * 6.8, p * 4.2, '#22c55e', px);
+      fillPxRect(cCtx, tx - p * 2.2, ty - p * 6.6, p * 4, p * 2.2, '#86efac', px);
+      fillPxRect(cCtx, tx - p * 4.4, ty - p * 3.8, p * 2.5, p * 1.8, '#4ade80', px);
     }
 
     function drawCornerFloodlightTower(
@@ -348,7 +612,6 @@ export default function App() {
       px = 3
     ) {
       const outline = GRAPHICS_CONFIG.palette.outline;
-      // Soft radial stadium light glow pool toward pitch corner
       const grad = cCtx.createRadialGradient(
         fx + dirX * 45,
         fy + dirY * 45,
@@ -365,22 +628,18 @@ export default function App() {
       cCtx.arc(fx + dirX * 85, fy + dirY * 85, 220, 0, Math.PI * 2);
       cCtx.fill();
 
-      // Tower shadow
       cCtx.fillStyle = 'rgba(15, 23, 42, 0.26)';
       cCtx.fillRect(fx - 26, fy + 24, 56, 16);
 
-      // Concrete foundation & steel pylon base
       fillPxRect(cCtx, fx - 28, fy - 28, 56, 56, outline, px);
       fillPxRect(cCtx, fx - 24, fy - 24, 48, 48, '#475569', px);
       fillPxRect(cCtx, fx - 18, fy - 18, 36, 36, '#64748b', px);
 
-      // Angled Halide Lamp Bank Hood
       const bankX = fx + dirX * 8;
       const bankY = fy + dirY * 8;
       fillPxRect(cCtx, bankX - 22, bankY - 16, 44, 32, outline, px);
       fillPxRect(cCtx, bankX - 18, bankY - 12, 36, 24, '#1e293b', px);
 
-      // 6 Glowing Pixel Halide Bulbs
       for (let bx = -12; bx <= 8; bx += 10) {
         for (let by = -7; by <= 3; by += 10) {
           fillPxRect(cCtx, bankX + bx, bankY + by, 6, 6, '#fde047', px);
@@ -400,28 +659,60 @@ export default function App() {
       const s = Math.max(1, Math.round(scale));
       const p = px * s;
       const outline = GRAPHICS_CONFIG.palette.outline;
-      const palettes = [
-        { dark: '#9a3412', mid: '#ea580c', light: '#fde047' }, // Fiery Orange-Gold Maple
-        { dark: '#991b1b', mid: '#dc2626', light: '#fca5a5' }, // Crimson Red Maple
-        { dark: '#b45309', mid: '#f59e0b', light: '#fef08a' }, // Golden Ginkgo
-      ];
-      const pal = palettes[variant % palettes.length];
+      const v = Math.abs(Math.round(variant)) % 4;
+
+      if (v === 1) {
+        // Tall Golden Ginkgo Spire
+        cCtx.fillStyle = 'rgba(15, 23, 42, 0.24)';
+        cCtx.fillRect(Math.round(tx - p * 4), Math.round(ty + p * 4), p * 8, p * 2.5);
+        fillPxRect(cCtx, tx - p * 1.5, ty + p * 0.5, p * 3, p * 5, outline, px);
+        fillPxRect(cCtx, tx - p * 0.8, ty + p * 0.5, p * 1.6, p * 4.2, '#5c280a', px);
+        fillPxRect(cCtx, tx - p * 3.8, ty - p * 3.5, p * 7.6, p * 5, outline, px);
+        fillPxRect(cCtx, tx - p * 3, ty - p * 7, p * 6, p * 5, outline, px);
+        fillPxRect(cCtx, tx - p * 1.8, ty - p * 10, p * 3.6, p * 4, outline, px);
+        fillPxRect(cCtx, tx - p * 3.2, ty - p * 3, p * 6.4, p * 4, '#b45309', px);
+        fillPxRect(cCtx, tx - p * 2.4, ty - p * 6.5, p * 4.8, p * 4, '#f59e0b', px);
+        fillPxRect(cCtx, tx - p * 1.2, ty - p * 9.4, p * 2.4, p * 3.4, '#fde047', px);
+        return;
+      }
+
+      if (v === 2) {
+        // White-Bark Silver Birch with Amber Canopy & Fallen Leaf Scatter
+        cCtx.fillStyle = 'rgba(15, 23, 42, 0.22)';
+        cCtx.fillRect(Math.round(tx - p * 5), Math.round(ty + p * 4), p * 10, p * 3);
+        fillPxRect(cCtx, tx - p * 1.6, ty - p * 0.5, p * 3.2, p * 6, outline, px);
+        fillPxRect(cCtx, tx - p * 0.9, ty - p * 0.5, p * 1.8, p * 5.2, '#f1f5f9', px);
+        fillPxRect(cCtx, tx - p * 0.9, ty + p * 1.2, p * 1.2, p * 0.6, '#334155', px);
+        fillPxRect(cCtx, tx - p * 0.3, ty + p * 2.8, p * 1.2, p * 0.6, '#334155', px);
+
+        fillPxRect(cCtx, tx - p * 5, ty - p * 5.5, p * 10, p * 6, outline, px);
+        fillPxRect(cCtx, tx - p * 3.5, ty - p * 8, p * 7, p * 4, outline, px);
+        fillPxRect(cCtx, tx - p * 4.2, ty - p * 4.8, p * 8.4, p * 4.6, '#ea580c', px);
+        fillPxRect(cCtx, tx - p * 2.8, ty - p * 7.2, p * 5.6, p * 3.4, '#fb923c', px);
+        fillPxRect(cCtx, tx - p * 1.8, ty - p * 7.2, p * 3.2, p * 1.8, '#fef08a', px);
+        return;
+      }
+
+      const pal =
+        v === 0
+          ? { dark: '#991b1b', mid: '#dc2626', light: '#fca5a5' }
+          : { dark: '#9a3412', mid: '#ea580c', light: '#fde047' };
 
       cCtx.fillStyle = 'rgba(15, 23, 42, 0.24)';
-      cCtx.fillRect(Math.round(tx - p * 5), Math.round(ty + p * 4), p * 10, p * 3);
-
+      cCtx.fillRect(Math.round(tx - p * 5.5), Math.round(ty + p * 4), p * 11, p * 3);
       fillPxRect(cCtx, tx - p * 2, ty + p * 1, p * 4, p * 5, outline, px);
       fillPxRect(cCtx, tx - p * 1, ty + p * 1, p * 2, p * 4, '#5c280a', px);
 
-      fillPxRect(cCtx, tx - p * 5, ty - p * 4, p * 10, p * 6, outline, px);
-      fillPxRect(cCtx, tx - p * 4, ty - p * 6, p * 8, p * 8, outline, px);
-      fillPxRect(cCtx, tx - p * 3, ty - p * 7, p * 6, p * 3, outline, px);
+      fillPxRect(cCtx, tx - p * 6, ty - p * 4, p * 12, p * 6, outline, px);
+      fillPxRect(cCtx, tx - p * 4.5, ty - p * 6.5, p * 9, p * 8, outline, px);
+      fillPxRect(cCtx, tx - p * 3, ty - p * 7.8, p * 6, p * 3, outline, px);
 
-      fillPxRect(cCtx, tx - p * 4, ty - p * 3, p * 8, p * 4, pal.dark, px);
-      fillPxRect(cCtx, tx - p * 4, ty - p * 5, p * 8, p * 4, pal.mid, px);
-      fillPxRect(cCtx, tx - p * 3, ty - p * 6, p * 6, p * 3, pal.mid, px);
-      fillPxRect(cCtx, tx - p * 2, ty - p * 6, p * 4, p * 2, pal.light, px);
-      fillPxRect(cCtx, tx - p * 3, ty - p * 4, p * 3, p * 2, pal.light, px);
+      fillPxRect(cCtx, tx - p * 5, ty - p * 3, p * 10, p * 4, pal.dark, px);
+      fillPxRect(cCtx, tx - p * 4, ty - p * 5.5, p * 8, p * 4, pal.mid, px);
+      fillPxRect(cCtx, tx - p * 3, ty - p * 6.8, p * 6, p * 3, pal.mid, px);
+      fillPxRect(cCtx, tx - p * 2, ty - p * 6.8, p * 4, p * 2, pal.light, px);
+      fillPxRect(cCtx, tx - p * 4.5, ty + p * 4.2, p * 2, p * 1, pal.mid, px);
+      fillPxRect(cCtx, tx + p * 2.5, ty + p * 4.5, p * 2, p * 1, '#facc15', px);
     }
 
     function drawSakuraBlossomTree(
@@ -435,27 +726,224 @@ export default function App() {
       const s = Math.max(1, Math.round(scale));
       const p = px * s;
       const outline = GRAPHICS_CONFIG.palette.outline;
-      const darkPink = variant % 2 === 0 ? '#db2777' : '#e11d48';
-      const midPink = variant % 2 === 0 ? '#f472b6' : '#fb7185';
-      const lightPink = variant % 2 === 0 ? '#fce7f3' : '#ffe4e6';
+      const v = Math.abs(Math.round(variant)) % 4;
+
+      if (v === 1) {
+        // Variant 1: Arashiyama Segmented Emerald Bamboo Cluster
+        cCtx.fillStyle = 'rgba(15, 23, 42, 0.22)';
+        cCtx.fillRect(Math.round(tx - p * 4.5), Math.round(ty + p * 3.5), p * 9, p * 2.5);
+        for (const stalk of [
+          { dx: -2.4, h: 10.5, col: '#15803d' },
+          { dx: 0, h: 12.2, col: '#22c55e' },
+          { dx: 2.4, h: 9.6, col: '#16a34a' },
+        ]) {
+          const sx = tx + stalk.dx * p;
+          const sh = stalk.h * p;
+          fillPxRect(cCtx, sx - p * 1.1, ty + p * 4 - sh, p * 2.2, sh, outline, px);
+          fillPxRect(cCtx, sx - p * 0.6, ty + p * 4 - sh + p * 0.5, p * 1.2, sh - p, stalk.col, px);
+          for (let nodeY = ty + p * 2; nodeY > ty + p * 4 - sh + p * 2; nodeY -= p * 2.6) {
+            fillPxRect(cCtx, sx - p * 1.1, nodeY, p * 2.2, p * 0.5, '#bbf7d0', px);
+          }
+          // Bamboo leaf tufts at top
+          fillPxRect(cCtx, sx - p * 2.6, ty + p * 3.5 - sh, p * 5.2, p * 2.2, outline, px);
+          fillPxRect(cCtx, sx - p * 2.1, ty + p * 3.8 - sh, p * 4.2, p * 1.5, '#4ade80', px);
+        }
+        return;
+      }
+
+      if (v === 2) {
+        // Variant 2: Sculpted Japanese Cloud-Pruned Niwaki Pine
+        cCtx.fillStyle = 'rgba(15, 23, 42, 0.22)';
+        cCtx.fillRect(Math.round(tx - p * 5), Math.round(ty + p * 3.5), p * 10, p * 2.5);
+        fillPxRect(cCtx, tx - p * 1.8, ty - p * 2, p * 3.2, p * 6, outline, px);
+        fillPxRect(cCtx, tx - p * 1, ty - p * 2, p * 1.8, p * 5.5, '#5c280a', px);
+        for (const pad of [
+          { dx: -3.5, dy: -2.2, w: 5.2, h: 2.6, c: '#0f766e' },
+          { dx: 1.5, dy: -3.4, w: 5.2, h: 2.6, c: '#115e59' },
+          { dx: -1.5, dy: -6.2, w: 6.4, h: 3.0, c: '#14b8a6' },
+        ]) {
+          fillPxRect(cCtx, tx + pad.dx * p - p * 0.6, ty + pad.dy * p - p * 0.6, (pad.w + 1.2) * p, (pad.h + 1.2) * p, outline, px);
+          fillPxRect(cCtx, tx + pad.dx * p, ty + pad.dy * p, pad.w * p, pad.h * p, pad.c, px);
+          fillPxRect(cCtx, tx + (pad.dx + 0.8) * p, ty + pad.dy * p, (pad.w - 1.6) * p, p * 0.9, '#5eead4', px);
+        }
+        return;
+      }
+
+      const darkPink = v === 0 ? '#db2777' : '#e11d48';
+      const midPink = v === 0 ? '#f472b6' : '#fb7185';
+      const lightPink = v === 0 ? '#fce7f3' : '#ffe4e6';
 
       cCtx.fillStyle = 'rgba(15, 23, 42, 0.22)';
-      cCtx.fillRect(Math.round(tx - p * 5), Math.round(ty + p * 4), p * 10, p * 3);
+      cCtx.fillRect(Math.round(tx - p * 6), Math.round(ty + p * 4), p * 12, p * 3);
 
-      fillPxRect(cCtx, tx - p * 2, ty + p * 1, p * 4, p * 5, outline, px);
-      fillPxRect(cCtx, tx - p * 1, ty + p * 1, p * 2, p * 4, '#4a1d1f', px);
+      // Gnarled curving cherry trunk
+      fillPxRect(cCtx, tx - p * 2.2, ty + p * 0.5, p * 4.4, p * 5, outline, px);
+      fillPxRect(cCtx, tx - p * 1.2, ty + p * 0.5, p * 2.4, p * 4.2, '#4a1d1f', px);
 
-      fillPxRect(cCtx, tx - p * 5, ty - p * 4, p * 10, p * 6, outline, px);
-      fillPxRect(cCtx, tx - p * 4, ty - p * 6, p * 8, p * 8, outline, px);
-      fillPxRect(cCtx, tx - p * 3, ty - p * 7, p * 6, p * 3, outline, px);
+      fillPxRect(cCtx, tx - p * 6, ty - p * 4.2, p * 12, p * 6, outline, px);
+      fillPxRect(cCtx, tx - p * 4.5, ty - p * 6.8, p * 9, p * 8, outline, px);
+      fillPxRect(cCtx, tx - p * 3, ty - p * 8, p * 6, p * 3, outline, px);
 
-      fillPxRect(cCtx, tx - p * 4, ty - p * 3, p * 8, p * 4, darkPink, px);
-      fillPxRect(cCtx, tx - p * 4, ty - p * 5, p * 8, p * 4, midPink, px);
-      fillPxRect(cCtx, tx - p * 3, ty - p * 6, p * 6, p * 3, midPink, px);
-      fillPxRect(cCtx, tx - p * 2, ty - p * 6, p * 4, p * 2, lightPink, px);
-      fillPxRect(cCtx, tx - p * 3, ty - p * 4, p * 3, p * 2, lightPink, px);
+      fillPxRect(cCtx, tx - p * 5.2, ty - p * 3.2, p * 10.4, p * 4, darkPink, px);
+      fillPxRect(cCtx, tx - p * 4.2, ty - p * 5.8, p * 8.4, p * 4, midPink, px);
+      fillPxRect(cCtx, tx - p * 3, ty - p * 7, p * 6, p * 3, midPink, px);
+      fillPxRect(cCtx, tx - p * 2.2, ty - p * 7, p * 4.4, p * 2, lightPink, px);
+      fillPxRect(cCtx, tx - p * 3.6, ty - p * 4.4, p * 3, p * 2, lightPink, px);
+      // Draping weeping sakura garlands on variant 0
+      if (v === 0) {
+        for (const wx of [-4.2, -1.8, 1.8, 4.2]) {
+          fillPxRect(cCtx, tx + wx * p, ty - p * 0.5, p * 1.2, p * 2.8, midPink, px);
+          fillPxRect(cCtx, tx + wx * p, ty + p * 1.2, p * 1.0, p * 1.2, lightPink, px);
+        }
+      }
     }
 
+    function drawTeamCoachBus(
+      cCtx: CanvasRenderingContext2D,
+      bx: number,
+      by: number,
+      bodyCol: string,
+      stripeCol: string,
+      px = 3
+    ) {
+      const outline = GRAPHICS_CONFIG.palette.outline;
+      cCtx.fillStyle = 'rgba(15, 23, 42, 0.28)';
+      cCtx.fillRect(bx - 30, by - 66, 62, 138);
+      // Wheels
+      for (const wy of [-46, 32]) {
+        fillPxRect(cCtx, bx - 30, by + wy, 60, 14, outline, px);
+      }
+      // Coach chassis
+      fillPxRect(cCtx, bx - 26, by - 64, 52, 128, outline, px);
+      fillPxRect(cCtx, bx - 22, by - 60, 44, 120, bodyCol, px);
+      fillPxRect(cCtx, bx - 16, by - 54, 32, 108, stripeCol, px);
+      fillPxRect(cCtx, bx - 12, by - 50, 24, 100, '#f8fafc', px);
+      // Panoramic front & rear windshields
+      fillPxRect(cCtx, bx - 18, by - 56, 36, 14, '#0f172a', px);
+      fillPxRect(cCtx, bx - 14, by - 53, 28, 8, '#38bdf8', px);
+      fillPxRect(cCtx, bx - 18, by + 42, 36, 12, '#0f172a', px);
+      // Roof AC pods
+      fillPxRect(cCtx, bx - 8, by - 26, 16, 20, '#cbd5e1', px);
+      fillPxRect(cCtx, bx - 8, by + 6, 16, 20, '#cbd5e1', px);
+      // Headlights
+      fillPxRect(cCtx, bx - 18, by - 63, 8, 4, '#fef08a', px);
+      fillPxRect(cCtx, bx + 10, by - 63, 8, 4, '#fef08a', px);
+    }
+
+    function drawBotanicalGlasshouse(
+      cCtx: CanvasRenderingContext2D,
+      gx: number,
+      gy: number,
+      px = 3
+    ) {
+      const outline = GRAPHICS_CONFIG.palette.outline;
+      cCtx.fillStyle = 'rgba(15, 23, 42, 0.24)';
+      cCtx.fillRect(gx - 58, gy - 72, 120, 152);
+      // Stone foundation plinth
+      fillPxRect(cCtx, gx - 54, gy - 70, 108, 140, outline, px);
+      fillPxRect(cCtx, gx - 50, gy - 66, 100, 132, '#e2e8f0', px);
+      // Arched glass conservatory wings
+      fillPxRect(cCtx, gx - 44, gy - 58, 88, 116, outline, px);
+      fillPxRect(cCtx, gx - 40, gy - 54, 80, 108, '#0284c7', px);
+      fillPxRect(cCtx, gx - 34, gy - 48, 68, 96, '#38bdf8', px);
+      // Lush exotic palms visible through glass roof
+      fillPxRect(cCtx, gx - 24, gy - 32, 22, 22, '#16a34a', px);
+      fillPxRect(cCtx, gx + 4, gy + 10, 22, 22, '#22c55e', px);
+      fillPxRect(cCtx, gx - 18, gy + 16, 16, 16, '#f472b6', px);
+      // White Victorian wrought-iron glass ribs & central dome
+      for (let ry = -38; ry <= 38; ry += 19) {
+        fillPxRect(cCtx, gx - 40, gy + ry, 80, 3, '#f8fafc', px);
+      }
+      fillPxRect(cCtx, gx - 2, gy - 54, 4, 108, '#f8fafc', px);
+      fillPxRect(cCtx, gx - 24, gy - 24, 48, 48, outline, px);
+      fillPxRect(cCtx, gx - 20, gy - 20, 40, 40, '#bae6fd', px);
+      fillPxRect(cCtx, gx - 12, gy - 12, 24, 24, '#e0f2fe', px);
+      fillPxRect(cCtx, gx - 4, gy - 4, 8, 8, '#fde047', px);
+    }
+
+    function drawArchedFootbridge(
+      cCtx: CanvasRenderingContext2D,
+      bx: number,
+      by: number,
+      bw: number,
+      bh: number,
+      style: 'BRICK' | 'TAIKO' | 'COVERED',
+      px = 3
+    ) {
+      const outline = GRAPHICS_CONFIG.palette.outline;
+      cCtx.fillStyle = 'rgba(15, 23, 42, 0.32)';
+      cCtx.fillRect(bx - bw * 0.5 - 4, by - bh * 0.5 + 8, bw + 8, bh);
+
+      if (style === 'TAIKO') {
+        // Vermilion Kyoto Taiko-Bashi Arched Drum Bridge with Golden Giboshi Finials
+        fillPxRect(cCtx, bx - bw * 0.5 - 4, by - bh * 0.5 - 4, bw + 8, bh + 8, outline, px);
+        fillPxRect(cCtx, bx - bw * 0.5, by - bh * 0.5, bw, bh, '#b91c1c', px);
+        fillPxRect(cCtx, bx - bw * 0.5, by - bh * 0.5 + 8, bw, bh - 16, '#ef4444', px);
+        fillPxRect(cCtx, bx - bw * 0.22, by - bh * 0.5 + 8, bw * 0.44, bh - 16, '#fca5a5', px);
+        for (let plankX = -bw * 0.44; plankX <= bw * 0.44; plankX += 14) {
+          fillPxRect(cCtx, bx + plankX, by - bh * 0.5 + 10, 4, bh - 20, '#7f1d1d', px);
+        }
+        for (const postX of [-bw * 0.45, -bw * 0.18, bw * 0.18, bw * 0.45]) {
+          fillPxRect(cCtx, bx + postX - 4, by - bh * 0.5 - 6, 8, 10, '#fde047', px);
+          fillPxRect(cCtx, bx + postX - 4, by + bh * 0.5 - 4, 8, 10, '#fde047', px);
+        }
+        return;
+      }
+
+      if (style === 'COVERED') {
+        // New England Red Timber Covered Bridge
+        fillPxRect(cCtx, bx - bw * 0.5 - 4, by - bh * 0.5 - 4, bw + 8, bh + 8, outline, px);
+        fillPxRect(cCtx, bx - bw * 0.5, by - bh * 0.5, bw, bh, '#991b1b', px);
+        fillPxRect(cCtx, bx - bw * 0.46, by - bh * 0.5 + 6, bw * 0.92, bh - 12, '#78350f', px);
+        fillPxRect(cCtx, bx - bw * 0.46, by - 4, bw * 0.92, 8, '#5c280a', px);
+        fillPxRect(cCtx, bx - bw * 0.5, by - bh * 0.5, 8, bh, '#f8fafc', px);
+        fillPxRect(cCtx, bx + bw * 0.5 - 8, by - bh * 0.5, 8, bh, '#f8fafc', px);
+        return;
+      }
+
+      // Classic Sandstone & Red-Brick Arched Park Footbridge
+      fillPxRect(cCtx, bx - bw * 0.5 - 4, by - bh * 0.5 - 4, bw + 8, bh + 8, outline, px);
+      fillPxRect(cCtx, bx - bw * 0.5, by - bh * 0.5, bw, bh, '#9a3412', px);
+      fillPxRect(cCtx, bx - bw * 0.5, by - bh * 0.5 + 10, bw, bh - 20, '#cbd5e1', px);
+      fillPxRect(cCtx, bx - bw * 0.25, by - bh * 0.5 + 10, bw * 0.5, bh - 20, '#e2e8f0', px);
+      for (const lx of [-bw * 0.38, bw * 0.38]) {
+        fillPxRect(cCtx, bx + lx - 5, by - bh * 0.5 - 2, 10, 10, '#fde047', px);
+        fillPxRect(cCtx, bx + lx - 5, by + bh * 0.5 - 8, 10, 10, '#fde047', px);
+      }
+    }
+
+    function drawFiveTierPagoda(
+      cCtx: CanvasRenderingContext2D,
+      pxCenter: number,
+      pyCenter: number,
+      px = 3
+    ) {
+      const outline = GRAPHICS_CONFIG.palette.outline;
+      cCtx.fillStyle = 'rgba(15, 23, 42, 0.3)';
+      cCtx.fillRect(pxCenter - 58, pyCenter - 52, 120, 114);
+      // Stone foundation terrace
+      fillPxRect(cCtx, pxCenter - 54, pyCenter - 54, 108, 108, outline, px);
+      fillPxRect(cCtx, pxCenter - 50, pyCenter - 50, 100, 100, '#cbd5e1', px);
+      // Concentric pagoda roof tiers (from wide base roof to upper spire)
+      const tiers = [
+        { sz: 88, roofCol: '#1e293b', trimCol: '#dc2626' },
+        { sz: 70, roofCol: '#334155', trimCol: '#ef4444' },
+        { sz: 52, roofCol: '#1e293b', trimCol: '#dc2626' },
+        { sz: 34, roofCol: '#334155', trimCol: '#f97316' },
+      ];
+      for (const t of tiers) {
+        const half = t.sz * 0.5;
+        fillPxRect(cCtx, pxCenter - half - 3, pyCenter - half - 3, t.sz + 6, t.sz + 6, outline, px);
+        fillPxRect(cCtx, pxCenter - half, pyCenter - half, t.sz, t.sz, t.roofCol, px);
+        fillPxRect(cCtx, pxCenter - half + 4, pyCenter - half + 4, t.sz - 8, t.sz - 8, t.trimCol, px);
+      }
+      // Golden Sorin Spire Finial
+      fillPxRect(cCtx, pxCenter - 10, pyCenter - 10, 20, 20, outline, px);
+      fillPxRect(cCtx, pxCenter - 7, pyCenter - 7, 14, 14, '#facc15', px);
+      fillPxRect(cCtx, pxCenter - 3, pyCenter - 3, 6, 6, '#ffffff', px);
+    }
+
+    let homeMenuStadiumId: PitchThemeId = 'CLASSIC_TURF';
     let selectedPitchTheme: PitchThemeId = 'CLASSIC_TURF';
     let preferredArenaMode: 'RANDOM' | PitchThemeId = 'RANDOM';
     const urlPitchParam =
@@ -464,38 +952,36 @@ export default function App() {
         : '';
     if (urlPitchParam === 'SPACE' || urlPitchParam === 'COSMIC_SPACE') {
       preferredArenaMode = 'COSMIC_SPACE';
-      selectedPitchTheme = 'COSMIC_SPACE';
+      homeMenuStadiumId = 'COSMIC_SPACE';
     } else if (urlPitchParam === 'STREET' || urlPitchParam === 'URBAN_CONCRETE') {
       preferredArenaMode = 'URBAN_CONCRETE';
-      selectedPitchTheme = 'URBAN_CONCRETE';
+      homeMenuStadiumId = 'URBAN_CONCRETE';
     } else if (urlPitchParam === 'CLAY' || urlPitchParam === 'BEACH' || urlPitchParam === 'RIO_CLAY') {
       preferredArenaMode = 'RIO_CLAY';
-      selectedPitchTheme = 'RIO_CLAY';
+      homeMenuStadiumId = 'RIO_CLAY';
     } else if (urlPitchParam === 'SYNTH' || urlPitchParam === 'NIGHT' || urlPitchParam === 'TWILIGHT_SYNTH') {
       preferredArenaMode = 'TWILIGHT_SYNTH';
-      selectedPitchTheme = 'TWILIGHT_SYNTH';
+      homeMenuStadiumId = 'TWILIGHT_SYNTH';
     } else if (urlPitchParam === 'ICE' || urlPitchParam === 'SNOW' || urlPitchParam === 'ARCTIC_ICE') {
       preferredArenaMode = 'ARCTIC_ICE';
-      selectedPitchTheme = 'ARCTIC_ICE';
+      homeMenuStadiumId = 'ARCTIC_ICE';
     } else if (urlPitchParam === 'VOLCANO' || urlPitchParam === 'LAVA' || urlPitchParam === 'VOLCANO_FORGE') {
       preferredArenaMode = 'VOLCANO_FORGE';
-      selectedPitchTheme = 'VOLCANO_FORGE';
+      homeMenuStadiumId = 'VOLCANO_FORGE';
     } else if (urlPitchParam === 'AUTUMN' || urlPitchParam === 'TURF_AUTUMN') {
       preferredArenaMode = 'TURF_AUTUMN';
-      selectedPitchTheme = 'TURF_AUTUMN';
+      homeMenuStadiumId = 'TURF_AUTUMN';
     } else if (urlPitchParam === 'SAKURA' || urlPitchParam === 'TURF_SAKURA') {
       preferredArenaMode = 'TURF_SAKURA';
-      selectedPitchTheme = 'TURF_SAKURA';
+      homeMenuStadiumId = 'TURF_SAKURA';
     } else if (urlPitchParam === 'CHAMPIONS' || urlPitchParam === 'TURF_CHAMPIONS') {
       preferredArenaMode = 'TURF_CHAMPIONS';
-      selectedPitchTheme = 'TURF_CHAMPIONS';
+      homeMenuStadiumId = 'TURF_CHAMPIONS';
     } else if (urlPitchParam === 'TURF' || urlPitchParam === 'CLASSIC_TURF') {
       preferredArenaMode = 'CLASSIC_TURF';
-      selectedPitchTheme = 'CLASSIC_TURF';
-    } else {
-      const initialRandom = PITCH_THEMES[Math.floor(Math.random() * PITCH_THEMES.length)];
-      selectedPitchTheme = initialRandom.id;
+      homeMenuStadiumId = 'CLASSIC_TURF';
     }
+    selectedPitchTheme = homeMenuStadiumId;
     applyPitchTheme(selectedPitchTheme);
     sound.setPitchTheme(selectedPitchTheme);
 
@@ -776,354 +1262,664 @@ export default function App() {
       const OUTER_WORLD_START = 220;
 
       // ======================================================================
-      // STEP 1: OUTSIDE WORLD BACKGROUND & THEMED SCENERY (STRICTLY OUTSIDE STADIUM BOWL)
+      // STEP 1: ASYMMETRIC 4-QUADRANT ARTISTIC STADIUM SURROUNDINGS DIORAMA
+      // West, East, North & South each tell a distinct visual story with zero repeating stamp grids!
       // ======================================================================
       if (selectedPitchTheme === 'COSMIC_SPACE') {
-        // === 1. COSMIC SPACE ORBITAL ARENA BACKGROUND ===
-        pitchCacheCtx.fillStyle = '#060818';
+        // === 1. COSMIC SPACE: WEST STARFIGHTER HANGAR, EAST BIODOME & COMMS ARRAY, NORTH REACTORS, SOUTH LUNAR ROVER OUTPOST ===
+        pitchCacheCtx.fillStyle = '#050716';
         pitchCacheCtx.fillRect(-CACHE_PAD_X, -CACHE_PAD_Y, w + CACHE_PAD_X * 2, h + CACHE_PAD_Y * 2);
 
-        const bandW = 160;
-        pitchCacheCtx.fillStyle = '#0a0e29';
-        for (let bx = -CACHE_PAD_X; bx < w + CACHE_PAD_X; bx += bandW * 2) {
-          pitchCacheCtx.fillRect(bx, -CACHE_PAD_Y, bandW, h + CACHE_PAD_Y * 2);
-        }
-
+        // Organic Swirling Deep-Space Nebulae & Spiral Galaxy Arms (Asymmetric placement)
         const nebulas = [
-          { x: 260, y: -320, r: 340, c1: 'rgba(139, 92, 246, 0.36)', c2: 'rgba(217, 70, 239, 0.16)' },
-          { x: w - 260, y: h + 320, r: 360, c1: 'rgba(56, 189, 248, 0.32)', c2: 'rgba(99, 102, 241, 0.15)' },
-          { x: -340, y: h * 0.5, r: 310, c1: 'rgba(236, 72, 153, 0.28)', c2: 'rgba(124, 58, 237, 0.12)' },
-          { x: w + 340, y: h * 0.35, r: 330, c1: 'rgba(45, 212, 191, 0.28)', c2: 'rgba(56, 189, 248, 0.12)' },
+          { x: 420, y: -340, r: 420, c1: 'rgba(139, 92, 246, 0.42)', c2: 'rgba(217, 70, 239, 0.16)' },
+          { x: w - 380, y: -290, r: 360, c1: 'rgba(56, 189, 248, 0.34)', c2: 'rgba(14, 165, 233, 0.12)' },
+          { x: -360, y: h * 0.32, r: 380, c1: 'rgba(236, 72, 153, 0.3)', c2: 'rgba(124, 58, 237, 0.12)' },
+          { x: w + 370, y: h * 0.65, r: 410, c1: 'rgba(45, 212, 191, 0.32)', c2: 'rgba(56, 189, 248, 0.14)' },
+          { x: w * 0.45, y: h + 380, r: 460, c1: 'rgba(99, 102, 241, 0.32)', c2: 'rgba(168, 85, 247, 0.12)' },
         ];
         for (const neb of nebulas) {
-          const nGrad = pitchCacheCtx.createRadialGradient(neb.x, neb.y, 20, neb.x, neb.y, neb.r);
+          const nGrad = pitchCacheCtx.createRadialGradient(neb.x, neb.y, 18, neb.x, neb.y, neb.r);
           nGrad.addColorStop(0, neb.c1);
           nGrad.addColorStop(0.55, neb.c2);
-          nGrad.addColorStop(1, 'rgba(6, 8, 24, 0)');
+          nGrad.addColorStop(1, 'rgba(5, 7, 22, 0)');
           pitchCacheCtx.fillStyle = nGrad;
           pitchCacheCtx.beginPath();
           pitchCacheCtx.arc(neb.x, neb.y, neb.r, 0, Math.PI * 2);
           pitchCacheCtx.fill();
         }
 
+        // Rich Starfield with Constellation Lines in the North-West Vista
         const starColors = ['#ffffff', '#e0f2fe', '#fef08a', '#f5d0fe', '#bae6fd', '#c4b5fd'];
-        for (let i = 0; i < 260; i++) {
-          const sx = -CACHE_PAD_X + 20 + ((i * 193) % (w + CACHE_PAD_X * 2 - 40));
-          const sy = -CACHE_PAD_Y + 20 + ((i * 271) % (h + CACHE_PAD_Y * 2 - 40));
-          if (sx > -STADIUM_BOWL_PAD - 20 && sx < w + STADIUM_BOWL_PAD + 20 && sy > -STADIUM_BOWL_PAD - 20 && sy < h + STADIUM_BOWL_PAD + 20) continue;
+        for (let i = 0; i < 320; i++) {
+          const sx = -CACHE_PAD_X + 20 + ((i * 197 + (i % 7) * 43) % (w + CACHE_PAD_X * 2 - 40));
+          const sy = -CACHE_PAD_Y + 20 + ((i * 283 + (i % 5) * 61) % (h + CACHE_PAD_Y * 2 - 40));
+          if (sx > -STADIUM_BOWL_PAD - 16 && sx < w + STADIUM_BOWL_PAD + 16 && sy > -STADIUM_BOWL_PAD - 16 && sy < h + STADIUM_BOWL_PAD + 16) continue;
           const col = starColors[i % starColors.length];
-          const sz = i % 7 === 0 ? px * 2 : px;
+          const sz = i % 9 === 0 ? px * 2 : px;
           fillPxRect(pitchCacheCtx, sx, sy, sz, sz, col, px);
-          if (i % 13 === 0) {
+          if (i % 17 === 0) {
             fillPxRect(pitchCacheCtx, sx - px, sy, px * 3, px, col, px);
             fillPxRect(pitchCacheCtx, sx, sy - px, px, px * 3, col, px);
           }
         }
 
-        // Outer Space Ringed Planets & Cratered Moons (Strictly outside the Stadium Bowl!)
-        drawRingedPlanet(pitchCacheCtx, 340, -295, 48, px);
-        drawRingedPlanet(pitchCacheCtx, w + 310, h * 0.24, 54, px);
-        drawRingedPlanet(pitchCacheCtx, -310, -280, 64, px);
-        drawRingedPlanet(pitchCacheCtx, w - 340, h + 295, 50, px);
-
-        for (const mPos of [
-          { x: w - 360, y: -285, r: 34 },
-          { x: -305, y: h * 0.76, r: 38 },
-          { x: 360, y: h + 285, r: 34 },
-        ]) {
-          fillPxRect(pitchCacheCtx, mPos.x - mPos.r - 3, mPos.y - mPos.r - 3, (mPos.r + 3) * 2, (mPos.r + 3) * 2, outline, px);
-          fillPxRect(pitchCacheCtx, mPos.x - mPos.r, mPos.y - mPos.r, mPos.r * 2, mPos.r * 2, '#94a3b8', px);
-          fillPxRect(pitchCacheCtx, mPos.x - mPos.r + 6, mPos.y - mPos.r + 6, mPos.r * 1.5, mPos.r * 1.5, '#cbd5e1', px);
-          fillPxRect(pitchCacheCtx, mPos.x - 12, mPos.y - 10, 12, 12, '#64748b', px);
-          fillPxRect(pitchCacheCtx, mPos.x + 8, mPos.y + 6, 9, 9, '#64748b', px);
+        // WEST QUADRANT (x < -165): Orbital Starfighter Docking Hangar & Cargo Deck
+        fillPxRect(pitchCacheCtx, -380, h * 0.16 - 4, 206, h * 0.68 + 8, outline, px);
+        fillPxRect(pitchCacheCtx, -374, h * 0.16, 194, h * 0.68, '#0f172a', px);
+        fillPxRect(pitchCacheCtx, -362, h * 0.18, 170, h * 0.64, '#1e293b', px);
+        // Glowing Cyan Magnetic Hangar Forcefield Threshold & Yellow Hazard Stripes
+        fillPxRect(pitchCacheCtx, -366, h * 0.24, 10, h * 0.52, '#38bdf8', px);
+        for (let hy = h * 0.22; hy < h * 0.76; hy += 28) {
+          fillPxRect(pitchCacheCtx, -206, hy, 14, 14, '#facc15', px);
+        }
+        // Landed Sleek Delta-Wing Starfighter Shuttle on West Hangar Pad (y = h * 0.38)
+        const sfX = -275;
+        const sfY = h * 0.38;
+        fillPxRect(pitchCacheCtx, sfX - 52, sfY - 38, 104, 76, outline, px);
+        fillPxRect(pitchCacheCtx, sfX - 46, sfY - 32, 92, 64, '#334155', px);
+        fillPxRect(pitchCacheCtx, sfX - 30, sfY - 52, 60, 104, outline, px);
+        fillPxRect(pitchCacheCtx, sfX - 24, sfY - 46, 48, 92, '#f8fafc', px);
+        fillPxRect(pitchCacheCtx, sfX - 12, sfY - 28, 24, 56, '#0284c7', px);
+        fillPxRect(pitchCacheCtx, sfX - 8, sfY - 18, 16, 26, '#38bdf8', px);
+        fillPxRect(pitchCacheCtx, sfX - 42, sfY - 12, 14, 24, '#f43f5e', px);
+        fillPxRect(pitchCacheCtx, sfX + 28, sfY - 12, 14, 24, '#f43f5e', px);
+        // Lower-West Plasma Fuel Tanks & Cargo Containers (y = h * 0.68)
+        for (let ty = 0; ty < 2; ty++) {
+          const cy = h * 0.64 + ty * 54;
+          fillPxRect(pitchCacheCtx, -338, cy - 18, 118, 36, outline, px);
+          fillPxRect(pitchCacheCtx, -334, cy - 14, 110, 28, '#312e81', px);
+          fillPxRect(pitchCacheCtx, -322, cy - 6, 86, 12, ty === 0 ? '#22d3ee' : '#e879f9', px);
         }
 
-        // Left & Right Outer Orbital Solar Array Wings (Outside Stadium Wall at x = -295 and w + 210)
-        for (const sideX of [-296, w + 214]) {
-          fillPxRect(pitchCacheCtx, sideX - 3, h * 0.32 - 3, 88, 146, outline, px);
-          fillPxRect(pitchCacheCtx, sideX, h * 0.32, 82, 140, '#1e3a8a', px);
-          pitchCacheCtx.strokeStyle = '#38bdf8';
-          pitchCacheCtx.lineWidth = 2;
-          for (let sy = h * 0.32 + 20; sy < h * 0.32 + 135; sy += 24) {
-            pitchCacheCtx.beginPath();
-            pitchCacheCtx.moveTo(sideX + 4, sy);
-            pitchCacheCtx.lineTo(sideX + 78, sy);
-            pitchCacheCtx.stroke();
-          }
-          pitchCacheCtx.beginPath();
-          pitchCacheCtx.moveTo(sideX + 41, h * 0.32 + 4);
-          pitchCacheCtx.lineTo(sideX + 41, h * 0.32 + 136);
-          pitchCacheCtx.stroke();
+        // EAST QUADRANT (x > w + 165): Geodesic Hydroponic Biodome & Quantum Comms Array
+        // Structural Catwalk Spine connecting Stadium to East Modules
+        fillPxRect(pitchCacheCtx, w + 162, h * 0.28 - 22, 190, 44, outline, px);
+        fillPxRect(pitchCacheCtx, w + 166, h * 0.28 - 16, 182, 32, '#1e293b', px);
+        fillPxRect(pitchCacheCtx, w + 162, h * 0.72 - 22, 190, 44, outline, px);
+        fillPxRect(pitchCacheCtx, w + 166, h * 0.72 - 16, 182, 32, '#1e293b', px);
+        // Giant Geodesic Glass Biodome Arboretum (x = w + 285, y = h * 0.30)
+        const bioX = w + 285;
+        const bioY = h * 0.30;
+        const bioR = 92;
+        pitchCacheCtx.save();
+        pitchCacheCtx.beginPath();
+        pitchCacheCtx.arc(bioX, bioY, bioR + 6, 0, Math.PI * 2);
+        pitchCacheCtx.fillStyle = outline;
+        pitchCacheCtx.fill();
+        pitchCacheCtx.beginPath();
+        pitchCacheCtx.arc(bioX, bioY, bioR, 0, Math.PI * 2);
+        pitchCacheCtx.fillStyle = '#064e3b';
+        pitchCacheCtx.fill();
+        // Alien bioluminescent trees & winding stream inside Biodome
+        fillPxRect(pitchCacheCtx, bioX - 58, bioY - 12, 116, 24, '#0284c7', px);
+        drawPixelTree(pitchCacheCtx, bioX - 32, bioY - 28, 1.5, 3, px);
+        drawPixelTree(pitchCacheCtx, bioX + 28, bioY + 26, 1.5, 1, px);
+        drawSakuraBlossomTree(pitchCacheCtx, bioX + 22, bioY - 26, 1.3, 0, px);
+        // Geodesic glass hex struts & specular highlight
+        pitchCacheCtx.strokeStyle = 'rgba(186, 230, 253, 0.55)';
+        pitchCacheCtx.lineWidth = 3;
+        pitchCacheCtx.beginPath();
+        pitchCacheCtx.arc(bioX, bioY, bioR - 4, 0, Math.PI * 2);
+        pitchCacheCtx.arc(bioX, bioY, bioR * 0.58, 0, Math.PI * 2);
+        pitchCacheCtx.moveTo(bioX - bioR, bioY);
+        pitchCacheCtx.lineTo(bioX + bioR, bioY);
+        pitchCacheCtx.moveTo(bioX, bioY - bioR);
+        pitchCacheCtx.lineTo(bioX, bioY + bioR);
+        pitchCacheCtx.stroke();
+        pitchCacheCtx.restore();
+        // Lower-East Deep-Space Quantum Dish Deck & EVA Airlock (x = w + 265, y = h * 0.72)
+        fillPxRect(pitchCacheCtx, w + 206, h * 0.64, 128, 140, outline, px);
+        fillPxRect(pitchCacheCtx, w + 212, h * 0.64 + 6, 116, 128, '#1e1b4b', px);
+        fillPxRect(pitchCacheCtx, w + 224, h * 0.64 + 18, 92, 104, '#312e81', px);
+
+        // NORTH QUADRANT (y < -165): Twin Tokamak Fusion Reactor Cores, Energy Bridges & Ringed Planet Vista
+        for (const rx of [w * 0.28, w * 0.72]) {
+          const ry = -258;
+          fillPxRect(pitchCacheCtx, rx - 74, ry - 48, 148, 96, outline, px);
+          fillPxRect(pitchCacheCtx, rx - 68, ry - 42, 136, 84, '#0f172a', px);
+          fillPxRect(pitchCacheCtx, rx - 52, ry - 28, 104, 56, '#1e3a8a', px);
+          fillPxRect(pitchCacheCtx, rx - 28, ry - 20, 56, 40, '#38bdf8', px);
+          fillPxRect(pitchCacheCtx, rx - 14, ry - 10, 28, 20, '#e0f2fe', px);
         }
+        // Connecting Plasma Conduit Spine between North Reactors
+        fillPxRect(pitchCacheCtx, w * 0.28 + 74, -270, w * 0.44 - 148, 24, outline, px);
+        fillPxRect(pitchCacheCtx, w * 0.28 + 74, -264, w * 0.44 - 148, 12, '#38bdf8', px);
+        drawRingedPlanet(pitchCacheCtx, w * 0.5, -420, 74, px);
+        drawRingedPlanet(pitchCacheCtx, -420, -340, 58, px);
+
+        // SOUTH QUADRANT (y > h + 165): Cratered Lunar Outpost Ridge, Habitat Tubes & Kyber Crystals
+        fillPxRect(pitchCacheCtx, 120, h + 206, w - 240, 155, outline, px);
+        fillPxRect(pitchCacheCtx, 126, h + 212, w - 252, 143, '#334155', px);
+        fillPxRect(pitchCacheCtx, 144, h + 224, w - 288, 118, '#475569', px);
+        // Lunar craters & glowing purple/cyan crystal clusters along the South Moon Ridge
+        for (const crX of [280, 680, w * 0.5 + 160, w - 420]) {
+          fillPxRect(pitchCacheCtx, crX - 28, h + 246, 56, 36, '#1e293b', px);
+          fillPxRect(pitchCacheCtx, crX - 20, h + 252, 40, 24, '#0f172a', px);
+        }
+        for (const kx of [460, w - 620, w - 240]) {
+          fillPxRect(pitchCacheCtx, kx - 12, h + 234, 24, 34, outline, px);
+          fillPxRect(pitchCacheCtx, kx - 8, h + 238, 16, 26, '#e879f9', px);
+          fillPxRect(pitchCacheCtx, kx - 3, h + 242, 6, 16, '#f5d0fe', px);
+        }
+        drawRingedPlanet(pitchCacheCtx, w + 380, h + 330, 66, px);
       } else if (selectedPitchTheme === 'URBAN_CONCRETE') {
-        // === 2. URBAN STREET CONCRETE: DOWNTOWN METRO BLOCK PARTY & ASPHALT AVENUE ===
+        // === 2. URBAN STREET CONCRETE: WEST SKATEPARK & LOWRIDER TACO PLAZA, EAST RUCKER STREETBALL & DJ STAGE, NORTH EL-TRAIN VIADUCT, SOUTH TWO-LANE AVENUE ===
         pitchCacheCtx.fillStyle = '#1e293b';
         pitchCacheCtx.fillRect(-CACHE_PAD_X, -CACHE_PAD_Y, w + CACHE_PAD_X * 2, h + CACHE_PAD_Y * 2);
 
-        pitchCacheCtx.fillStyle = '#334155';
-        for (let bx = -CACHE_PAD_X; bx < w + CACHE_PAD_X; bx += 180) {
-          pitchCacheCtx.fillRect(bx, -CACHE_PAD_Y, 90, h + CACHE_PAD_Y * 2);
-        }
-
-        // Outer City Asphalt Roads & Crosswalks (Strictly outside Stadium Bowl at y = -280 and y = h + 212)
-        for (const roadY of [-280, h + 212]) {
-          fillPxRect(pitchCacheCtx, -CACHE_PAD_X, roadY - 4, w + CACHE_PAD_X * 2, 76, outline, px);
-          fillPxRect(pitchCacheCtx, -CACHE_PAD_X, roadY, w + CACHE_PAD_X * 2, 68, '#0f172a', px);
-          for (let rx = -CACHE_PAD_X + 20; rx < w + CACHE_PAD_X; rx += 64) {
-            fillPxRect(pitchCacheCtx, rx, roadY + 31, 34, 6, '#facc15', px);
-          }
-          for (const cwX of [180, w * 0.5 - 36, w - 230]) {
-            for (let stripe = 0; stripe < 5; stripe++) {
-              fillPxRect(pitchCacheCtx, cwX, roadY + 6 + stripe * 12, 54, 7, '#f8fafc', px);
-            }
+        // Subtle urban asphalt block paving joints (non-striped!)
+        pitchCacheCtx.strokeStyle = 'rgba(15, 23, 42, 0.35)';
+        pitchCacheCtx.lineWidth = 3;
+        for (let gx = -CACHE_PAD_X; gx < w + CACHE_PAD_X; gx += 220) {
+          for (let gy = -CACHE_PAD_Y; gy < h + CACHE_PAD_Y; gy += 180) {
+            pitchCacheCtx.strokeRect(gx, gy, 220, 180);
           }
         }
 
-        // Left & Right Outer Streetball Half-Courts & Boombox Plazas (Outside Stadium Wall at x = -296 and w + 216)
-        for (const sideX of [-296, w + 216]) {
-          fillPxRect(pitchCacheCtx, sideX - 3, h * 0.24 - 3, 86, h * 0.52 + 6, outline, px);
-          fillPxRect(pitchCacheCtx, sideX, h * 0.24, 80, h * 0.52, '#475569', px);
-          fillPxRect(pitchCacheCtx, sideX + 8, h * 0.36, 64, h * 0.28, '#f97316', px);
-          pitchCacheCtx.strokeStyle = '#f8fafc';
-          pitchCacheCtx.lineWidth = 2.5;
-          pitchCacheCtx.strokeRect(sideX + 8, h * 0.36, 64, h * 0.28);
-          pitchCacheCtx.beginPath();
-          pitchCacheCtx.arc(sideX + 40, h * 0.5, 22, 0, Math.PI * 2);
-          pitchCacheCtx.stroke();
-          fillPxRect(pitchCacheCtx, sideX + 24, h * 0.25, 32, 6, '#f8fafc', px);
-          fillPxRect(pitchCacheCtx, sideX + 34, h * 0.25 + 6, 12, 8, '#ef4444', px);
-          // Street-Art Cargo Containers & DJ Boombox Stacks
-          fillPxRect(pitchCacheCtx, sideX + 4, 112, 72, 46, outline, px);
-          fillPxRect(pitchCacheCtx, sideX + 7, 115, 66, 40, sideX < 0 ? '#38bdf8' : '#f43f5e', px);
-          fillPxRect(pitchCacheCtx, sideX + 18, 124, 44, 12, '#fde047', px);
-          fillPxRect(pitchCacheCtx, sideX + 4, h - 158, 72, 46, outline, px);
-          fillPxRect(pitchCacheCtx, sideX + 7, h - 155, 66, 40, sideX < 0 ? '#a855f7' : '#facc15', px);
-          fillPxRect(pitchCacheCtx, sideX + 16, h - 144, 16, 16, '#0f172a', px);
-          fillPxRect(pitchCacheCtx, sideX + 48, h - 144, 16, 16, '#0f172a', px);
+        // WEST QUADRANT (x < -165): Sunken Concrete Skatepark Bowl (Upper-West) & Neon Taco Truck + Lowrider Meet (Lower-West)
+        // 1A. Sunken Kidney Skatepark Bowl & Half-Pipe (x = -335..-190, y = 90..540)
+        fillPxRect(pitchCacheCtx, -342, 86, 152, 440, outline, px);
+        fillPxRect(pitchCacheCtx, -336, 92, 140, 428, '#475569', px);
+        fillPxRect(pitchCacheCtx, -320, 114, 108, 220, outline, px);
+        fillPxRect(pitchCacheCtx, -314, 120, 96, 208, '#94a3b8', px);
+        fillPxRect(pitchCacheCtx, -298, 140, 64, 168, '#cbd5e1', px);
+        // Steel Grind Rail & Street Graffiti Tag inside Skatepark
+        fillPxRect(pitchCacheCtx, -270, 355, 8, 130, outline, px);
+        fillPxRect(pitchCacheCtx, -268, 358, 4, 124, '#facc15', px);
+        fillPxRect(pitchCacheCtx, -318, 375, 36, 22, '#f43f5e', px);
+        fillPxRect(pitchCacheCtx, -312, 380, 24, 10, '#38bdf8', px);
+
+        // 1B. Lower-West Neon Taco Food Truck, Checkered Tables & Lowrider Meet (y = h - 540 .. h - 85)
+        fillPxRect(pitchCacheCtx, -342, h - 520, 152, 430, outline, px);
+        fillPxRect(pitchCacheCtx, -336, h - 514, 140, 418, '#334155', px);
+        // Pastel Cyan & Magenta Taco Truck
+        fillPxRect(pitchCacheCtx, -316, h - 475, 68, 136, outline, px);
+        fillPxRect(pitchCacheCtx, -310, h - 469, 56, 124, '#06b6d4', px);
+        fillPxRect(pitchCacheCtx, -300, h - 455, 36, 96, '#f472b6', px);
+        fillPxRect(pitchCacheCtx, -248, h - 445, 18, 76, '#fde047', px); // Striped awning
+        // Picnic Umbrellas
+        drawBeachUmbrella(pitchCacheCtx, -238, h - 280, '#f43f5e', '#fef08a', px);
+        drawBeachUmbrella(pitchCacheCtx, -295, h - 250, '#38bdf8', '#ffffff', px);
+
+        // EAST QUADRANT (x > w + 165): Full Rucker-Style Streetball Court (Upper-East) & Container DJ Stage + Cypher Mat (Lower-East)
+        // 2A. Rucker Streetball Court (x = w + 194, y = 86..640)
+        const sbX = w + 194;
+        fillPxRect(pitchCacheCtx, sbX - 4, 86, 156, 520, outline, px);
+        fillPxRect(pitchCacheCtx, sbX, 92, 148, 508, '#334155', px);
+        fillPxRect(pitchCacheCtx, sbX + 12, 110, 124, 472, '#ea580c', px);
+        pitchCacheCtx.strokeStyle = '#f8fafc';
+        pitchCacheCtx.lineWidth = 3;
+        pitchCacheCtx.strokeRect(sbX + 14, 112, 120, 468);
+        // Painted Key, Center Circle & Backboard
+        fillPxRect(pitchCacheCtx, sbX + 44, 112, 60, 96, '#0284c7', px);
+        pitchCacheCtx.strokeRect(sbX + 44, 112, 60, 96);
+        pitchCacheCtx.beginPath();
+        pitchCacheCtx.arc(sbX + 74, 346, 36, 0, Math.PI * 2);
+        pitchCacheCtx.stroke();
+        fillPxRect(pitchCacheCtx, sbX + 52, 102, 44, 8, '#f8fafc', px);
+        fillPxRect(pitchCacheCtx, sbX + 66, 110, 16, 10, '#ef4444', px);
+
+        // 2B. Lower-East Shipping Container Block-Party DJ Stage & Breakdance Cypher Mat (y = h - 490..h - 86)
+        fillPxRect(pitchCacheCtx, sbX - 4, h - 480, 156, 394, outline, px);
+        fillPxRect(pitchCacheCtx, sbX, h - 474, 148, 382, '#1e293b', px);
+        // Stacked Corrugated Cargo Containers (Magenta & Gold)
+        fillPxRect(pitchCacheCtx, sbX + 14, h - 455, 120, 68, outline, px);
+        fillPxRect(pitchCacheCtx, sbX + 18, h - 451, 112, 60, '#a855f7', px);
+        fillPxRect(pitchCacheCtx, sbX + 32, h - 435, 84, 28, '#facc15', px);
+        // Checkered Breakdance Cypher Floor Mat
+        fillPxRect(pitchCacheCtx, sbX + 22, h - 345, 104, 104, outline, px);
+        for (let cx = 0; cx < 4; cx++) {
+          for (let cy = 0; cy < 4; cy++) {
+            fillPxRect(
+              pitchCacheCtx,
+              sbX + 26 + cx * 24,
+              h - 341 + cy * 24,
+              24,
+              24,
+              (cx + cy) % 2 === 0 ? '#38bdf8' : '#0f172a',
+              px
+            );
+          }
+        }
+        // Giant Twin Speaker Stacks
+        fillPxRect(pitchCacheCtx, sbX + 18, h - 205, 112, 56, outline, px);
+        fillPxRect(pitchCacheCtx, sbX + 22, h - 201, 104, 48, '#334155', px);
+        fillPxRect(pitchCacheCtx, sbX + 32, h - 193, 28, 32, '#0f172a', px);
+        fillPxRect(pitchCacheCtx, sbX + 88, h - 193, 28, 32, '#0f172a', px);
+
+        // NORTH QUADRANT (y < -165): Elevated Steel Subway Viaduct (El-Train Track) & Brick Tenement Rooftops
+        const elY = -265;
+        fillPxRect(pitchCacheCtx, -CACHE_PAD_X, elY - 32, w + CACHE_PAD_X * 2, 64, outline, px);
+        fillPxRect(pitchCacheCtx, -CACHE_PAD_X, elY - 26, w + CACHE_PAD_X * 2, 52, '#334155', px);
+        // Railroad ties & twin steel rails
+        for (let tx = -CACHE_PAD_X + 16; tx < w + CACHE_PAD_X; tx += 28) {
+          fillPxRect(pitchCacheCtx, tx, elY - 20, 12, 40, '#451a03', px);
+        }
+        fillPxRect(pitchCacheCtx, -CACHE_PAD_X, elY - 12, w + CACHE_PAD_X * 2, 5, '#94a3b8', px);
+        fillPxRect(pitchCacheCtx, -CACHE_PAD_X, elY + 7, w + CACHE_PAD_X * 2, 5, '#94a3b8', px);
+        // Asymmetric Red-Brick Tenements & Rooftop Water Towers North of the El-Track
+        for (const bld of [
+          { x: 140, y: -440, bw: 240, bh: 125, col: '#7c2d12', roof: '#451a03' },
+          { x: 520, y: -455, bw: 190, bh: 140, col: '#334155', roof: '#1e293b' },
+          { x: w * 0.5 - 130, y: -445, bw: 260, bh: 130, col: '#9a3412', roof: '#431407' },
+          { x: w - 720, y: -450, bw: 210, bh: 135, col: '#1e293b', roof: '#0f172a' },
+          { x: w - 390, y: -435, bw: 250, bh: 120, col: '#7f1d1d', roof: '#450a0a' },
+        ]) {
+          fillPxRect(pitchCacheCtx, bld.x - 4, bld.y - 4, bld.bw + 8, bld.bh + 8, outline, px);
+          fillPxRect(pitchCacheCtx, bld.x, bld.y, bld.bw, bld.bh, bld.col, px);
+          fillPxRect(pitchCacheCtx, bld.x + 10, bld.y + 10, bld.bw - 20, bld.bh - 20, bld.roof, px);
+          // Rooftop Wooden Water Tank or Neon Billboard
+          fillPxRect(pitchCacheCtx, bld.x + 24, bld.y + 22, 42, 42, outline, px);
+          fillPxRect(pitchCacheCtx, bld.x + 28, bld.y + 26, 34, 34, '#b45309', px);
+        }
+
+        // SOUTH QUADRANT (y > h + 165): Two-Lane Downtown Asphalt Avenue, Crosswalks, Bus Stop & Steaming Manholes
+        const aveY = h + 206;
+        fillPxRect(pitchCacheCtx, -CACHE_PAD_X, aveY - 4, w + CACHE_PAD_X * 2, 92, outline, px);
+        fillPxRect(pitchCacheCtx, -CACHE_PAD_X, aveY, w + CACHE_PAD_X * 2, 84, '#0f172a', px);
+        for (let rx = -CACHE_PAD_X + 20; rx < w + CACHE_PAD_X; rx += 72) {
+          fillPxRect(pitchCacheCtx, rx, aveY + 39, 38, 6, '#facc15', px);
+        }
+        for (const cwX of [260, w * 0.5 - 32, w - 310]) {
+          for (let stripe = 0; stripe < 6; stripe++) {
+            fillPxRect(pitchCacheCtx, cwX, aveY + 6 + stripe * 13, 58, 7, '#f8fafc', px);
+          }
+        }
+        // Iron Manhole Covers (for live rising steam plumes!)
+        for (const mhX of [520, w * 0.5 + 240, w - 540]) {
+          fillPxRect(pitchCacheCtx, mhX - 12, aveY + 18, 24, 24, outline, px);
+          fillPxRect(pitchCacheCtx, mhX - 8, aveY + 22, 16, 16, '#475569', px);
         }
       } else if (selectedPitchTheme === 'RIO_CLAY') {
-        // === 3. RIO CLAY: COPACABANA TROPICAL BEACHFRONT, OCEAN SURF & PALM BOARDWALK ===
-        pitchCacheCtx.fillStyle = '#0284c7';
+        // === 3. RIO CLAY: WEST PORTUGUESE WAVE BOARDWALK & SAMBA STAGE, EAST ATLANTIC OCEAN MARINA PIER, NORTH SUGARLOAF WATERFALL, SOUTH PALM COVE ===
+        // Base Golden Sand & West Copacabana Promenade
+        pitchCacheCtx.fillStyle = '#fde68a';
         pitchCacheCtx.fillRect(-CACHE_PAD_X, -CACHE_PAD_Y, w + CACHE_PAD_X * 2, h + CACHE_PAD_Y * 2);
 
-        // Ocean Surf & Golden Copacabana Sand Island Surrounding the Stadium Bowl
-        fillPxRect(pitchCacheCtx, -380, -310, w + 760, h + 620, '#0ea5e9', px);
-        fillPxRect(pitchCacheCtx, -345, -280, w + 690, h + 560, '#38bdf8', px);
-        fillPxRect(pitchCacheCtx, -318, -256, w + 636, h + 512, '#e0f2fe', px);
-        fillPxRect(pitchCacheCtx, -298, -238, w + 596, h + 476, '#fcd34d', px);
-        fillPxRect(pitchCacheCtx, -270, -216, w + 540, h + 432, '#fde68a', px);
-
-        // Outer Beach Volleyball Sand Courts on Left & Right Beach (Outside Stadium Wall)
-        for (const vx of [-262, w + 192]) {
-          pitchCacheCtx.strokeStyle = '#f97316';
-          pitchCacheCtx.lineWidth = 2.5;
-          pitchCacheCtx.strokeRect(vx, h * 0.28, 66, h * 0.44);
-          fillPxRect(pitchCacheCtx, vx - 3, h * 0.5 - 3, 72, 6, '#ffffff', px);
-          fillPxRect(pitchCacheCtx, vx - 4, h * 0.5 - 6, 6, 12, outline, px);
-          fillPxRect(pitchCacheCtx, vx + 64, h * 0.5 - 6, 6, 12, outline, px);
+        // EAST QUADRANT (x > w + 175): Curved Atlantic Ocean Surf Bay & Timber Marina Yacht Pier
+        fillPxRect(pitchCacheCtx, w + 178, -CACHE_PAD_Y, CACHE_PAD_X, h + CACHE_PAD_Y * 2, '#f8fafc', px); // White surf foam edge
+        fillPxRect(pitchCacheCtx, w + 196, -CACHE_PAD_Y, CACHE_PAD_X, h + CACHE_PAD_Y * 2, '#38bdf8', px); // Shallow turquoise surf
+        fillPxRect(pitchCacheCtx, w + 232, -CACHE_PAD_Y, CACHE_PAD_X, h + CACHE_PAD_Y * 2, '#0ea5e9', px); // Mid ocean
+        fillPxRect(pitchCacheCtx, w + 285, -CACHE_PAD_Y, CACHE_PAD_X, h + CACHE_PAD_Y * 2, '#0284c7', px); // Deep Atlantic
+        // Timber Marina Yacht Pier jutting out at y = h * 0.5
+        const pierX = w + 174;
+        const pierY = h * 0.5 - 38;
+        fillPxRect(pitchCacheCtx, pierX, pierY - 4, 240, 84, outline, px);
+        fillPxRect(pitchCacheCtx, pierX + 4, pierY, 232, 76, '#78350f', px);
+        for (let pxPlank = pierX + 12; pxPlank < pierX + 228; pxPlank += 16) {
+          fillPxRect(pitchCacheCtx, pxPlank, pierY + 4, 10, 68, '#92400e', px);
         }
+        // Moored Luxury Sun-Yacht & Tiki Boat House beside the Pier
+        fillPxRect(pitchCacheCtx, w + 245, pierY - 82, 112, 48, outline, px);
+        fillPxRect(pitchCacheCtx, w + 249, pierY - 78, 104, 40, '#f8fafc', px);
+        fillPxRect(pitchCacheCtx, w + 265, pierY - 70, 64, 24, '#38bdf8', px);
+        fillPxRect(pitchCacheCtx, w + 285, pierY - 64, 28, 12, '#f43f5e', px);
 
-        // Colorful Tropical Surfboards, Beach Umbrellas & Palms on Outer Sand (Strictly outside ±215px)
-        for (const sb of [
-          { x: 265, y: -212, col: '#f43f5e', stripe: '#fde047' },
-          { x: w - 265, y: -212, col: '#06b6d4', stripe: '#ffffff' },
-          { x: 265, y: h + 212, col: '#10b981', stripe: '#fef08a' },
-          { x: w - 265, y: h + 212, col: '#f97316', stripe: '#ffffff' },
+        // WEST QUADRANT (x < -165): Iconic Black & White Portuguese Wave Mosaic Boardwalk (`Calçadão`), Samba Stage & Footvolley
+        fillPxRect(pitchCacheCtx, -365, -CACHE_PAD_Y, 185, h + CACHE_PAD_Y * 2, outline, px);
+        fillPxRect(pitchCacheCtx, -359, -CACHE_PAD_Y, 173, h + CACHE_PAD_Y * 2, '#f8fafc', px);
+        // Portuguese Wave Mosaic Stripes
+        for (let wy = -CACHE_PAD_Y + 20; wy < h + CACHE_PAD_Y; wy += 48) {
+          fillPxRect(pitchCacheCtx, -352, wy, 78, 14, '#0f172a', px);
+          fillPxRect(pitchCacheCtx, -274, wy + 18, 82, 14, '#0f172a', px);
+        }
+        // Carnival Samba Percussion Float & Stage (x = -295, y = h * 0.26)
+        fillPxRect(pitchCacheCtx, -338, h * 0.18, 132, 195, outline, px);
+        fillPxRect(pitchCacheCtx, -332, h * 0.18 + 6, 120, 183, '#db2777', px);
+        fillPxRect(pitchCacheCtx, -318, h * 0.18 + 20, 92, 155, '#facc15', px);
+        fillPxRect(pitchCacheCtx, -304, h * 0.18 + 38, 64, 118, '#10b981', px);
+        // Footvolley Sand Court & Tiki Coconut Bar (y = h * 0.62)
+        fillPxRect(pitchCacheCtx, -332, h * 0.56, 120, 260, outline, px);
+        fillPxRect(pitchCacheCtx, -326, h * 0.56 + 6, 108, 248, '#fcd34d', px);
+        pitchCacheCtx.strokeStyle = '#f43f5e';
+        pitchCacheCtx.lineWidth = 3;
+        pitchCacheCtx.strokeRect(-314, h * 0.58, 84, 212);
+        fillPxRect(pitchCacheCtx, -318, h * 0.58 + 103, 92, 6, '#ffffff', px);
+
+        // NORTH QUADRANT (y < -165): Sugarloaf Coastal Granite Cliffs, Rainforest Waterfall & Plunge Lagoon
+        // Plunge Lagoon & Waterfall at x = w * 0.32, y = -285
+        const lagX = w * 0.32;
+        fillPxRect(pitchCacheCtx, lagX - 180, -390, 360, 190, outline, px);
+        fillPxRect(pitchCacheCtx, lagX - 174, -384, 348, 178, '#57534e', px); // Granite cliff rock
+        fillPxRect(pitchCacheCtx, lagX - 140, -350, 280, 140, '#78716c', px);
+        fillPxRect(pitchCacheCtx, lagX - 96, -295, 192, 92, '#0ea5e9', px); // Turquoise lagoon
+        fillPxRect(pitchCacheCtx, lagX - 78, -282, 156, 68, '#38bdf8', px);
+        fillPxRect(pitchCacheCtx, lagX - 28, -384, 56, 110, '#bae6fd', px); // Waterfall chute
+        fillPxRect(pitchCacheCtx, lagX - 18, -384, 36, 110, '#ffffff', px);
+        // North-East Lifeguard Tower & Colorful Beach Towels
+        fillPxRect(pitchCacheCtx, w * 0.68 - 32, -265, 64, 64, outline, px);
+        fillPxRect(pitchCacheCtx, w * 0.68 - 26, -259, 52, 52, '#f8fafc', px);
+        fillPxRect(pitchCacheCtx, w * 0.68 - 18, -251, 36, 36, '#ef4444', px);
+        drawBeachUmbrella(pitchCacheCtx, w * 0.56, -230, '#f43f5e', '#fef08a', px);
+        drawBeachUmbrella(pitchCacheCtx, w * 0.78, -234, '#0ea5e9', '#ffffff', px);
+        drawBeachUmbrella(pitchCacheCtx, w * 0.86, -222, '#10b981', '#fef08a', px);
+
+        // SOUTH QUADRANT (y > h + 165): Surfboard Rental Shack, Giant Sandcastle & Leaning Coconut Palm Grove
+        fillPxRect(pitchCacheCtx, 240, h + 208, 146, 78, outline, px);
+        fillPxRect(pitchCacheCtx, 246, h + 214, 134, 66, '#b45309', px);
+        fillPxRect(pitchCacheCtx, 256, h + 222, 114, 50, '#d97706', px);
+        // Lineup of colorful surfboards beside the shack
+        for (let sIdx = 0; sIdx < 5; sIdx++) {
+          const sCol = ['#f43f5e', '#06b6d4', '#10b981', '#facc15', '#a855f7'][sIdx];
+          fillPxRect(pitchCacheCtx, 420 + sIdx * 36, h + 218, 22, 48, outline, px);
+          fillPxRect(pitchCacheCtx, 423 + sIdx * 36, h + 221, 16, 42, sCol, px);
+        }
+        // Sculpted Multi-Tower Sandcastle (x = w * 0.58, y = h + 238)
+        const scX = w * 0.58;
+        fillPxRect(pitchCacheCtx, scX - 54, h + 206, 108, 74, outline, px);
+        fillPxRect(pitchCacheCtx, scX - 48, h + 212, 96, 62, '#d97706', px);
+        fillPxRect(pitchCacheCtx, scX - 32, h + 222, 64, 42, '#f59e0b', px);
+        fillPxRect(pitchCacheCtx, scX - 12, h + 232, 24, 22, '#fef08a', px);
+
+        for (const pm of [
+          { x: 140, y: -228 },
+          { x: lagX - 210, y: -240 },
+          { x: lagX + 210, y: -236 },
+          { x: 160, y: h + 235 },
+          { x: w * 0.42, y: h + 242 },
+          { x: w - 420, y: h + 232 },
+          { x: w - 220, y: h + 240 },
         ]) {
-          fillPxRect(pitchCacheCtx, sb.x - 14, sb.y - 7, 28, 14, outline, px);
-          fillPxRect(pitchCacheCtx, sb.x - 11, sb.y - 4, 22, 8, sb.col, px);
-          fillPxRect(pitchCacheCtx, sb.x - 6, sb.y - 2, 12, 4, sb.stripe, px);
-        }
-
-        const umbrellas = [
-          { x: 170, y: -222, c1: '#f43f5e', c2: '#ffffff' },
-          { x: 480, y: -224, c1: '#0ea5e9', c2: '#fef08a' },
-          { x: w - 480, y: -224, c1: '#ec4899', c2: '#ffffff' },
-          { x: w - 170, y: -222, c1: '#10b981', c2: '#fef08a' },
-          { x: 170, y: h + 222, c1: '#8b5cf6', c2: '#ffffff' },
-          { x: 480, y: h + 224, c1: '#f97316', c2: '#fef08a' },
-          { x: w - 480, y: h + 224, c1: '#06b6d4', c2: '#ffffff' },
-          { x: w - 170, y: h + 222, c1: '#f43f5e', c2: '#fef08a' },
-          { x: -236, y: 150, c1: '#f43f5e', c2: '#ffffff' },
-          { x: -236, y: h - 150, c1: '#0ea5e9', c2: '#fef08a' },
-          { x: w + 236, y: 150, c1: '#10b981', c2: '#ffffff' },
-          { x: w + 236, y: h - 150, c1: '#ec4899', c2: '#fef08a' },
-        ];
-        for (const umb of umbrellas) {
-          drawBeachUmbrella(pitchCacheCtx, umb.x, umb.y, umb.c1, umb.c2, px);
-        }
-
-        const palmPositions = [
-          { x: 330, y: -220 },
-          { x: w - 330, y: -220 },
-          { x: 330, y: h + 224 },
-          { x: w - 330, y: h + 224 },
-          { x: -242, y: 78 },
-          { x: -242, y: h - 78 },
-          { x: w + 242, y: 78 },
-          { x: w + 242, y: h - 78 },
-        ];
-        for (const pm of palmPositions) {
           drawPixelPalmTree(pitchCacheCtx, pm.x, pm.y, px);
         }
       } else if (selectedPitchTheme === 'TWILIGHT_SYNTH') {
-        // === 4. TWILIGHT SYNTH: CYBER-SYNTHWAVES, NEON LASER GRID & SKYLINE ROOFTOP ===
+        // === 4. TWILIGHT SYNTH: WEST 80s NEON DINER & GULLWING MEET, EAST CYBER HELIPAD & DJ TOWER, NORTH OUTRUN WIREFRAME PEAKS, SOUTH MAGLEV MONORAIL ===
         pitchCacheCtx.fillStyle = '#09051c';
         pitchCacheCtx.fillRect(-CACHE_PAD_X, -CACHE_PAD_Y, w + CACHE_PAD_X * 2, h + CACHE_PAD_Y * 2);
 
-        // Giant Retro Outrun Segmented Sunset Glow & Horizon Disc Above Stadium
-        const sunGrad = pitchCacheCtx.createRadialGradient(w * 0.5, -280, 10, w * 0.5, -280, 320);
-        sunGrad.addColorStop(0, 'rgba(244, 114, 182, 0.52)');
-        sunGrad.addColorStop(0.5, 'rgba(168, 85, 247, 0.26)');
-        sunGrad.addColorStop(1, 'rgba(9, 5, 28, 0)');
-        pitchCacheCtx.fillStyle = sunGrad;
-        pitchCacheCtx.beginPath();
-        pitchCacheCtx.arc(w * 0.5, -280, 320, 0, Math.PI * 2);
-        pitchCacheCtx.fill();
-
-        fillPxRect(pitchCacheCtx, w * 0.5 - 64, -310, 128, 8, '#fde047', px);
-        fillPxRect(pitchCacheCtx, w * 0.5 - 76, -296, 152, 8, '#fb923c', px);
-        fillPxRect(pitchCacheCtx, w * 0.5 - 84, -282, 168, 8, '#f43f5e', px);
-        fillPxRect(pitchCacheCtx, w * 0.5 - 76, -268, 152, 6, '#e879f9', px);
-
-        pitchCacheCtx.strokeStyle = 'rgba(232, 121, 249, 0.34)';
+        // Perspective Synthwave Laser Grid
+        pitchCacheCtx.strokeStyle = 'rgba(232, 121, 249, 0.32)';
         pitchCacheCtx.lineWidth = 2;
-        for (let gx = -CACHE_PAD_X; gx <= w + CACHE_PAD_X; gx += 72) {
+        for (let gx = -CACHE_PAD_X; gx <= w + CACHE_PAD_X; gx += 76) {
           pitchCacheCtx.beginPath();
           pitchCacheCtx.moveTo(gx, -CACHE_PAD_Y);
           pitchCacheCtx.lineTo(gx, h + CACHE_PAD_Y);
           pitchCacheCtx.stroke();
         }
-        pitchCacheCtx.strokeStyle = 'rgba(34, 211, 238, 0.32)';
-        for (let gy = -CACHE_PAD_Y; gy <= h + CACHE_PAD_Y; gy += 64) {
+        pitchCacheCtx.strokeStyle = 'rgba(34, 211, 238, 0.30)';
+        for (let gy = -CACHE_PAD_Y; gy <= h + CACHE_PAD_Y; gy += 68) {
           pitchCacheCtx.beginPath();
           pitchCacheCtx.moveTo(-CACHE_PAD_X, gy);
           pitchCacheCtx.lineTo(w + CACHE_PAD_X, gy);
           pitchCacheCtx.stroke();
         }
 
-        // Cyber-Synth Skyline Towers (Strictly outside Stadium Bowl at y <= -305, y >= h + 210, x <= -290, x >= w + 206)
-        const buildings = [
-          { x: 85, y: -305, bw: 96, bh: 92, c: '#1e1b4b', win: '#fde047' },
-          { x: 195, y: -320, bw: 110, bh: 106, c: '#311042', win: '#22d3ee' },
-          { x: 320, y: -296, bw: 88, bh: 82, c: '#1e1b4b', win: '#f472b6' },
-          { x: w - 410, y: -300, bw: 92, bh: 86, c: '#311042', win: '#22d3ee' },
-          { x: w - 305, y: -322, bw: 108, bh: 108, c: '#1e1b4b', win: '#fde047' },
-          { x: w - 183, y: -304, bw: 96, bh: 90, c: '#311042', win: '#a7f3d0' },
-          { x: 95, y: h + 212, bw: 104, bh: 96, c: '#311042', win: '#22d3ee' },
-          { x: 215, y: h + 212, bw: 112, bh: 108, c: '#1e1b4b', win: '#f472b6' },
-          { x: w - 327, y: h + 212, bw: 112, bh: 108, c: '#1e1b4b', win: '#fde047' },
-          { x: w - 199, y: h + 212, bw: 104, bh: 96, c: '#311042', win: '#22d3ee' },
-          { x: -292, y: 95, bw: 84, bh: 150, c: '#1e1b4b', win: '#fde047' },
-          { x: -292, y: h - 245, bw: 84, bh: 150, c: '#311042', win: '#f472b6' },
-          { x: w + 208, y: 95, bw: 84, bh: 150, c: '#311042', win: '#22d3ee' },
-          { x: w + 208, y: h - 245, bw: 84, bh: 150, c: '#1e1b4b', win: '#fde047' },
-        ];
-        for (const b of buildings) {
-          fillPxRect(pitchCacheCtx, b.x - 4, b.y - 4, b.bw + 8, b.bh + 8, outline, px);
-          fillPxRect(pitchCacheCtx, b.x, b.y, b.bw, b.bh, b.c, px);
-          fillPxRect(pitchCacheCtx, b.x + 6, b.y + 4, b.bw - 12, 5, '#f472b6', px);
-          fillPxRect(pitchCacheCtx, b.x + b.bw * 0.5 - 3, b.y - 12, 6, 10, '#22d3ee', px);
-          for (let wx = b.x + 12; wx < b.x + b.bw - 14; wx += 18) {
-            for (let wy = b.y + 14; wy < b.y + b.bh - 12; wy += 16) {
-              if ((wx + wy) % 5 !== 0) {
-                fillPxRect(pitchCacheCtx, wx, wy, 8, 8, b.win, px);
-              }
-            }
+        // NORTH QUADRANT (y < -165): Giant Outrun Sunset Disc, 3D Cyan/Magenta Wireframe Mountain Peaks & Asymmetric Neo-Tokyo Towers
+        const sunGrad = pitchCacheCtx.createRadialGradient(w * 0.5, -290, 12, w * 0.5, -290, 380);
+        sunGrad.addColorStop(0, 'rgba(244, 114, 182, 0.58)');
+        sunGrad.addColorStop(0.5, 'rgba(168, 85, 247, 0.28)');
+        sunGrad.addColorStop(1, 'rgba(9, 5, 28, 0)');
+        pitchCacheCtx.fillStyle = sunGrad;
+        pitchCacheCtx.beginPath();
+        pitchCacheCtx.arc(w * 0.5, -290, 380, 0, Math.PI * 2);
+        pitchCacheCtx.fill();
+
+        fillPxRect(pitchCacheCtx, w * 0.5 - 92, -330, 184, 10, '#fde047', px);
+        fillPxRect(pitchCacheCtx, w * 0.5 - 108, -312, 216, 10, '#fb923c', px);
+        fillPxRect(pitchCacheCtx, w * 0.5 - 118, -294, 236, 10, '#f43f5e', px);
+        fillPxRect(pitchCacheCtx, w * 0.5 - 108, -276, 216, 8, '#e879f9', px);
+
+        // 3D Vector Wireframe Mountain Peaks flanking the Outrun Sun
+        pitchCacheCtx.save();
+        for (const pk of [
+          { cx: w * 0.28, cy: -215, pw: 260, ph: 135, col: '#22d3ee' },
+          { cx: w * 0.38, cy: -215, pw: 210, ph: 110, col: '#e879f9' },
+          { cx: w * 0.62, cy: -215, pw: 210, ph: 110, col: '#e879f9' },
+          { cx: w * 0.72, cy: -215, pw: 260, ph: 135, col: '#22d3ee' },
+        ]) {
+          pitchCacheCtx.fillStyle = '#140933';
+          pitchCacheCtx.strokeStyle = pk.col;
+          pitchCacheCtx.lineWidth = 2.5;
+          pitchCacheCtx.beginPath();
+          pitchCacheCtx.moveTo(pk.cx - pk.pw * 0.5, pk.cy);
+          pitchCacheCtx.lineTo(pk.cx, pk.cy - pk.ph);
+          pitchCacheCtx.lineTo(pk.cx + pk.pw * 0.5, pk.cy);
+          pitchCacheCtx.closePath();
+          pitchCacheCtx.fill();
+          pitchCacheCtx.stroke();
+          // Internal wireframe facets
+          pitchCacheCtx.beginPath();
+          pitchCacheCtx.moveTo(pk.cx, pk.cy - pk.ph);
+          pitchCacheCtx.lineTo(pk.cx - pk.pw * 0.16, pk.cy);
+          pitchCacheCtx.moveTo(pk.cx, pk.cy - pk.ph);
+          pitchCacheCtx.lineTo(pk.cx + pk.pw * 0.16, pk.cy);
+          pitchCacheCtx.stroke();
+        }
+        pitchCacheCtx.restore();
+
+        // WEST QUADRANT (x < -165): Retro 80s Chrome & Neon Drive-In Diner + Gullwing Sports Car Meet
+        fillPxRect(pitchCacheCtx, -356, 110, 168, h - 220, outline, px);
+        fillPxRect(pitchCacheCtx, -350, 116, 156, h - 232, '#1e1b4b', px);
+        // Checkered Black & Magenta Diner Patio Floor
+        for (let dy = 140; dy < 460; dy += 32) {
+          for (let dx = -336; dx < -210; dx += 32) {
+            fillPxRect(pitchCacheCtx, dx, dy, 32, 32, ((dx + dy) / 32) % 2 === 0 ? '#3b0764' : '#09051c', px);
           }
         }
+        // Chrome & Pink Neon Diner Building
+        fillPxRect(pitchCacheCtx, -338, 165, 112, 240, outline, px);
+        fillPxRect(pitchCacheCtx, -332, 171, 100, 228, '#cbd5e1', px);
+        fillPxRect(pitchCacheCtx, -324, 180, 84, 210, '#f472b6', px);
+        fillPxRect(pitchCacheCtx, -312, 196, 60, 178, '#22d3ee', px);
+        // Parked Silver & Neon Gullwing Sports Cars in Drive-In Stalls (Lower-West)
+        for (let cIdx = 0; cIdx < 4; cIdx++) {
+          drawStreetCar(
+            pitchCacheCtx,
+            -268,
+            h - 460 + cIdx * 82,
+            1,
+            cIdx % 2 === 0 ? '#22d3ee' : '#f472b6',
+            px,
+            false,
+            0
+          );
+        }
+
+        // EAST QUADRANT (x > w + 165): Rooftop Cyber-Helipad (Upper-East) & Hologram Equalizer Megatower (Lower-East)
+        const heliX = w + 275;
+        const heliY = h * 0.28;
+        fillPxRect(pitchCacheCtx, heliX - 88, heliY - 88, 176, 176, outline, px);
+        fillPxRect(pitchCacheCtx, heliX - 82, heliY - 82, 164, 164, '#1e1b4b', px);
+        pitchCacheCtx.strokeStyle = '#22d3ee';
+        pitchCacheCtx.lineWidth = 4;
+        pitchCacheCtx.beginPath();
+        pitchCacheCtx.arc(heliX, heliY, 64, 0, Math.PI * 2);
+        pitchCacheCtx.stroke();
+        // Glowing 'H' Markings
+        fillPxRect(pitchCacheCtx, heliX - 24, heliY - 28, 10, 56, '#f472b6', px);
+        fillPxRect(pitchCacheCtx, heliX + 14, heliY - 28, 10, 56, '#f472b6', px);
+        fillPxRect(pitchCacheCtx, heliX - 24, heliY - 5, 48, 10, '#f472b6', px);
+        // Lower-East Hologram Equalizer Megatower
+        const eqX = w + 202;
+        const eqY = h * 0.58;
+        fillPxRect(pitchCacheCtx, eqX - 4, eqY - 4, 148, 320, outline, px);
+        fillPxRect(pitchCacheCtx, eqX, eqY, 140, 312, '#140933', px);
+        for (let bar = 0; bar < 8; bar++) {
+          const barW = 48 + ((bar * 37) % 68);
+          const barCol = bar % 3 === 0 ? '#22d3ee' : bar % 3 === 1 ? '#f472b6' : '#fde047';
+          fillPxRect(pitchCacheCtx, eqX + 14, eqY + 22 + bar * 34, barW, 18, barCol, px);
+        }
+
+        // SOUTH QUADRANT (y > h + 165): Elevated Neon Maglev Monorail Beamway
+        const monoY = h + 236;
+        fillPxRect(pitchCacheCtx, -CACHE_PAD_X, monoY - 20, w + CACHE_PAD_X * 2, 40, outline, px);
+        fillPxRect(pitchCacheCtx, -CACHE_PAD_X, monoY - 14, w + CACHE_PAD_X * 2, 28, '#1e1b4b', px);
+        fillPxRect(pitchCacheCtx, -CACHE_PAD_X, monoY - 4, w + CACHE_PAD_X * 2, 8, '#22d3ee', px);
       } else if (selectedPitchTheme === 'ARCTIC_ICE') {
-        // === 5. ARCTIC ICE: GLACIER FROST FJORD, SNOW PINES & ALPINE SKI LODGES ===
-        pitchCacheCtx.fillStyle = '#0f172a';
+        // === 5. ARCTIC ICE: WEST SKI GONDOLA CHAIRLIFT & NORDIC LODGE, EAST ICEBREAKER SHIP & GEOTHERMAL HOT SPRINGS, NORTH GLACIAL PEAKS, SOUTH RESEARCH DOME ===
+        pitchCacheCtx.fillStyle = '#e2e8f0';
         pitchCacheCtx.fillRect(-CACHE_PAD_X, -CACHE_PAD_Y, w + CACHE_PAD_X * 2, h + CACHE_PAD_Y * 2);
 
-        // Frozen Glacial Fjord Ring & Snow-Blanketed Shore Outside the Stadium Bowl
-        fillPxRect(pitchCacheCtx, -370, -300, w + 740, h + 600, '#1e3a8a', px);
-        fillPxRect(pitchCacheCtx, -335, -272, w + 670, h + 544, '#38bdf8', px);
-        fillPxRect(pitchCacheCtx, -305, -248, w + 610, h + 496, '#e2e8f0', px);
-        fillPxRect(pitchCacheCtx, -276, -224, w + 552, h + 448, '#f8fafc', px);
-
-        // Glowing Crystalline Ice Monoliths on Left & Right Glacial Banks (Outside Stadium Bowl)
-        for (const ic of [
-          { x: -238, y: h * 0.5 - 64 },
-          { x: -238, y: h * 0.5 + 42 },
-          { x: w + 222, y: h * 0.5 - 64 },
-          { x: w + 222, y: h * 0.5 + 42 },
-        ]) {
-          fillPxRect(pitchCacheCtx, ic.x - 4, ic.y - 4, 24, 32, outline, px);
-          fillPxRect(pitchCacheCtx, ic.x, ic.y, 16, 24, '#38bdf8', px);
-          fillPxRect(pitchCacheCtx, ic.x + 3, ic.y + 3, 10, 18, '#bae6fd', px);
-          fillPxRect(pitchCacheCtx, ic.x + 5, ic.y + 5, 5, 10, '#ffffff', px);
+        // EAST QUADRANT (x > w + 175): Deep Glacial Iceberg Bay, Anchored Red Polar Icebreaker Ship & Steaming Turquoise Hot Springs
+        fillPxRect(pitchCacheCtx, w + 185, -CACHE_PAD_Y, CACHE_PAD_X, h * 0.56 + CACHE_PAD_Y, '#bae6fd', px);
+        fillPxRect(pitchCacheCtx, w + 205, -CACHE_PAD_Y, CACHE_PAD_X, h * 0.54 + CACHE_PAD_Y, '#0284c7', px);
+        fillPxRect(pitchCacheCtx, w + 235, -CACHE_PAD_Y, CACHE_PAD_X, h * 0.52 + CACHE_PAD_Y, '#0c4a6e', px);
+        // Anchored Red-Hull Polar Expedition Icebreaker Ship (x = w + 275, y = 260)
+        const shipX = w + 275;
+        const shipY = 260;
+        fillPxRect(pitchCacheCtx, shipX - 38, shipY - 115, 76, 230, outline, px);
+        fillPxRect(pitchCacheCtx, shipX - 32, shipY - 109, 64, 218, '#dc2626', px);
+        fillPxRect(pitchCacheCtx, shipX - 24, shipY - 85, 48, 170, '#f8fafc', px);
+        fillPxRect(pitchCacheCtx, shipX - 18, shipY - 45, 36, 68, '#0f172a', px);
+        fillPxRect(pitchCacheCtx, shipX - 12, shipY + 35, 24, 24, '#facc15', px); // Helideck circle on stern
+        // Floating Pack-Ice Floes in the Bay
+        fillPxRect(pitchCacheCtx, w + 230, 520, 68, 48, '#f8fafc', px);
+        fillPxRect(pitchCacheCtx, w + 238, 528, 52, 32, '#bae6fd', px);
+        // Lower-East Steaming Turquoise Geothermal Hot Springs & Igloo Village (y = h * 0.62 .. h - 90)
+        const hsX = w + 258;
+        const hsY = h * 0.72;
+        fillPxRect(pitchCacheCtx, hsX - 66, hsY - 58, 132, 116, outline, px);
+        fillPxRect(pitchCacheCtx, hsX - 60, hsY - 52, 120, 104, '#64748b', px); // Warm volcanic stones
+        fillPxRect(pitchCacheCtx, hsX - 48, hsY - 40, 96, 80, '#0d9488', px);
+        fillPxRect(pitchCacheCtx, hsX - 36, hsY - 28, 72, 56, '#2dd4bf', px);
+        fillPxRect(pitchCacheCtx, hsX - 20, hsY - 14, 40, 28, '#99f6e4', px);
+        // Snow Igloo Domes near the Hot Springs
+        for (const igY of [h * 0.58, h * 0.88]) {
+          fillPxRect(pitchCacheCtx, w + 225, igY - 26, 56, 52, outline, px);
+          fillPxRect(pitchCacheCtx, w + 229, igY - 22, 48, 44, '#f8fafc', px);
+          fillPxRect(pitchCacheCtx, w + 235, igY - 16, 36, 32, '#bae6fd', px);
+          fillPxRect(pitchCacheCtx, w + 215, igY - 8, 16, 16, '#e2e8f0', px); // Igloo tunnel entrance
         }
 
-        // Cozy Alpine Timber Ski Lodges with Warm Lit Windows & Chimneys (Strictly outside Stadium Bowl)
-        for (const lodge of [
-          { x: 140, y: -262 },
-          { x: w - 236, y: -262 },
-          { x: 140, y: h + 212 },
-          { x: w - 236, y: h + 212 },
-        ]) {
-          fillPxRect(pitchCacheCtx, lodge.x + 70, lodge.y - 12, 16, 20, outline, px);
-          fillPxRect(pitchCacheCtx, lodge.x + 73, lodge.y - 9, 10, 14, '#64748b', px);
-          fillPxRect(pitchCacheCtx, lodge.x - 4, lodge.y - 4, 104, 58, outline, px);
-          fillPxRect(pitchCacheCtx, lodge.x, lodge.y, 96, 50, '#78350f', px);
-          fillPxRect(pitchCacheCtx, lodge.x - 6, lodge.y - 6, 108, 18, outline, px);
-          fillPxRect(pitchCacheCtx, lodge.x - 3, lodge.y - 3, 102, 12, '#ffffff', px);
-          fillPxRect(pitchCacheCtx, lodge.x + 14, lodge.y + 18, 20, 18, outline, px);
-          fillPxRect(pitchCacheCtx, lodge.x + 17, lodge.y + 21, 14, 12, '#fde047', px);
-          fillPxRect(pitchCacheCtx, lodge.x + 60, lodge.y + 18, 20, 18, outline, px);
-          fillPxRect(pitchCacheCtx, lodge.x + 63, lodge.y + 21, 14, 12, '#fde047', px);
+        // WEST QUADRANT (x < -165): Groomed Alpine Ski Run, Overhead Gondola Chairlift & Cozy Nordic Timber Lodge
+        fillPxRect(pitchCacheCtx, -350, -120, 160, h + 240, '#f8fafc', px);
+        // Ski slalom gates (alternating red & blue flags)
+        for (let sy = 140; sy < h - 180; sy += 160) {
+          fillPxRect(pitchCacheCtx, -305, sy, 14, 18, '#ef4444', px);
+          fillPxRect(pitchCacheCtx, -225, sy + 80, 14, 18, '#2563eb', px);
+        }
+        // Overhead Gondola Chairlift Steel Towers & Cable (x = -255)
+        fillPxRect(pitchCacheCtx, -258, -140, 6, h + 280, '#334155', px);
+        for (const py of [110, h * 0.5, h - 110]) {
+          fillPxRect(pitchCacheCtx, -276, py - 12, 42, 24, outline, px);
+          fillPxRect(pitchCacheCtx, -272, py - 8, 34, 16, '#64748b', px);
+        }
+        // Grand Nordic Timber Apres-Ski Lodge with Warm Glowing Windows & Stone Chimney (x = -335, y = h * 0.28)
+        const ldgX = -355;
+        const ldgY = h * 0.24;
+        fillPxRect(pitchCacheCtx, ldgX - 4, ldgY - 4, 118, 168, outline, px);
+        fillPxRect(pitchCacheCtx, ldgX, ldgY, 110, 160, '#78350f', px);
+        fillPxRect(pitchCacheCtx, ldgX + 8, ldgY + 8, 94, 144, '#92400e', px);
+        fillPxRect(pitchCacheCtx, ldgX + 18, ldgY + 18, 36, 124, '#f8fafc', px); // Snow-covered gable ridge
+        fillPxRect(pitchCacheCtx, ldgX + 72, ldgY - 14, 24, 24, outline, px); // Stone chimney
+        fillPxRect(pitchCacheCtx, ldgX + 76, ldgY - 10, 16, 16, '#475569', px);
+        for (let wy = ldgY + 28; wy < ldgY + 130; wy += 36) {
+          fillPxRect(pitchCacheCtx, ldgX + 64, wy, 20, 22, '#fde047', px);
         }
 
-        // Snow-Capped 16-Bit Pine Trees Around the Fjord (Outside Stadium Bowl)
-        const pineCoords = [
-          { x: 320, y: -226 },
-          { x: 450, y: -232 },
-          { x: w - 450, y: -232 },
-          { x: w - 320, y: -226 },
-          { x: 320, y: h + 228 },
-          { x: 450, y: h + 234 },
-          { x: w - 450, y: h + 234 },
-          { x: w - 320, y: h + 228 },
-          { x: -236, y: 110 },
-          { x: -248, y: 240 },
-          { x: -248, y: h - 240 },
-          { x: -236, y: h - 110 },
-          { x: w + 236, y: 110 },
-          { x: w + 248, y: 240 },
-          { x: w + 248, y: h - 240 },
-          { x: w + 236, y: h - 110 },
-        ];
-        for (const pt of pineCoords) {
+        // NORTH QUADRANT (y < -165): Jagged Glacial Mountain Range & Ice-Crystal Citadel Gate
+        for (let mx = 120; mx < w - 120; mx += 260) {
+          const mh = 110 + ((mx * 17) % 65);
+          fillPxRect(pitchCacheCtx, mx - 8, -205 - mh, 196, mh + 12, outline, px);
+          fillPxRect(pitchCacheCtx, mx, -200 - mh, 180, mh, '#64748b', px);
+          fillPxRect(pitchCacheCtx, mx + 18, -200 - mh, 144, mh * 0.58, '#bae6fd', px);
+          fillPxRect(pitchCacheCtx, mx + 36, -200 - mh, 108, mh * 0.35, '#ffffff', px);
+        }
+
+        // SOUTH QUADRANT (y > h + 165): Orange Polar Research Geodome & Tracked Snowcats
+        const resX = w * 0.34;
+        const resY = h + 248;
+        fillPxRect(pitchCacheCtx, resX - 58, resY - 58, 116, 116, outline, px);
+        fillPxRect(pitchCacheCtx, resX - 52, resY - 52, 104, 104, '#ea580c', px);
+        fillPxRect(pitchCacheCtx, resX - 38, resY - 38, 76, 76, '#f97316', px);
+        fillPxRect(pitchCacheCtx, resX - 20, resY - 20, 40, 40, '#fef08a', px);
+        // Tracked Red Arctic Snowcat Vehicle
+        fillPxRect(pitchCacheCtx, resX + 110, resY - 22, 68, 44, outline, px);
+        fillPxRect(pitchCacheCtx, resX + 116, resY - 16, 56, 32, '#ef4444', px);
+        fillPxRect(pitchCacheCtx, resX + 128, resY - 10, 28, 20, '#38bdf8', px);
+
+        for (const pt of [
+          { x: -315, y: 120 },
+          { x: -315, y: h - 140 },
+          { x: 180, y: h + 235 },
+          { x: w - 480, y: h + 238 },
+          { x: w - 260, y: h + 230 },
+        ]) {
           drawSnowPineTree(pitchCacheCtx, pt.x, pt.y, px);
         }
       } else if (selectedPitchTheme === 'VOLCANO_FORGE') {
-        // === 6. VOLCANO FORGE: MAGMA CALDERA CITADEL, LAVA RIVERS & DRAGON BRAZIERS ===
-        pitchCacheCtx.fillStyle = '#7c2d12';
+        // === 6. VOLCANO FORGE: WEST TITAN CRUCIBLE SMELTERY, EAST DRAGON SKELETON & MINECART TRACK, NORTH CALDERA THRONE, SOUTH IRON DRAWBRIDGE ===
+        pitchCacheCtx.fillStyle = '#27120b';
         pitchCacheCtx.fillRect(-CACHE_PAD_X, -CACHE_PAD_Y, w + CACHE_PAD_X * 2, h + CACHE_PAD_Y * 2);
 
-        // Bright Glowing Lava River Moat Outside the Basalt Citadel
-        fillPxRect(pitchCacheCtx, -370, -300, w + 740, h + 600, '#c2410c', px);
-        fillPxRect(pitchCacheCtx, -335, -270, w + 670, h + 540, '#ea580c', px);
-        fillPxRect(pitchCacheCtx, -304, -244, w + 608, h + 488, '#f97316', px);
-        fillPxRect(pitchCacheCtx, -278, -222, w + 556, h + 444, '#facc15', px);
+        // Asymmetric Molten Magma Sea on the East & South-East + Lava Channels
+        fillPxRect(pitchCacheCtx, w + 180, -CACHE_PAD_Y, CACHE_PAD_X, h + CACHE_PAD_Y * 2, '#9a3412', px);
+        fillPxRect(pitchCacheCtx, w + 200, -CACHE_PAD_Y, CACHE_PAD_X, h + CACHE_PAD_Y * 2, '#ea580c', px);
+        fillPxRect(pitchCacheCtx, w + 228, -CACHE_PAD_Y, CACHE_PAD_X, h + CACHE_PAD_Y * 2, '#f97316', px);
+        fillPxRect(pitchCacheCtx, -120, h + 195, w + 420, 120, '#ea580c', px);
+        fillPxRect(pitchCacheCtx, -100, h + 210, w + 380, 90, '#facc15', px);
 
-        // Left & Right Obsidian Stone Bridges Spanning the Outer Lava Moat
-        for (const bx of [-296, w + 196]) {
-          fillPxRect(pitchCacheCtx, bx, h * 0.34, 100, h * 0.32, outline, px);
-          fillPxRect(pitchCacheCtx, bx + 4, h * 0.34 + 4, 92, h * 0.32 - 8, '#3f3f46', px);
-          fillPxRect(pitchCacheCtx, bx + 12, h * 0.34 + 14, 76, 8, '#f97316', px);
-          fillPxRect(pitchCacheCtx, bx + 12, h * 0.66 - 22, 76, 8, '#f97316', px);
-          fillPxRect(pitchCacheCtx, bx + 36, h * 0.5 - 12, 28, 24, outline, px);
-          fillPxRect(pitchCacheCtx, bx + 40, h * 0.5 - 8, 20, 16, '#facc15', px);
+        // WEST QUADRANT (x < -165): Great Dwarven Titan Crucible Smeltery & Colossal Forge Anvil
+        fillPxRect(pitchCacheCtx, -356, 110, 176, h - 220, outline, px);
+        fillPxRect(pitchCacheCtx, -350, 116, 164, h - 232, '#18181b', px);
+        fillPxRect(pitchCacheCtx, -336, 130, 136, h - 260, '#27272a', px);
+        // Giant Tilted Molten Gold Crucible Vat (x = -268, y = 240)
+        const vatX = -268;
+        const vatY = 235;
+        fillPxRect(pitchCacheCtx, vatX - 54, vatY - 54, 108, 108, outline, px);
+        fillPxRect(pitchCacheCtx, vatX - 48, vatY - 48, 96, 96, '#3f3f46', px);
+        fillPxRect(pitchCacheCtx, vatX - 36, vatY - 36, 72, 72, '#ea580c', px);
+        fillPxRect(pitchCacheCtx, vatX - 24, vatY - 24, 48, 48, '#fde047', px);
+        // Glowing Runic Lava Channel flowing South from Crucible to the Colossal Anvil (y = 290..h-260)
+        fillPxRect(pitchCacheCtx, vatX - 14, vatY + 54, 28, h - 560, outline, px);
+        fillPxRect(pitchCacheCtx, vatX - 10, vatY + 54, 20, h - 560, '#f97316', px);
+        fillPxRect(pitchCacheCtx, vatX - 4, vatY + 54, 8, h - 560, '#fef08a', px);
+        // Colossal Foundry Anvil & Twin Hammer Pedestal (y = h - 240)
+        const anvY = h - 245;
+        fillPxRect(pitchCacheCtx, vatX - 58, anvY - 42, 116, 84, outline, px);
+        fillPxRect(pitchCacheCtx, vatX - 52, anvY - 36, 104, 72, '#52525b', px);
+        fillPxRect(pitchCacheCtx, vatX - 38, anvY - 20, 76, 40, '#71717a', px);
+
+        // EAST QUADRANT (x > w + 165): Colossal Bleached Dragon Skeleton in Lava Lake (Upper-East) & Iron Ore Minecart Trestle (Lower-East)
+        // 2A. Ancient Dragon Skull & Curved Ribcage Bones emerging from the Magma (x = w + 265, y = 120..520)
+        const drgX = w + 272;
+        // Horned Dragon Skull
+        fillPxRect(pitchCacheCtx, drgX - 44, 115, 88, 68, outline, px);
+        fillPxRect(pitchCacheCtx, drgX - 38, 121, 76, 56, '#e2e8f0', px);
+        fillPxRect(pitchCacheCtx, drgX - 58, 95, 24, 34, '#cbd5e1', px); // Left horn
+        fillPxRect(pitchCacheCtx, drgX + 34, 95, 24, 34, '#cbd5e1', px); // Right horn
+        fillPxRect(pitchCacheCtx, drgX - 24, 142, 14, 14, '#ef4444', px); // Glowing eye socket
+        fillPxRect(pitchCacheCtx, drgX + 10, 142, 14, 14, '#ef4444', px);
+        // Spine & 5 Pairs of Curved Rib Bones
+        fillPxRect(pitchCacheCtx, drgX - 8, 185, 16, 285, '#cbd5e1', px);
+        for (let rib = 0; rib < 5; rib++) {
+          const ry = 205 + rib * 52;
+          fillPxRect(pitchCacheCtx, drgX - 56, ry - 4, 112, 18, outline, px);
+          fillPxRect(pitchCacheCtx, drgX - 52, ry, 104, 10, '#f1f5f9', px);
+        }
+        // 2B. Iron Trestle Minecart Rail Track (x = w + 248, y = h * 0.52 .. h + 160)
+        const trkX = w + 248;
+        fillPxRect(pitchCacheCtx, trkX - 22, h * 0.52, 44, h * 0.55, outline, px);
+        fillPxRect(pitchCacheCtx, trkX - 16, h * 0.52, 32, h * 0.55, '#3f3f46', px);
+        for (let tieY = h * 0.53; tieY < h + 140; tieY += 24) {
+          fillPxRect(pitchCacheCtx, trkX - 20, tieY, 40, 8, '#78350f', px);
+        }
+        fillPxRect(pitchCacheCtx, trkX - 12, h * 0.52, 4, h * 0.55, '#94a3b8', px);
+        fillPxRect(pitchCacheCtx, trkX + 8, h * 0.52, 4, h * 0.55, '#94a3b8', px);
+
+        // NORTH QUADRANT (y < -165): Caldera Throne Gate, Lava Waterfalls & Crimson Ruby Spires
+        for (const lwfX of [w * 0.26, w * 0.74]) {
+          fillPxRect(pitchCacheCtx, lwfX - 64, -340, 128, 150, outline, px);
+          fillPxRect(pitchCacheCtx, lwfX - 58, -334, 116, 138, '#3f3f46', px);
+          fillPxRect(pitchCacheCtx, lwfX - 32, -334, 64, 138, '#f97316', px);
+          fillPxRect(pitchCacheCtx, lwfX - 16, -334, 32, 138, '#fde047', px);
         }
 
-        // 8 Ancient Obsidian Fire Brazier Pedestals Outside the Stadium Wall
+        // SOUTH QUADRANT (y > h + 165): Heavy Iron-Chain Fortress Drawbridge Spanning the Southern Lava Moat
+        const dbX = w * 0.5;
+        fillPxRect(pitchCacheCtx, dbX - 96, h + 172, 192, 160, outline, px);
+        fillPxRect(pitchCacheCtx, dbX - 88, h + 178, 176, 148, '#3f3f46', px);
+        fillPxRect(pitchCacheCtx, dbX - 72, h + 186, 144, 132, '#52525b', px);
+        fillPxRect(pitchCacheCtx, dbX - 84, h + 178, 12, 148, '#facc15', px); // Heavy brass/iron chains
+        fillPxRect(pitchCacheCtx, dbX + 72, h + 178, 12, 148, '#facc15', px);
+
+        // 8 Obsidian Fire Brazier Pedestals matched to live flames
         for (const bz of [
-          { x: 210, y: -214 },
-          { x: w - 210, y: -214 },
-          { x: 210, y: h + 214 },
-          { x: w - 210, y: h + 214 },
+          { x: 240, y: -214 },
+          { x: w - 240, y: -214 },
+          { x: 240, y: h + 214 },
+          { x: w - 240, y: h + 214 },
           { x: -232, y: 155 },
           { x: -232, y: h - 155 },
           { x: w + 232, y: 155 },
@@ -1135,363 +1931,425 @@ export default function App() {
           fillPxRect(pitchCacheCtx, bz.x - 6, bz.y - 6, 12, 12, '#fde047', px);
         }
       } else if (selectedPitchTheme === 'TURF_AUTUMN') {
-        // === 7. AUTUMN HARVEST TURF: GOLDEN MAPLE PARK, COBBLESTONE PROMENADE & HARVEST FESTIVAL ===
+        // === 7. AUTUMN HARVEST TURF: WEST FARMERS MARKET & TRACTOR, EAST CIDER MILL WATERWHEEL & COVERED BRIDGE, NORTH BONFIRE STAGE, SOUTH HOT-AIR BALLOON MEADOW ===
         pitchCacheCtx.fillStyle = GRAPHICS_CONFIG.palette.apron.base;
         pitchCacheCtx.fillRect(-CACHE_PAD_X, -CACHE_PAD_Y, w + CACHE_PAD_X * 2, h + CACHE_PAD_Y * 2);
 
-        const bandW = 136;
+        // Organic Golden-Ochre Meadow Contours (No vertical stripes!)
         pitchCacheCtx.fillStyle = GRAPHICS_CONFIG.palette.apron.dither;
-        for (let bx = -CACHE_PAD_X; bx < w + CACHE_PAD_X; bx += bandW * 2) {
-          pitchCacheCtx.fillRect(bx, -CACHE_PAD_Y, bandW, h + CACHE_PAD_Y * 2);
+        for (const patch of [
+          { x: -340, y: 220, r: 240 },
+          { x: -290, y: h - 260, r: 260 },
+          { x: w + 320, y: 310, r: 250 },
+          { x: w + 310, y: h - 320, r: 270 },
+          { x: w * 0.3, y: -290, r: 280 },
+          { x: w * 0.72, y: h + 290, r: 310 },
+        ]) {
+          pitchCacheCtx.beginPath();
+          pitchCacheCtx.arc(patch.x, patch.y, patch.r, 0, Math.PI * 2);
+          pitchCacheCtx.fill();
         }
 
-        // Warm Sandstone Autumn Park Promenade Path Outside Left & Right Stadium Gates
-        fillPxRect(pitchCacheCtx, -CACHE_PAD_X, h * 0.5 - 54, w + CACHE_PAD_X * 2, 108, outline, px);
-        fillPxRect(pitchCacheCtx, -CACHE_PAD_X, h * 0.5 - 48, w + CACHE_PAD_X * 2, 96, '#fed7aa', px);
-        for (let cx = -CACHE_PAD_X + 40; cx <= w + CACHE_PAD_X - 40; cx += 52) {
-          if (cx > -STADIUM_BOWL_PAD - 20 && cx < w + STADIUM_BOWL_PAD + 20) continue;
-          fillPxRect(pitchCacheCtx, cx, h * 0.5 - 36, 28, 18, '#fdba74', px);
-          fillPxRect(pitchCacheCtx, cx + 14, h * 0.5 + 18, 28, 18, '#fdba74', px);
+        // EAST QUADRANT (x > w + 165): Babbling Autumn Brook, Stone Cider Mill with Waterwheel, Red Covered Bridge & Pumpkin Patch Maze
+        const brkX = w + 245;
+        fillPxRect(pitchCacheCtx, brkX - 42, -CACHE_PAD_Y, 84, h + CACHE_PAD_Y * 2, outline, px);
+        fillPxRect(pitchCacheCtx, brkX - 36, -CACHE_PAD_Y, 72, h + CACHE_PAD_Y * 2, '#b45309', px);
+        fillPxRect(pitchCacheCtx, brkX - 28, -CACHE_PAD_Y, 56, h + CACHE_PAD_Y * 2, '#0284c7', px);
+        fillPxRect(pitchCacheCtx, brkX - 18, -CACHE_PAD_Y, 36, h + CACHE_PAD_Y * 2, '#38bdf8', px);
+        // New England Red Timber Covered Bridge Spanning the Autumn Brook at y = h * 0.5
+        drawArchedFootbridge(pitchCacheCtx, brkX, h * 0.5, 118, 72, 'COVERED', px);
+        // Old Stone & Timber Cider Millhouse beside the Upper-East Brook (x = w + 315, y = 240)
+        const millX = w + 315;
+        const millY = 240;
+        fillPxRect(pitchCacheCtx, millX - 46, millY - 58, 92, 116, outline, px);
+        fillPxRect(pitchCacheCtx, millX - 40, millY - 52, 80, 104, '#78350f', px);
+        fillPxRect(pitchCacheCtx, millX - 32, millY - 44, 64, 88, '#9a3412', px);
+        fillPxRect(pitchCacheCtx, millX - 14, millY - 44, 28, 88, '#b45309', px);
+        // Lower-East Giant Pumpkin Patch & Hay-Bale Maze (x = w + 310, y = h - 280)
+        const mzX = w + 305;
+        const mzY = h - 310;
+        fillPxRect(pitchCacheCtx, mzX - 42, mzY - 68, 96, 148, outline, px);
+        fillPxRect(pitchCacheCtx, mzX - 36, mzY - 62, 84, 136, '#eab308', px);
+        fillPxRect(pitchCacheCtx, mzX - 20, mzY - 46, 52, 104, '#78350f', px);
+        for (let py = -34; py <= 34; py += 22) {
+          fillPxRect(pitchCacheCtx, mzX - 12, mzY + py, 14, 14, '#f97316', px);
+          fillPxRect(pitchCacheCtx, mzX + 8, mzY + py + 4, 12, 12, '#ea580c', px);
         }
 
-        // Harvest Festival Timber Market Stalls & Pumpkin Patches Outside Left & Right Concourses
-        for (const sx of [-262, w + 214]) {
-          for (const sy of [h * 0.22 - 28, h * 0.78 - 28]) {
-            fillPxRect(pitchCacheCtx, sx - 4, sy - 4, 52, 56, outline, px);
-            fillPxRect(pitchCacheCtx, sx, sy, 44, 48, '#78350f', px);
-            for (let st = 0; st < 4; st++) {
-              fillPxRect(pitchCacheCtx, sx + 2 + st * 10, sy + 2, 10, 14, st % 2 === 0 ? '#ea580c' : '#fef3c7', px);
-            }
-            fillPxRect(pitchCacheCtx, sx + 6, sy + 24, 14, 14, '#f97316', px);
-            fillPxRect(pitchCacheCtx, sx + 11, sy + 21, 4, 4, '#15803d', px);
-            fillPxRect(pitchCacheCtx, sx + 24, sy + 26, 14, 12, '#facc15', px);
+        // WEST QUADRANT (x < -165): Harvest Farmers' Market Plaza, Hot Cider Cauldron & Vintage Red Tractor
+        fillPxRect(pitchCacheCtx, -342, h * 0.18, 152, h * 0.64, outline, px);
+        fillPxRect(pitchCacheCtx, -336, h * 0.18 + 6, 140, h * 0.64 - 12, '#fed7aa', px);
+        // L-Shaped Artisanal Market Stalls (Upper-West)
+        for (const sy of [h * 0.22, h * 0.38]) {
+          fillPxRect(pitchCacheCtx, -318, sy, 96, 56, outline, px);
+          fillPxRect(pitchCacheCtx, -312, sy + 4, 84, 48, '#78350f', px);
+          for (let st = 0; st < 4; st++) {
+            fillPxRect(pitchCacheCtx, -308 + st * 19, sy + 8, 19, 16, st % 2 === 0 ? '#dc2626' : '#fef3c7', px);
           }
+          fillPxRect(pitchCacheCtx, -296, sy + 30, 16, 14, '#f97316', px);
+          fillPxRect(pitchCacheCtx, -268, sy + 30, 16, 14, '#facc15', px);
         }
+        // Vintage Red Farm Tractor & Loaded Hay Wagon (Lower-West, y = h * 0.66)
+        const trcX = -268;
+        const trcY = h * 0.66;
+        fillPxRect(pitchCacheCtx, trcX - 28, trcY - 42, 56, 48, outline, px);
+        fillPxRect(pitchCacheCtx, trcX - 22, trcY - 36, 44, 36, '#dc2626', px);
+        fillPxRect(pitchCacheCtx, trcX - 12, trcY - 28, 24, 20, '#fde047', px);
+        fillPxRect(pitchCacheCtx, trcX - 32, trcY + 14, 64, 78, outline, px); // Hay wagon trailer
+        fillPxRect(pitchCacheCtx, trcX - 26, trcY + 20, 52, 66, '#d97706', px);
+        fillPxRect(pitchCacheCtx, trcX - 18, trcY + 28, 36, 50, '#facc15', px);
 
-        // 16 Crimson, Amber & Gold Autumn Maple & Ginkgo Trees Strictly Outside the Stadium Bowl
-        const maplePositions = [
-          { x: -236, y: 88, s: 2, v: 0 },
-          { x: -325, y: 185, s: 2, v: 1 },
-          { x: -236, y: h - 88, s: 2, v: 2 },
-          { x: -325, y: h - 185, s: 2, v: 0 },
-          { x: w + 236, y: 88, s: 2, v: 1 },
-          { x: w + 325, y: 185, s: 2, v: 2 },
-          { x: w + 236, y: h - 88, s: 2, v: 0 },
-          { x: w + 325, y: h - 185, s: 2, v: 1 },
+        // NORTH QUADRANT (y < -165): Harvest Festival Bonfire Circle & Timber Folk Stage
+        const bfX = w * 0.35;
+        const bfY = -238;
+        fillPxRect(pitchCacheCtx, bfX - 44, bfY - 44, 88, 88, outline, px);
+        fillPxRect(pitchCacheCtx, bfX - 38, bfY - 38, 76, 76, '#78350f', px);
+        fillPxRect(pitchCacheCtx, bfX - 24, bfY - 24, 48, 48, '#451a03', px);
+        fillPxRect(pitchCacheCtx, bfX - 14, bfY - 14, 28, 28, '#ea580c', px);
+        fillPxRect(pitchCacheCtx, bfX - 8, bfY - 8, 16, 16, '#fde047', px);
+
+        // SOUTH QUADRANT (y > h + 165): Hot-Air Balloon Launch Pad & Vineyard Cask Cellar
+        const padX = w * 0.64;
+        const padY = h + 248;
+        fillPxRect(pitchCacheCtx, padX - 48, padY - 48, 96, 96, outline, px);
+        fillPxRect(pitchCacheCtx, padX - 42, padY - 42, 84, 84, '#fef3c7', px);
+        fillPxRect(pitchCacheCtx, padX - 28, padY - 28, 56, 56, '#d97706', px);
+
+        // Diverse Autumn Trees (Crimson Maples, Tall Golden Ginkgos, White-Bark Silver Birches)
+        for (const mp of [
+          { x: -242, y: 92, s: 2, v: 0 },
+          { x: -328, y: 175, s: 2, v: 1 },
+          { x: -242, y: h - 92, s: 2, v: 2 },
+          { x: -328, y: h - 180, s: 2, v: 3 },
+          { x: w + 195, y: 96, s: 2, v: 1 },
+          { x: w + 335, y: 112, s: 2, v: 0 },
+          { x: w + 195, y: h - 96, s: 2, v: 2 },
+          { x: w + 335, y: h - 118, s: 2, v: 1 },
           { x: 180, y: -234, s: 2, v: 0 },
-          { x: 430, y: -238, s: 2, v: 2 },
-          { x: w - 430, y: -238, s: 2, v: 1 },
-          { x: w - 180, y: -234, s: 2, v: 0 },
-          { x: 180, y: h + 234, s: 2, v: 1 },
-          { x: 430, y: h + 238, s: 2, v: 0 },
-          { x: w - 430, y: h + 238, s: 2, v: 2 },
-          { x: w - 180, y: h + 234, s: 2, v: 1 },
-        ];
-        for (const mp of maplePositions) {
+          { x: 540, y: -242, s: 2, v: 1 },
+          { x: w - 520, y: -238, s: 2, v: 2 },
+          { x: w - 190, y: -232, s: 2, v: 3 },
+          { x: 210, y: h + 236, s: 2, v: 2 },
+          { x: 520, y: h + 242, s: 2, v: 0 },
+          { x: w - 460, y: h + 238, s: 2, v: 1 },
+          { x: w - 190, y: h + 234, s: 2, v: 0 },
+        ]) {
           drawAutumnMapleTree(pitchCacheCtx, mp.x, mp.y, mp.s, mp.v, px);
         }
       } else if (selectedPitchTheme === 'TURF_SAKURA') {
-        // === 8. SAKURA BLOSSOM TURF: KYOTO IMPERIAL GARDEN, KOI PONDS & VERMILION TORII GATES ===
+        // === 8. SAKURA BLOSSOM TURF: WEST ARASHIYAMA BAMBOO GROVE & YATAI ALLEY, EAST WINDING KOI STREAM, TAIKO BRIDGE & 5-TIER PAGODA, NORTH ZEN ROCK SANCTUARY, SOUTH LANTERN PIER ===
         pitchCacheCtx.fillStyle = GRAPHICS_CONFIG.palette.apron.base;
         pitchCacheCtx.fillRect(-CACHE_PAD_X, -CACHE_PAD_Y, w + CACHE_PAD_X * 2, h + CACHE_PAD_Y * 2);
 
-        const bandW = 136;
-        pitchCacheCtx.fillStyle = GRAPHICS_CONFIG.palette.apron.dither;
-        for (let bx = -CACHE_PAD_X; bx < w + CACHE_PAD_X; bx += bandW * 2) {
-          pitchCacheCtx.fillRect(bx, -CACHE_PAD_Y, bandW, h + CACHE_PAD_Y * 2);
+        // Raked Karesansui White Zen Gravel Sanctuary on the North & West Approaches
+        fillPxRect(pitchCacheCtx, 180, -310, w - 360, 125, outline, px);
+        fillPxRect(pitchCacheCtx, 186, -304, w - 372, 113, '#fdf2f8', px);
+        pitchCacheCtx.strokeStyle = '#fbcfe8';
+        pitchCacheCtx.lineWidth = 2;
+        for (let ry = -292; ry < -202; ry += 12) {
+          pitchCacheCtx.beginPath();
+          pitchCacheCtx.moveTo(200, ry);
+          pitchCacheCtx.lineTo(w - 200, ry);
+          pitchCacheCtx.stroke();
+        }
+        // Zen Mossy Rock Islands inside the North Karesansui Garden
+        for (const rkX of [w * 0.32, w * 0.5, w * 0.68]) {
+          fillPxRect(pitchCacheCtx, rkX - 32, -268, 64, 42, '#fbcfe8', px);
+          fillPxRect(pitchCacheCtx, rkX - 22, -260, 44, 26, outline, px);
+          fillPxRect(pitchCacheCtx, rkX - 18, -256, 36, 18, '#475569', px);
+          fillPxRect(pitchCacheCtx, rkX - 10, -252, 18, 10, '#16a34a', px);
         }
 
-        // White Pebble Zen Garden Walkways Outside Stadium Gates
-        fillPxRect(pitchCacheCtx, -CACHE_PAD_X, h * 0.5 - 52, w + CACHE_PAD_X * 2, 104, outline, px);
-        fillPxRect(pitchCacheCtx, -CACHE_PAD_X, h * 0.5 - 46, w + CACHE_PAD_X * 2, 92, '#fdf2f8', px);
-
-        // Left & Right Imperial Turquoise Koi Ponds & Stone Toro Lanterns Outside the Stadium Wall
-        for (const kx of [-268, w + 200]) {
-          for (const ky of [h * 0.2 - 36, h * 0.8 - 36]) {
-            fillPxRect(pitchCacheCtx, kx - 4, ky - 4, 76, 76, outline, px);
-            fillPxRect(pitchCacheCtx, kx, ky, 68, 68, '#94a3b8', px);
-            fillPxRect(pitchCacheCtx, kx + 6, ky + 6, 56, 56, '#0284c7', px);
-            fillPxRect(pitchCacheCtx, kx + 12, ky + 12, 44, 44, '#38bdf8', px);
-            fillPxRect(pitchCacheCtx, kx + 14, ky + 16, 12, 12, '#16a34a', px);
-            fillPxRect(pitchCacheCtx, kx + 17, ky + 19, 6, 6, '#f472b6', px);
-            fillPxRect(pitchCacheCtx, kx + 38, ky + 38, 12, 12, '#16a34a', px);
-            fillPxRect(pitchCacheCtx, kx + 26, ky - 16, 16, 16, outline, px);
-            fillPxRect(pitchCacheCtx, kx + 29, ky - 13, 10, 10, '#cbd5e1', px);
-            fillPxRect(pitchCacheCtx, kx + 31, ky - 11, 6, 6, '#fde047', px);
-          }
+        // EAST QUADRANT (x > w + 165): Winding Imperial Turquoise Koi Stream, Arched Vermilion Taiko-Bashi Bridge, Five-Tier Pagoda & Matcha Tea House
+        const koiStreamX = w + 236;
+        fillPxRect(pitchCacheCtx, koiStreamX - 44, -CACHE_PAD_Y, 88, h + CACHE_PAD_Y * 2, outline, px);
+        fillPxRect(pitchCacheCtx, koiStreamX - 38, -CACHE_PAD_Y, 76, h + CACHE_PAD_Y * 2, '#94a3b8', px);
+        fillPxRect(pitchCacheCtx, koiStreamX - 30, -CACHE_PAD_Y, 60, h + CACHE_PAD_Y * 2, '#0284c7', px);
+        fillPxRect(pitchCacheCtx, koiStreamX - 20, -CACHE_PAD_Y, 40, h + CACHE_PAD_Y * 2, '#38bdf8', px);
+        // Floating green lily pads & pink lotus blossoms in the Koi Stream
+        for (const ly of [180, 340, 560, h - 520, h - 310, h - 160]) {
+          fillPxRect(pitchCacheCtx, koiStreamX - 18 + ((ly * 7) % 22), ly, 14, 14, '#16a34a', px);
+          fillPxRect(pitchCacheCtx, koiStreamX - 14 + ((ly * 7) % 22), ly + 4, 6, 6, '#f472b6', px);
         }
+        // Vermilion Taiko-Bashi Arched Drum Bridge spanning the Koi Stream at y = h * 0.5
+        drawArchedFootbridge(pitchCacheCtx, koiStreamX, h * 0.5, 116, 68, 'TAIKO', px);
+        // Five-Tiered Kyoto Timber Pagoda on the Upper-East Terrace (x = w + 335, y = 215)
+        drawFiveTierPagoda(pitchCacheCtx, w + 335, 215, px);
+        // Traditional Matcha Tea House with Tatami Veranda & Red Paper Lanterns on Lower-East (x = w + 330, y = h - 235)
+        const teaX = w + 330;
+        const teaY = h - 235;
+        fillPxRect(pitchCacheCtx, teaX - 48, teaY - 62, 96, 124, outline, px);
+        fillPxRect(pitchCacheCtx, teaX - 42, teaY - 56, 84, 112, '#78350f', px);
+        fillPxRect(pitchCacheCtx, teaX - 34, teaY - 48, 68, 96, '#fef08a', px); // Warm glowing shoji & tatami
+        fillPxRect(pitchCacheCtx, teaX - 26, teaY - 40, 52, 80, '#334155', px); // Tiled irimoya roof
+        fillPxRect(pitchCacheCtx, teaX - 46, teaY - 36, 10, 14, '#ef4444', px); // Chochin lantern
+        fillPxRect(pitchCacheCtx, teaX - 46, teaY + 22, 10, 14, '#ef4444', px);
 
-        // Traditional Vermilion Torii Gates on Outer Left & Right Walkways
-        for (const gx of [-246, w + 214]) {
+        // WEST QUADRANT (x < -165): Arashiyama Emerald Bamboo Forest Grove, Senbon Torii Procession & Ramen Yatai Stalls
+        // Senbon Torii Vermilion Gate Colonade leading to the West Gate (y = h * 0.5)
+        fillPxRect(pitchCacheCtx, -365, h * 0.5 - 48, 195, 96, outline, px);
+        fillPxRect(pitchCacheCtx, -359, h * 0.5 - 42, 183, 84, '#fdf2f8', px);
+        for (const tx of [-335, -285, -235]) {
           const gy = h * 0.5 - 32;
-          fillPxRect(pitchCacheCtx, gx - 4, gy - 4, 36, 68, outline, px);
-          fillPxRect(pitchCacheCtx, gx, gy, 8, 60, '#dc2626', px);
-          fillPxRect(pitchCacheCtx, gx + 20, gy, 8, 60, '#dc2626', px);
-          fillPxRect(pitchCacheCtx, gx - 8, gy - 6, 44, 10, outline, px);
-          fillPxRect(pitchCacheCtx, gx - 6, gy - 4, 40, 6, '#ef4444', px);
-          fillPxRect(pitchCacheCtx, gx - 4, gy + 46, 36, 8, '#ef4444', px);
+          fillPxRect(pitchCacheCtx, tx - 4, gy - 4, 28, 68, outline, px);
+          fillPxRect(pitchCacheCtx, tx, gy, 6, 60, '#dc2626', px);
+          fillPxRect(pitchCacheCtx, tx + 14, gy, 6, 60, '#dc2626', px);
+          fillPxRect(pitchCacheCtx, tx - 6, gy - 6, 32, 8, '#ef4444', px);
+          fillPxRect(pitchCacheCtx, tx - 4, gy + 48, 28, 6, '#ef4444', px);
+        }
+        // Ramen & Takoyaki Yatai Festival Carts with Indigo Noren Curtains (Lower-West, y = h - 380 .. h - 190)
+        for (const yataiY of [h - 360, h - 240]) {
+          fillPxRect(pitchCacheCtx, -308, yataiY - 38, 68, 76, outline, px);
+          fillPxRect(pitchCacheCtx, -302, yataiY - 32, 56, 64, '#92400e', px);
+          fillPxRect(pitchCacheCtx, -294, yataiY - 24, 40, 48, '#1e3a8a', px); // Indigo noren curtain
+          fillPxRect(pitchCacheCtx, -252, yataiY - 22, 12, 14, '#ef4444', px);
+          fillPxRect(pitchCacheCtx, -252, yataiY + 8, 12, 14, '#fde047', px);
         }
 
-        // 16 Lush Pink Cherry Blossom Sakura Trees Strictly Outside the Stadium Bowl
-        const sakuraPositions = [
-          { x: -236, y: 88, s: 2, v: 0 },
-          { x: -325, y: 185, s: 2, v: 1 },
-          { x: -236, y: h - 88, s: 2, v: 1 },
-          { x: -325, y: h - 185, s: 2, v: 0 },
-          { x: w + 236, y: 88, s: 2, v: 1 },
-          { x: w + 325, y: 185, s: 2, v: 0 },
-          { x: w + 236, y: h - 88, s: 2, v: 0 },
-          { x: w + 325, y: h - 185, s: 2, v: 1 },
-          { x: 180, y: -234, s: 2, v: 0 },
-          { x: 430, y: -238, s: 2, v: 1 },
-          { x: w - 430, y: -238, s: 2, v: 0 },
-          { x: w - 180, y: -234, s: 2, v: 1 },
-          { x: 180, y: h + 234, s: 2, v: 1 },
-          { x: 430, y: h + 238, s: 2, v: 0 },
-          { x: w - 430, y: h + 238, s: 2, v: 1 },
-          { x: w - 180, y: h + 234, s: 2, v: 0 },
-        ];
-        for (const sk of sakuraPositions) {
+        // Mixed Kyoto Flora: Arashiyama Bamboo Clusters (v=1), Cloud-Pruned Niwaki Pines (v=2), and Weeping Sakura (v=0,3)
+        for (const sk of [
+          { x: -242, y: 110, s: 2, v: 1 },
+          { x: -315, y: 185, s: 2, v: 1 },
+          { x: -248, y: 270, s: 2, v: 1 },
+          { x: -322, y: 340, s: 2, v: 2 },
+          { x: -238, y: h - 105, s: 2, v: 0 },
+          { x: -328, y: h - 145, s: 2, v: 3 },
+          { x: w + 185, y: 105, s: 2, v: 0 },
+          { x: w + 185, y: h - 105, s: 2, v: 2 },
+          { x: 140, y: -234, s: 2, v: 0 },
+          { x: w - 140, y: -234, s: 2, v: 3 },
+          { x: 220, y: h + 234, s: 2, v: 0 },
+          { x: 520, y: h + 240, s: 2, v: 2 },
+          { x: w - 520, y: h + 240, s: 2, v: 1 },
+          { x: w - 220, y: h + 234, s: 2, v: 0 },
+        ]) {
           drawSakuraBlossomTree(pitchCacheCtx, sk.x, sk.y, sk.s, sk.v, px);
         }
       } else if (selectedPitchTheme === 'TURF_CHAMPIONS') {
-        // === 9. CHAMPIONS CATHEDRAL: FLOODLIT EUROPEAN TROPHY ARENA, GOLD BANNERS & CUP PLINTHS ===
-        pitchCacheCtx.fillStyle = GRAPHICS_CONFIG.palette.apron.base;
+        // === 9. CHAMPIONS CATHEDRAL: WEST VIP RED CARPET & HOLOGRAM ROTUNDA, EAST HALL OF FAME DOME & FAN FEST, NORTH TRIUMPHAL ARCH & BANNERS, SOUTH EXPRESS RAIL VIADUCT ===
+        pitchCacheCtx.fillStyle = '#0b132b';
         pitchCacheCtx.fillRect(-CACHE_PAD_X, -CACHE_PAD_Y, w + CACHE_PAD_X * 2, h + CACHE_PAD_Y * 2);
 
-        const bandW = 128;
-        pitchCacheCtx.fillStyle = GRAPHICS_CONFIG.palette.apron.dither;
-        for (let bx = -CACHE_PAD_X; bx < w + CACHE_PAD_X; bx += bandW * 2) {
-          pitchCacheCtx.fillRect(bx, -CACHE_PAD_Y, bandW, h + CACHE_PAD_Y * 2);
+        // Grand European Chevron Granite Piazza Paving
+        pitchCacheCtx.strokeStyle = 'rgba(30, 58, 138, 0.45)';
+        pitchCacheCtx.lineWidth = 3;
+        for (let gx = -CACHE_PAD_X; gx < w + CACHE_PAD_X; gx += 180) {
+          pitchCacheCtx.beginPath();
+          pitchCacheCtx.moveTo(gx, -CACHE_PAD_Y);
+          pitchCacheCtx.lineTo(gx, h + CACHE_PAD_Y);
+          pitchCacheCtx.stroke();
         }
 
-        // Royal Navy & Gold VIP Red-Carpet Tunnel Approaches Outside the Stadium Gates
-        fillPxRect(pitchCacheCtx, -CACHE_PAD_X, h * 0.5 - 56, w + CACHE_PAD_X * 2, 112, outline, px);
-        fillPxRect(pitchCacheCtx, -CACHE_PAD_X, h * 0.5 - 50, w + CACHE_PAD_X * 2, 100, '#1e1b4b', px);
-        fillPxRect(pitchCacheCtx, -CACHE_PAD_X, h * 0.5 - 24, w + CACHE_PAD_X * 2, 48, '#b91c1c', px);
-        fillPxRect(pitchCacheCtx, -CACHE_PAD_X, h * 0.5 - 28, w + CACHE_PAD_X * 2, 4, '#fde047', px);
-        fillPxRect(pitchCacheCtx, -CACHE_PAD_X, h * 0.5 + 24, w + CACHE_PAD_X * 2, 4, '#fde047', px);
+        // WEST QUADRANT (x < -165): VIP Red-Carpet Arrival Boulevard, Starlight Team Coaches & Golden Cup Hologram Rotunda
+        fillPxRect(pitchCacheCtx, -CACHE_PAD_X, h * 0.5 - 64, CACHE_PAD_X - STADIUM_BOWL_PAD + 12, 128, outline, px);
+        fillPxRect(pitchCacheCtx, -CACHE_PAD_X, h * 0.5 - 58, CACHE_PAD_X - STADIUM_BOWL_PAD + 12, 116, '#1e1b4b', px);
+        fillPxRect(pitchCacheCtx, -CACHE_PAD_X, h * 0.5 - 28, CACHE_PAD_X - STADIUM_BOWL_PAD + 12, 56, '#b91c1c', px);
+        fillPxRect(pitchCacheCtx, -CACHE_PAD_X, h * 0.5 - 32, CACHE_PAD_X - STADIUM_BOWL_PAD + 12, 4, '#fde047', px);
+        fillPxRect(pitchCacheCtx, -CACHE_PAD_X, h * 0.5 + 28, CACHE_PAD_X - STADIUM_BOWL_PAD + 12, 4, '#fde047', px);
+        // Starlight Champions Team Coaches on West Arrival Plaza
+        drawTeamCoachBus(pitchCacheCtx, -268, 220, '#1e3a8a', '#fde047', px);
+        drawTeamCoachBus(pitchCacheCtx, -268, h - 220, '#991b1b', '#f8fafc', px);
+        // Golden Cup Hologram Rotunda Plinth (x = -255, y = h * 0.5)
+        fillPxRect(pitchCacheCtx, -288, h * 0.5 - 34, 68, 68, outline, px);
+        fillPxRect(pitchCacheCtx, -282, h * 0.5 - 28, 56, 56, '#172554', px);
+        fillPxRect(pitchCacheCtx, -270, h * 0.5 - 16, 32, 32, '#facc15', px);
+        fillPxRect(pitchCacheCtx, -262, h * 0.5 - 8, 16, 16, '#ffffff', px);
 
-        // Twin Gleaming 16-Bit Golden Championship Trophy Plinths Outside the Stadium Wall
-        for (const tx of [-234, w + 234]) {
-          for (const ty of [h * 0.24, h * 0.76]) {
-            fillPxRect(pitchCacheCtx, tx - 26, ty - 26, 52, 52, outline, px);
-            fillPxRect(pitchCacheCtx, tx - 22, ty - 22, 44, 44, '#1e293b', px);
-            fillPxRect(pitchCacheCtx, tx - 16, ty - 16, 32, 32, '#b45309', px);
-            fillPxRect(pitchCacheCtx, tx - 10, ty - 10, 20, 20, '#facc15', px);
-            fillPxRect(pitchCacheCtx, tx - 6, ty - 6, 12, 12, '#fef08a', px);
-            fillPxRect(pitchCacheCtx, tx - 3, ty - 3, 6, 6, '#ffffff', px);
-          }
+        // EAST QUADRANT (x > w + 165): Glass-Domed Champions Hall of Fame Museum & Fan-Fest Jumbotron Piazza
+        drawBotanicalGlasshouse(pitchCacheCtx, w + 265, 250, px);
+        // Fan-Fest Piazza with Giant LED Screen & Festival Tables (Lower-East, y = h - 380..h - 140)
+        const ffX = w + 206;
+        const ffY = h - 380;
+        fillPxRect(pitchCacheCtx, ffX - 4, ffY - 4, 136, 240, outline, px);
+        fillPxRect(pitchCacheCtx, ffX, ffY, 128, 232, '#1e293b', px);
+        fillPxRect(pitchCacheCtx, ffX + 14, ffY + 14, 100, 44, '#0284c7', px); // Giant Fan-Fest Jumbotron
+        fillPxRect(pitchCacheCtx, ffX + 22, ffY + 22, 84, 28, '#38bdf8', px);
+        for (let tblY = ffY + 82; tblY < ffY + 210; tblY += 44) {
+          fillPxRect(pitchCacheCtx, ffX + 20, tblY, 88, 24, '#78350f', px);
+          fillPxRect(pitchCacheCtx, ffX + 28, tblY + 6, 72, 12, '#fde047', px);
         }
+
+        // NORTH QUADRANT (y < -165): Monumental Neoclassical Triumphal Arch & Colonnade of 10 Distinct Club Heraldic Banners
+        const archX = w * 0.5;
+        const archY = -255;
+        fillPxRect(pitchCacheCtx, archX - 118, archY - 46, 236, 92, outline, px);
+        fillPxRect(pitchCacheCtx, archX - 112, archY - 40, 224, 80, '#cbd5e1', px);
+        fillPxRect(pitchCacheCtx, archX - 96, archY - 28, 192, 56, '#e2e8f0', px);
+        fillPxRect(pitchCacheCtx, archX - 42, archY - 40, 84, 80, '#0f172a', px); // Central vaulted passage
+        fillPxRect(pitchCacheCtx, archX - 24, archY - 16, 48, 32, '#facc15', px); // Golden quadriga crest on crown
+        // 10 Distinct European Club Heraldic Banners Flanking the Triumphal Arch
+        const bannerColors = ['#ef4444', '#38bdf8', '#facc15', '#10b981', '#a855f7', '#f97316', '#ec4899', '#ffffff', '#22d3ee', '#eab308'];
+        for (let bIdx = 0; bIdx < 10; bIdx++) {
+          const bx = bIdx < 5 ? 180 + bIdx * 175 : w - 180 - (9 - bIdx) * 175;
+          const bCol = bannerColors[bIdx];
+          fillPxRect(pitchCacheCtx, bx - 22, -248, 44, 56, outline, px);
+          fillPxRect(pitchCacheCtx, bx - 18, -244, 36, 48, '#1e3a8a', px);
+          fillPxRect(pitchCacheCtx, bx - 12, -238, 24, 36, bCol, px);
+          fillPxRect(pitchCacheCtx, bx - 6, -230, 12, 16, '#fde047', px);
+        }
+
+        // SOUTH QUADRANT (y > h + 165): European High-Speed Rail Stone Viaduct & Choreographed Golden Fountains
+        const viaY = h + 245;
+        fillPxRect(pitchCacheCtx, -CACHE_PAD_X, viaY - 26, w + CACHE_PAD_X * 2, 52, outline, px);
+        fillPxRect(pitchCacheCtx, -CACHE_PAD_X, viaY - 20, w + CACHE_PAD_X * 2, 40, '#334155', px);
+        fillPxRect(pitchCacheCtx, -CACHE_PAD_X, viaY - 8, w + CACHE_PAD_X * 2, 16, '#475569', px);
+        drawParkFountain(pitchCacheCtx, w * 0.28, h + 195, 24, px);
+        drawParkFountain(pitchCacheCtx, w * 0.72, h + 195, 24, px);
       } else {
-        // === 10. CLASSIC SUNLIT TURF: ROYAL BOTANICAL PARK, ORNAMENTAL FOUNTAINS & OLYMPIC ARENA ===
+        // === 10. CLASSIC SUNLIT TURF: WEST VIP ARRIVAL & BROADCAST COMPOUND, EAST SERPENTINE BOTANICAL CANAL & GLASSHOUSE, NORTH FAN PLAZA & 1v1 CAGE, SOUTH METRO STATION & AMPHITHEATER ===
         pitchCacheCtx.fillStyle = GRAPHICS_CONFIG.palette.apron.base;
         pitchCacheCtx.fillRect(-CACHE_PAD_X, -CACHE_PAD_Y, w + CACHE_PAD_X * 2, h + CACHE_PAD_Y * 2);
 
-        const bandW = 136;
+        // Organic Sunlit Meadow Contours (Replaces repetitive vertical stripes!)
         pitchCacheCtx.fillStyle = GRAPHICS_CONFIG.palette.apron.dither;
-        for (let bx = -CACHE_PAD_X; bx < w + CACHE_PAD_X; bx += bandW * 2) {
-          pitchCacheCtx.fillRect(bx, -CACHE_PAD_Y, bandW, h + CACHE_PAD_Y * 2);
+        for (const hill of [
+          { x: -340, y: 190, r: 260 },
+          { x: -320, y: h - 210, r: 250 },
+          { x: w + 380, y: 240, r: 280 },
+          { x: w + 360, y: h - 220, r: 290 },
+          { x: w * 0.25, y: -310, r: 270 },
+          { x: w * 0.75, y: -290, r: 260 },
+          { x: w * 0.5, y: h + 320, r: 320 },
+        ]) {
+          pitchCacheCtx.beginPath();
+          pitchCacheCtx.arc(hill.x, hill.y, hill.r, 0, Math.PI * 2);
+          pitchCacheCtx.fill();
         }
 
-        fillPxRect(pitchCacheCtx, -CACHE_PAD_X, h * 0.5 - 52, w + CACHE_PAD_X * 2, 104, outline, px);
-        fillPxRect(pitchCacheCtx, -CACHE_PAD_X, h * 0.5 - 46, w + CACHE_PAD_X * 2, 92, '#e2e8f0', px);
-        for (const hx of [-265, w + 225]) {
-          fillPxRect(pitchCacheCtx, hx, h * 0.5 - 44, 42, 14, '#15803d', px);
-          fillPxRect(pitchCacheCtx, hx + 4, h * 0.5 - 41, 34, 8, '#22c55e', px);
-          fillPxRect(pitchCacheCtx, hx, h * 0.5 + 30, 42, 14, '#15803d', px);
-          fillPxRect(pitchCacheCtx, hx + 4, h * 0.5 + 33, 34, 8, '#22c55e', px);
+        // EAST QUADRANT (x > w + 165): Winding Serpentine Botanical Canal, Arched Red-Brick Footbridge, Rowboat Pier & Victorian Glasshouse Conservatory
+        const canalX = w + 238;
+        // Limestone Canal Embankment & Shimmering Water Channel running North-to-South on the East side
+        fillPxRect(pitchCacheCtx, canalX - 44, -CACHE_PAD_Y, 88, h + CACHE_PAD_Y * 2, outline, px);
+        fillPxRect(pitchCacheCtx, canalX - 38, -CACHE_PAD_Y, 76, h + CACHE_PAD_Y * 2, '#cbd5e1', px);
+        fillPxRect(pitchCacheCtx, canalX - 30, -CACHE_PAD_Y, 60, h + CACHE_PAD_Y * 2, '#0284c7', px);
+        fillPxRect(pitchCacheCtx, canalX - 20, -CACHE_PAD_Y, 40, h + CACHE_PAD_Y * 2, '#38bdf8', px);
+        // Water lily pads along the canal banks
+        for (const ly of [140, 320, 610, h - 540, h - 290, h - 130]) {
+          fillPxRect(pitchCacheCtx, canalX - 22 + ((ly * 5) % 26), ly, 12, 12, '#16a34a', px);
+          fillPxRect(pitchCacheCtx, canalX - 19 + ((ly * 5) % 26), ly + 3, 6, 6, '#fde047', px);
         }
+        // Sandstone Promenade connecting East Stadium Gate to the Arched Brick Footbridge
+        fillPxRect(pitchCacheCtx, w + STADIUM_BOWL_PAD, h * 0.5 - 44, 190, 88, outline, px);
+        fillPxRect(pitchCacheCtx, w + STADIUM_BOWL_PAD, h * 0.5 - 38, 190, 76, '#e2e8f0', px);
+        drawArchedFootbridge(pitchCacheCtx, canalX, h * 0.5, 118, 72, 'BRICK', px);
+        // Upper-East Timber Rowboat Pier & Lakeside Gazebo (y = 210)
+        fillPxRect(pitchCacheCtx, canalX + 24, 185, 68, 32, outline, px);
+        fillPxRect(pitchCacheCtx, canalX + 28, 189, 60, 24, '#92400e', px);
+        // Lower-East Victorian Glasshouse Conservatory Dome (x = w + 345, y = h - 255)
+        drawBotanicalGlasshouse(pitchCacheCtx, w + 345, h - 255, px);
 
-        // Royal Botanical Park Fountains Strictly Outside the Stadium Bowl
-        drawParkFountain(pitchCacheCtx, -234, h * 0.24, 34, px);
-        drawParkFountain(pitchCacheCtx, -234, h * 0.76, 34, px);
-        drawParkFountain(pitchCacheCtx, w + 234, h * 0.24, 34, px);
-        drawParkFountain(pitchCacheCtx, w + 234, h * 0.76, 34, px);
+        // WEST QUADRANT (x < -165): VIP Team Arrival Roundabout, Luxury Team Coach Bus, TV Broadcast OB Van & Supporters Bistro Plaza
+        // Cobblestone VIP Arrival Roundabout at y = h * 0.5
+        fillPxRect(pitchCacheCtx, -365, h * 0.5 - 76, 205, 152, outline, px);
+        fillPxRect(pitchCacheCtx, -359, h * 0.5 - 70, 193, 140, '#cbd5e1', px);
+        fillPxRect(pitchCacheCtx, -345, h * 0.5 - 56, 165, 112, '#e2e8f0', px);
+        fillPxRect(pitchCacheCtx, -245, h * 0.5 - 24, 84, 48, '#ef4444', px); // VIP Red Carpet into West Gate
+        fillPxRect(pitchCacheCtx, -315, h * 0.5 - 28, 56, 56, '#15803d', px); // Roundabout central topiary island
+        fillPxRect(pitchCacheCtx, -303, h * 0.5 - 16, 32, 32, '#22c55e', px);
+        // Upper-West: TV Outside Broadcast (OB) Production Van & Team Coach Bus (y = 140..440)
+        fillPxRect(pitchCacheCtx, -338, 125, 132, 310, outline, px);
+        fillPxRect(pitchCacheCtx, -332, 131, 120, 298, '#94a3b8', px);
+        // TV Broadcast OB Van at (-255, 205) — Roof Dish rotates live in drawPitch()!
+        fillPxRect(pitchCacheCtx, -284, 152, 58, 108, outline, px);
+        fillPxRect(pitchCacheCtx, -278, 158, 46, 96, '#f8fafc', px);
+        fillPxRect(pitchCacheCtx, -272, 166, 34, 80, '#0284c7', px);
+        // Home Team Luxury Coach Bus at (-258, 345)
+        drawTeamCoachBus(pitchCacheCtx, -258, 345, '#0284c7', '#fde047', px);
+        // Lower-West: Supporters Espresso Bistro, Merch Kiosk & Parasol Patio (y = h - 435..h - 125)
+        fillPxRect(pitchCacheCtx, -338, h - 435, 132, 310, outline, px);
+        fillPxRect(pitchCacheCtx, -332, h - 429, 120, 298, '#fed7aa', px);
+        fillPxRect(pitchCacheCtx, -320, h - 405, 76, 128, outline, px);
+        fillPxRect(pitchCacheCtx, -314, h - 399, 64, 116, '#b91c1c', px);
+        for (let st = 0; st < 5; st++) {
+          fillPxRect(pitchCacheCtx, -310, h - 395 + st * 22, 56, 11, '#f8fafc', px);
+        }
+        drawBeachUmbrella(pitchCacheCtx, -238, h - 225, '#0ea5e9', '#fef08a', px);
+        drawBeachUmbrella(pitchCacheCtx, -292, h - 185, '#f43f5e', '#ffffff', px);
 
+        // NORTH QUADRANT (y < -165): Grand Champions Fan Rotunda, Food Truck Court (NW) & 1v1 Kids Warm-Up Street Cage (NE)
+        // Center-North Golden Statue Rotunda (x = w * 0.5, y = -242)
+        const rotX = w * 0.5;
+        const rotY = -242;
+        fillPxRect(pitchCacheCtx, rotX - 68, rotY - 48, 136, 96, outline, px);
+        fillPxRect(pitchCacheCtx, rotX - 62, rotY - 42, 124, 84, '#e2e8f0', px);
+        fillPxRect(pitchCacheCtx, rotX - 46, rotY - 28, 92, 56, '#cbd5e1', px);
+        fillPxRect(pitchCacheCtx, rotX - 22, rotY - 22, 44, 44, outline, px);
+        fillPxRect(pitchCacheCtx, rotX - 18, rotY - 18, 36, 36, '#facc15', px);
+        fillPxRect(pitchCacheCtx, rotX - 8, rotY - 8, 16, 16, '#fef08a', px);
+        // North-West Festival Food Trucks (x = 340..780, y = -242)
+        for (const ft of [
+          { x: 380, y: -242, col: '#f472b6', roof: '#fce7f3' },
+          { x: 560, y: -242, col: '#38bdf8', roof: '#e0f2fe' },
+          { x: 740, y: -242, col: '#facc15', roof: '#fef9c3' },
+        ]) {
+          fillPxRect(pitchCacheCtx, ft.x - 48, ft.y - 26, 96, 52, outline, px);
+          fillPxRect(pitchCacheCtx, ft.x - 42, ft.y - 20, 84, 40, ft.col, px);
+          fillPxRect(pitchCacheCtx, ft.x - 30, ft.y - 12, 60, 24, ft.roof, px);
+        }
+        // North-East Mini 1v1 Kids Warm-Up Cage Pitch (x = w - 680 .. w - 420, y = -242)
+        const miniX = w - 660;
+        const miniY = -282;
+        const miniW = 210;
+        const miniH = 88;
+        fillPxRect(pitchCacheCtx, miniX - 6, miniY - 6, miniW + 12, miniH + 12, outline, px);
+        fillPxRect(pitchCacheCtx, miniX, miniY, miniW, miniH, '#10b981', px);
+        fillPxRect(pitchCacheCtx, miniX + 6, miniY + 6, miniW - 12, miniH - 12, '#34d399', px);
+        pitchCacheCtx.strokeStyle = '#ffffff';
+        pitchCacheCtx.lineWidth = 2;
+        pitchCacheCtx.strokeRect(miniX + 8, miniY + 8, miniW - 16, miniH - 16);
+        fillPxRect(pitchCacheCtx, miniX + miniW * 0.5 - 1, miniY + 8, 2, miniH - 16, '#ffffff', px);
+
+        // SOUTH QUADRANT (y > h + 165): Stadium Express Metro Rail Platform (SW), Sunken Amphitheater (Center) & Rose Cascade (SE)
+        // Commuter Rail Track running along y = h + 252
+        const railY = h + 252;
+        fillPxRect(pitchCacheCtx, -CACHE_PAD_X, railY - 20, w + 340, 40, outline, px);
+        fillPxRect(pitchCacheCtx, -CACHE_PAD_X, railY - 14, w + 340, 28, '#475569', px);
+        for (let tieX = -CACHE_PAD_X + 16; tieX < w + 180; tieX += 26) {
+          fillPxRect(pitchCacheCtx, tieX, railY - 12, 10, 24, '#78350f', px);
+        }
+        fillPxRect(pitchCacheCtx, -CACHE_PAD_X, railY - 7, w + 340, 4, '#cbd5e1', px);
+        fillPxRect(pitchCacheCtx, -CACHE_PAD_X, railY + 3, w + 340, 4, '#cbd5e1', px);
+        // Glass-Canopy Metro Station Platform (x = 240..720, y = h + 196)
+        fillPxRect(pitchCacheCtx, 240, h + 190, 460, 44, outline, px);
+        fillPxRect(pitchCacheCtx, 246, h + 196, 448, 32, '#cbd5e1', px);
+        fillPxRect(pitchCacheCtx, 280, h + 200, 380, 24, '#38bdf8', px);
+        // South-East Ornamental Fountain & Rose Parterre (x = w - 420, y = h + 205)
+        drawParkFountain(pitchCacheCtx, w - 380, h + 204, 28, px);
+
+        // Scatter Wildflower Clusters across the Meadows
         const flowerPalette = GRAPHICS_CONFIG.palette.apron.flowerColors;
-        for (let i = 0; i < 68; i++) {
-          const side = i % 4;
-          let fx = 0;
-          let fy = 0;
-          if (side === 0) {
-            fx = -420 + ((i * 47) % 190);
-            fy = -240 + ((i * 173) % (h + 480));
-          } else if (side === 1) {
-            fx = w + 230 + ((i * 53) % 190);
-            fy = -240 + ((i * 191) % (h + 480));
-          } else if (side === 2) {
-            fx = -80 + ((i * 167) % (w + 160));
-            fy = -340 + ((i * 31) % 115);
-          } else {
-            fx = -80 + ((i * 181) % (w + 160));
-            fy = h + 225 + ((i * 37) % 115);
-          }
+        for (let i = 0; i < 48; i++) {
+          const fx = (i % 2 === 0 ? -390 : w + 295) + ((i * 37) % 85);
+          const fy = 60 + ((i * 163) % (h - 120));
+          if (fx < 0 && fy > 110 && fy < h - 110) continue; // Keep clear of West paved plazas
+          if (fx > w && fy > h - 340 && fy < h - 170) continue; // Keep clear of East Glasshouse
           const col = flowerPalette[i % flowerPalette.length];
           fillPxRect(pitchCacheCtx, fx, fy + px, px * 2, px * 2, '#34a86c', px);
           fillPxRect(pitchCacheCtx, fx - px, fy, px * 3, px * 2, col, px);
-          fillPxRect(pitchCacheCtx, fx, fy - px, px * 2, px * 3, col, px);
           fillPxRect(pitchCacheCtx, fx, fy, px, px, '#fef08a', px);
         }
 
+        // Diverse Botanical Trees (Variant 0 = Multi-Oak, 1 = Cypress Spire, 2 = Weeping Willow by Canal, 3 = Blooming Jacaranda)
         const treePositions = [
-          { x: -236, y: 88, s: 2, v: 0 },
-          { x: -325, y: 185, s: 2, v: 1 },
-          { x: -236, y: h - 88, s: 2, v: 1 },
-          { x: -325, y: h - 185, s: 2, v: 0 },
-          { x: w + 236, y: 88, s: 2, v: 1 },
-          { x: w + 325, y: 185, s: 2, v: 0 },
-          { x: w + 236, y: h - 88, s: 2, v: 0 },
-          { x: w + 325, y: h - 185, s: 2, v: 1 },
-          { x: 180, y: -234, s: 2, v: 0 },
-          { x: 430, y: -238, s: 2, v: 1 },
-          { x: w - 430, y: -238, s: 2, v: 0 },
-          { x: w - 180, y: -234, s: 2, v: 1 },
-          { x: 180, y: h + 234, s: 2, v: 1 },
-          { x: 430, y: h + 238, s: 2, v: 0 },
-          { x: w - 430, y: h + 238, s: 2, v: 1 },
-          { x: w - 180, y: h + 234, s: 2, v: 0 },
+          { x: -242, y: 78, s: 2, v: 0 },
+          { x: -338, y: 88, s: 2, v: 3 },
+          { x: -242, y: h - 78, s: 2, v: 3 },
+          { x: -342, y: h - 92, s: 2, v: 1 },
+          { x: w + 188, y: 96, s: 2, v: 2 }, // Weeping willow overhanging upper canal
+          { x: w + 318, y: 112, s: 2, v: 0 },
+          { x: w + 188, y: 365, s: 2, v: 2 }, // Weeping willow overhanging mid canal
+          { x: w + 188, y: h - 355, s: 2, v: 1 }, // Cypress beside glasshouse approach
+          { x: w + 188, y: h - 92, s: 2, v: 2 }, // Weeping willow overhanging lower canal
+          { x: 175, y: -234, s: 2, v: 0 },
+          { x: 920, y: -238, s: 2, v: 1 },
+          { x: w - 920, y: -238, s: 2, v: 3 },
+          { x: w - 175, y: -234, s: 2, v: 2 },
+          { x: 165, y: h + 206, s: 2, v: 1 },
+          { x: w * 0.54, y: h + 204, s: 2, v: 0 },
+          { x: w - 210, y: h + 206, s: 2, v: 3 },
         ];
         for (const tr of treePositions) {
           drawPixelTree(pitchCacheCtx, tr.x, tr.y, tr.s, tr.v, px);
-        }
-      }
-
-      // Deep Vertical & Horizontal Outer World Details (Strictly beyond ±380px so they never touch the Stadium Bowl!)
-      for (const bandSign of [-1, 1]) {
-        for (let tier = 0; tier < 4; tier++) {
-          const baseY = bandSign < 0 ? -420 - tier * 235 : h + 340 + tier * 235;
-          if (selectedPitchTheme === 'COSMIC_SPACE') {
-            fillPxRect(pitchCacheCtx, -760, baseY - 22, w + 1520, 44, outline, px);
-            fillPxRect(pitchCacheCtx, -754, baseY - 16, w + 1508, 32, '#1e1b4b', px);
-            fillPxRect(pitchCacheCtx, -746, baseY - 6, w + 1492, 12, '#312e81', px);
-            for (let sx = -680; sx <= w + 680; sx += 260) {
-              fillPxRect(pitchCacheCtx, sx - 58, baseY - 56, 116, 36, outline, px);
-              fillPxRect(pitchCacheCtx, sx - 52, baseY - 50, 104, 24, '#1d4ed8', px);
-              fillPxRect(pitchCacheCtx, sx - 48, baseY - 39, 96, 3, '#38bdf8', px);
-              fillPxRect(pitchCacheCtx, sx - 16, baseY + 18, 32, 32, '#4c1d95', px);
-              fillPxRect(pitchCacheCtx, sx - 8, baseY + 26, 16, 16, tier % 2 === 0 ? '#22d3ee' : '#f472b6', px);
-            }
-            if (tier % 2 === 1) {
-              drawRingedPlanet(pitchCacheCtx, tier === 1 ? -420 : w + 420, baseY - 70, 56, px);
-              drawRingedPlanet(pitchCacheCtx, tier === 1 ? w - 320 : 320, baseY + 65, 48, px);
-            }
-          } else if (selectedPitchTheme === 'URBAN_CONCRETE') {
-            fillPxRect(pitchCacheCtx, -880, baseY - 28, w + 1760, 56, '#1e293b', px);
-            for (let lx = -840; lx < w + 840; lx += 84) {
-              fillPxRect(pitchCacheCtx, lx, baseY - 3, 42, 6, '#facc15', px);
-            }
-            for (let bx = -720; bx <= w + 720; bx += 310) {
-              const bCol = ((bx + tier * 100) % 620 === 0) ? '#7c2d12' : '#334155';
-              fillPxRect(pitchCacheCtx, bx - 95, baseY + 34, 190, 118, outline, px);
-              fillPxRect(pitchCacheCtx, bx - 89, baseY + 40, 178, 106, bCol, px);
-              fillPxRect(pitchCacheCtx, bx - 78, baseY + 50, 156, 86, '#475569', px);
-              if (tier % 2 === 0) {
-                fillPxRect(pitchCacheCtx, bx - 64, baseY + 58, 128, 70, '#ea580c', px);
-                pitchCacheCtx.strokeStyle = '#ffffff';
-                pitchCacheCtx.lineWidth = 2;
-                pitchCacheCtx.strokeRect(bx - 60, baseY + 62, 120, 62);
-              } else {
-                for (let wx = bx - 64; wx <= bx + 48; wx += 28) {
-                  for (let wy = baseY + 58; wy <= baseY + 110; wy += 24) {
-                    fillPxRect(pitchCacheCtx, wx, wy, 16, 14, (wx + wy) % 3 === 0 ? '#fde047' : '#38bdf8', px);
-                  }
-                }
-              }
-            }
-          } else if (selectedPitchTheme === 'RIO_CLAY') {
-            fillPxRect(pitchCacheCtx, -880, baseY - 22, w + 1760, 44, '#fde68a', px);
-            for (let mx = -860; mx < w + 860; mx += 48) {
-              fillPxRect(pitchCacheCtx, mx, baseY - 14, 24, 10, '#0f172a', px);
-              fillPxRect(pitchCacheCtx, mx + 24, baseY + 2, 24, 10, '#ffffff', px);
-            }
-            const umbCols = ['#f43f5e', '#facc15', '#38bdf8', '#22c55e', '#a855f7'];
-            for (let ux = -680; ux <= w + 680; ux += 240) {
-              const uCol = umbCols[Math.abs(Math.floor(ux / 240) + tier) % umbCols.length];
-              fillPxRect(pitchCacheCtx, ux - 22, baseY + 46, 44, 44, outline, px);
-              fillPxRect(pitchCacheCtx, ux - 18, baseY + 50, 36, 36, uCol, px);
-              fillPxRect(pitchCacheCtx, ux - 6, baseY + 62, 12, 12, '#ffffff', px);
-              drawPixelPalmTree(pitchCacheCtx, ux + 58, baseY + 68, px);
-            }
-          } else if (selectedPitchTheme === 'TWILIGHT_SYNTH') {
-            fillPxRect(pitchCacheCtx, -880, baseY - 18, w + 1760, 36, '#2e1065', px);
-            fillPxRect(pitchCacheCtx, -880, baseY - 4, w + 1760, 8, tier % 2 === 0 ? '#f472b6' : '#22d3ee', px);
-            for (let sx = -700; sx <= w + 700; sx += 280) {
-              fillPxRect(pitchCacheCtx, sx - 64, baseY + 28, 128, 96, outline, px);
-              fillPxRect(pitchCacheCtx, sx - 58, baseY + 34, 116, 84, '#0f0722', px);
-              fillPxRect(pitchCacheCtx, sx - 48, baseY + 44, 96, 12, '#22d3ee', px);
-              fillPxRect(pitchCacheCtx, sx - 48, baseY + 66, 96, 12, '#f472b6', px);
-              fillPxRect(pitchCacheCtx, sx - 48, baseY + 88, 96, 12, '#facc15', px);
-            }
-          } else if (selectedPitchTheme === 'ARCTIC_ICE') {
-            fillPxRect(pitchCacheCtx, -880, baseY - 18, w + 1760, 36, '#bae6fd', px);
-            for (let cx = -680; cx <= w + 680; cx += 270) {
-              fillPxRect(pitchCacheCtx, cx - 54, baseY + 32, 108, 72, outline, px);
-              fillPxRect(pitchCacheCtx, cx - 48, baseY + 38, 96, 60, '#78350f', px);
-              fillPxRect(pitchCacheCtx, cx - 52, baseY + 32, 104, 18, '#f8fafc', px);
-              fillPxRect(pitchCacheCtx, cx - 32, baseY + 58, 22, 20, '#fef08a', px);
-              fillPxRect(pitchCacheCtx, cx + 10, baseY + 58, 22, 20, '#fef08a', px);
-              drawSnowPineTree(pitchCacheCtx, cx + 88, baseY + 64, px);
-              drawSnowPineTree(pitchCacheCtx, cx - 88, baseY + 68, px);
-            }
-          } else if (selectedPitchTheme === 'VOLCANO_FORGE') {
-            fillPxRect(pitchCacheCtx, -880, baseY - 20, w + 1760, 40, outline, px);
-            fillPxRect(pitchCacheCtx, -880, baseY - 14, w + 1760, 28, '#ea580c', px);
-            fillPxRect(pitchCacheCtx, -880, baseY - 6, w + 1760, 12, '#fde047', px);
-            for (let fx = -680; fx <= w + 680; fx += 270) {
-              fillPxRect(pitchCacheCtx, fx - 56, baseY + 34, 112, 82, outline, px);
-              fillPxRect(pitchCacheCtx, fx - 50, baseY + 40, 100, 70, '#29150e', px);
-              fillPxRect(pitchCacheCtx, fx - 32, baseY + 56, 64, 38, '#f97316', px);
-              fillPxRect(pitchCacheCtx, fx - 18, baseY + 66, 36, 18, '#fef08a', px);
-            }
-          } else if (selectedPitchTheme === 'TURF_AUTUMN') {
-            fillPxRect(pitchCacheCtx, -880, baseY - 18, w + 1760, 36, outline, px);
-            fillPxRect(pitchCacheCtx, -880, baseY - 12, w + 1760, 24, '#fef3c7', px);
-            for (let ax = -680; ax <= w + 680; ax += 250) {
-              drawAutumnMapleTree(pitchCacheCtx, ax - 55, baseY + 66, 2, Math.abs(ax + tier) % 3, px);
-              drawAutumnMapleTree(pitchCacheCtx, ax + 55, baseY + 78, 2, Math.abs(ax + tier + 1) % 3, px);
-              fillPxRect(pitchCacheCtx, ax - 18, baseY + 52, 36, 36, outline, px);
-              fillPxRect(pitchCacheCtx, ax - 14, baseY + 56, 28, 28, '#ea580c', px);
-              fillPxRect(pitchCacheCtx, ax - 6, baseY + 64, 12, 12, '#fef08a', px);
-            }
-          } else if (selectedPitchTheme === 'TURF_SAKURA') {
-            fillPxRect(pitchCacheCtx, -880, baseY - 18, w + 1760, 36, outline, px);
-            fillPxRect(pitchCacheCtx, -880, baseY - 12, w + 1760, 24, '#fbcfe8', px);
-            for (let kx = -680; kx <= w + 680; kx += 260) {
-              drawSakuraBlossomTree(pitchCacheCtx, kx - 62, baseY + 68, 2, 0, px);
-              drawSakuraBlossomTree(pitchCacheCtx, kx + 62, baseY + 74, 2, 1, px);
-              fillPxRect(pitchCacheCtx, kx - 28, baseY + 46, 56, 14, outline, px);
-              fillPxRect(pitchCacheCtx, kx - 24, baseY + 50, 48, 8, '#ef4444', px);
-              fillPxRect(pitchCacheCtx, kx - 16, baseY + 58, 8, 34, '#dc2626', px);
-              fillPxRect(pitchCacheCtx, kx + 8, baseY + 58, 8, 34, '#dc2626', px);
-            }
-          } else if (selectedPitchTheme === 'TURF_CHAMPIONS') {
-            fillPxRect(pitchCacheCtx, -880, baseY - 20, w + 1760, 40, outline, px);
-            fillPxRect(pitchCacheCtx, -880, baseY - 14, w + 1760, 28, '#1e3a8a', px);
-            fillPxRect(pitchCacheCtx, -880, baseY - 2, w + 1760, 4, '#fde047', px);
-            for (let cx = -680; cx <= w + 680; cx += 260) {
-              fillPxRect(pitchCacheCtx, cx - 48, baseY + 38, 96, 76, outline, px);
-              fillPxRect(pitchCacheCtx, cx - 42, baseY + 44, 84, 64, '#172554', px);
-              fillPxRect(pitchCacheCtx, cx - 32, baseY + 54, 64, 44, '#2563eb', px);
-              fillPxRect(pitchCacheCtx, cx - 12, baseY + 64, 24, 24, '#facc15', px);
-              fillPxRect(pitchCacheCtx, cx - 6, baseY + 70, 12, 12, '#fef08a', px);
-            }
-          } else {
-            fillPxRect(pitchCacheCtx, -880, baseY - 18, w + 1760, 36, outline, px);
-            fillPxRect(pitchCacheCtx, -880, baseY - 12, w + 1760, 24, '#e2e8f0', px);
-            for (let pxPos = -680; pxPos <= w + 680; pxPos += 250) {
-              drawPixelTree(pitchCacheCtx, pxPos - 64, baseY + 68, 2, Math.abs(pxPos + tier) % 2, px);
-              drawPixelTree(pitchCacheCtx, pxPos + 64, baseY + 74, 2, Math.abs(pxPos + tier + 1) % 2, px);
-              if (tier % 2 === 0) {
-                drawParkFountain(pitchCacheCtx, pxPos, baseY + 72, 28, px);
-              } else {
-                fillPxRect(pitchCacheCtx, pxPos - 36, baseY + 52, 72, 36, outline, px);
-                fillPxRect(pitchCacheCtx, pxPos - 32, baseY + 56, 64, 28, '#15803d', px);
-                fillPxRect(pitchCacheCtx, pxPos - 24, baseY + 62, 48, 16, '#f43f5e', px);
-                fillPxRect(pitchCacheCtx, pxPos - 12, baseY + 66, 24, 8, '#fde047', px);
-              }
-            }
-          }
         }
       }
 
@@ -2530,35 +3388,12 @@ export default function App() {
     };
 
     function getActiveDifficultyPreset() {
-      const rankInfo = getUserRankInfo(userProfile.rankedWins);
-      if (currentGameMode === 'CASUAL') return MODE_PRESETS.CASUAL;
-      if (currentGameMode === 'RANKED') {
-        const base =
-          rankInfo.tierGroup === 'BRONZE'
-            ? MODE_PRESETS.RANKED_BRONZE
-            : rankInfo.tierGroup === 'SILVER'
-              ? MODE_PRESETS.RANKED_SILVER
-              : rankInfo.tierGroup === 'GOLD'
-                ? MODE_PRESETS.RANKED_GOLD
-                : rankInfo.tierGroup === 'PLATINUM'
-                  ? MODE_PRESETS.RANKED_PLATINUM
-                  : MODE_PRESETS.RANKED;
-        return {
-          ...base,
-          rankLabel: rankInfo.name,
-          userRankLabel: rankInfo.name,
-        };
-      }
-      const roundPreset =
-        tournamentRound === 0
-          ? MODE_PRESETS.TOURNAMENT_QF
-          : tournamentRound === 1
-            ? MODE_PRESETS.TOURNAMENT_SF
-            : MODE_PRESETS.TOURNAMENT_GF;
-      return {
-        ...roundPreset,
-        userRankLabel: rankInfo.name,
-      };
+      return computeMatchDifficultyProfile(
+        currentGameMode,
+        userProfile.rankedWins,
+        tournamentRound,
+        selectedTournamentTier
+      );
     }
 
     const AVATAR_COLORS = [
@@ -3068,7 +3903,7 @@ export default function App() {
           : 'bg-gradient-to-b from-sky-50 to-white rounded-2xl p-3.5 sm:p-4 border-2 border-dashed border-sky-300 flex flex-col items-center justify-center text-center transition-all duration-300 min-w-0';
       }
       if (mmName) {
-        mmName.innerText = 'Searching Slot';
+        mmName.innerText = 'Open Slot';
         mmName.className = cpuWearsAway
           ? 'text-xs sm:text-sm font-black text-rose-500 truncate max-w-full px-1'
           : 'text-xs sm:text-sm font-black text-sky-600 truncate max-w-full px-1';
@@ -3571,28 +4406,23 @@ export default function App() {
         const isPortraitPhone = w < h;
         const isCompactPhoneLandscape = h <= 550 && w > h;
         if (isPortraitPhone) {
-          // Portrait Mobile Optimization: generous field space & full goal visibility so goals and surrounding pitch are always in view
+          // Portrait Mobile Optimization: generous field space & full goal visibility so goals and surrounding diorama are in view
           canvasOffsetY = -18;
-          const fitScaleX = w / 1820;
-          const fitScaleY = h / (PITCH.height + 340);
-          viewScale = Math.max(0.20, Math.min(fitScaleX, fitScaleY));
+          const fitScaleX = w / 1920;
+          const fitScaleY = h / (PITCH.height + 540);
+          viewScale = Math.max(0.18, Math.min(fitScaleX, fitScaleY));
         } else {
-          // Landscape Mobile & Tablet Arena Framing: comfortable zoom so players and ball are crisp and close
-          canvasOffsetY = isCompactPhoneLandscape ? 10 : 14;
-          const padX = isCompactPhoneLandscape ? 24 : 48;
-          const padY = isCompactPhoneLandscape ? 42 : 76;
-          const scaleX = Math.max(240, w - padX) / (PITCH.width + 64);
-          const scaleY = Math.max(180, h - padY) / (PITCH.height + 64);
-          const fitScale = Math.min(scaleX, scaleY);
-          viewScale = isCompactPhoneLandscape ? fitScale * 1.24 : fitScale * 1.06;
+          // Landscape Mobile & Tablet Arena Framing: shows stadium bowl + outer surroundings while keeping players crisp
+          canvasOffsetY = isCompactPhoneLandscape ? 8 : 10;
+          const scaleX = w / (PITCH.width + (isCompactPhoneLandscape ? 520 : 620));
+          const scaleY = h / (PITCH.height + (isCompactPhoneLandscape ? 420 : 500));
+          viewScale = Math.max(0.18, Math.min(scaleX, scaleY));
         }
       } else {
-        // Normal PC widescreen viewing mode: balanced framing so stadium bleachers, floodlights, trees & cosmic space art are visible around the cage
-        canvasOffsetY = 8;
-        const padX = 185;
-        const padY = 175;
-        const scaleX = (w - padX) / PITCH.width;
-        const scaleY = (h - padY) / PITCH.height;
+        // Normal PC widescreen viewing mode: frames the pitch, stadium bowl, and all 4 surrounding diorama quadrants (-360..w+360, -290..h+290)
+        canvasOffsetY = 6;
+        const scaleX = w / (PITCH.width + 720);
+        const scaleY = h / (PITCH.height + 580);
         viewScale = Math.max(0.18, Math.min(scaleX, scaleY));
       }
       syncBodyStateAttr(gameState);
@@ -5880,7 +6710,7 @@ export default function App() {
       ctx.drawImage(pitchCacheCanvas, -CACHE_PAD_X, -CACHE_PAD_Y);
 
       if (selectedPitchTheme === 'COSMIC_SPACE') {
-        // 2A. Live Twinkling 4-Point Stars, Streaking Shooting Comets, Drifting Asteroids & Cruising 16-Bit Alien UFOs (Strictly in Outer Space Surround >= ±195px)
+        // 2A. Live Twinkling 4-Point Stars, Shooting Comets, Starfighter Hangar Thrusters, Biodome Pulse & Quantum Comms Radar
         ctx.save();
         const twinklePalette = ['#ffffff', '#fef08a', '#38bdf8', '#e879f9', '#a7f3d0'];
         for (let i = 0; i < 42; i++) {
@@ -5927,82 +6757,143 @@ export default function App() {
           ctx.fillRect(Math.round(cx - 4), cometY - 4, 8, 8);
         }
 
-        // Drifting 16-bit Pixel Asteroids in Left & Right Outer Space
-        for (let a = 0; a < 6; a++) {
-          const ax = a < 3 ? -235 + Math.sin(matchTick * 0.02 + a) * 16 : w + 235 + Math.cos(matchTick * 0.02 + a) * 16;
-          const ay = 140 + (a % 3) * 290 + Math.cos(matchTick * 0.03 + a * 2) * 18;
-          fillPxRect(ctx, ax - 11, ay - 11, 22, 22, GRAPHICS_CONFIG.palette.outline, px);
-          fillPxRect(ctx, ax - 8, ay - 8, 16, 16, '#64748b', px);
-          fillPxRect(ctx, ax - 5, ay - 5, 8, 8, '#94a3b8', px);
+        // West Hangar Pad: Sequential Runway Docking Chevrons & Starfighter Plasma Thruster Idle Glow
+        const activeChevron = Math.floor(matchTick * 0.15) % 5;
+        for (let ch = 0; ch < 5; ch++) {
+          const cy = 120 + ch * 130;
+          if (ch === activeChevron) {
+            fillPxRect(ctx, -298, cy - 6, 36, 12, '#67e8f9', px);
+          }
         }
+        const thrusterPulse = 8 + Math.round(Math.abs(Math.sin(matchTick * 0.25)) * 12);
+        fillPxRect(ctx, -275 - 14, h * 0.38 + 46, 28, thrusterPulse, '#38bdf8', px);
+        fillPxRect(ctx, -275 - 8, h * 0.38 + 46, 16, Math.max(4, thrusterPulse - 4), '#e0f2fe', px);
+
+        // East Quantum Comms Array (x = w + 285, y = h * 0.72): Rotating Radar Sweep & Telemetry Rings
+        const commX = w + 285;
+        const commY = h * 0.72;
+        const radarAng = matchTick * 0.06;
+        ctx.strokeStyle = 'rgba(56, 189, 248, 0.75)';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(commX, commY);
+        ctx.lineTo(commX + Math.cos(radarAng) * 52, commY + Math.sin(radarAng) * 52);
+        ctx.stroke();
+        const teleR = 14 + ((matchTick * 0.65) % 42);
+        ctx.strokeStyle = 'rgba(232, 121, 249, 0.55)';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(commX, commY, teleR, 0, Math.PI * 2);
+        ctx.stroke();
+
+        // South Zero-G Tethered Astro-Repair Drone gliding along truss (y = h + 215)
+        const droneX = w * 0.5 + Math.sin(matchTick * 0.018) * (w * 0.28);
+        const droneY = h + 215 + Math.cos(matchTick * 0.05) * 10;
+        fillPxRect(ctx, droneX - 10, droneY - 8, 20, 16, GRAPHICS_CONFIG.palette.outline, px);
+        fillPxRect(ctx, droneX - 7, droneY - 5, 14, 10, '#f8fafc', px);
+        fillPxRect(ctx, droneX - 3, droneY - 2, 6, 4, '#38bdf8', px);
 
         const ufo1X = w * 0.5 + Math.cos(matchTick * 0.012) * (w * 0.36);
         const ufo1Y = -225 + Math.sin(matchTick * 0.045) * 14;
         drawPixelUfo(ctx, ufo1X, ufo1Y, matchTick, px);
 
         const ufo2X = w * 0.5 - Math.cos(matchTick * 0.01 + 1.8) * (w * 0.34);
-        const ufo2Y = h + 225 + Math.cos(matchTick * 0.04) * 14;
+        const ufo2Y = h + 285 + Math.cos(matchTick * 0.04) * 12;
         drawPixelUfo(ctx, ufo2X, ufo2Y, matchTick + 25, px);
         ctx.restore();
       } else if (selectedPitchTheme === 'URBAN_CONCRETE') {
-        // 2B. Live Cruising 16-Bit Cars on Outer Asphalt Avenues, Bouncing Streetballs & Boombox Beats
+        // 2B. North Elevated Subway El-Train, South Avenue Lowriders, West Streetball & Boombox, East Skate Bowl Skater
         ctx.save();
-        const car1X = ((matchTick * 3.2) % (w + 560)) - 280;
-        drawStreetCar(ctx, car1X, -260, 1, '#facc15', px, false, matchTick);
-        const car2X = w + 280 - (((matchTick * 2.9 + 420) % (w + 560)));
-        drawStreetCar(ctx, car2X, -230, -1, '#1e293b', px, true, matchTick);
+        // North Elevated Steel Subway Viaduct (y = -270): 3-Car Graffiti Metro El-Train Gliding Across Trestle
+        const trainHeadX = ((matchTick * 3.6) % (w + 920)) - 460;
+        const trainY = -274;
+        for (let carIdx = 0; carIdx < 3; carIdx++) {
+          const cx = trainHeadX - carIdx * 128;
+          if (cx > -CACHE_PAD_X - 140 && cx < w + CACHE_PAD_X + 140) {
+            fillPxRect(ctx, cx - 58, trainY - 18, 116, 34, GRAPHICS_CONFIG.palette.outline, px);
+            fillPxRect(ctx, cx - 54, trainY - 14, 108, 26, '#94a3b8', px);
+            fillPxRect(ctx, cx - 54, trainY - 2, 108, 6, carIdx === 1 ? '#f43f5e' : '#0ea5e9', px);
+            for (let wx = -42; wx <= 32; wx += 24) {
+              fillPxRect(ctx, cx + wx, trainY - 10, 14, 8, '#fef08a', px);
+            }
+          }
+        }
 
+        // South Crosstown Asphalt Avenue (y = h + 230 & h + 265): Cruising Cars & Hydraulic Bouncing Lowrider
         const car3X = w + 280 - (((matchTick * 3.0 + 180) % (w + 560)));
         drawStreetCar(ctx, car3X, h + 230, -1, '#f43f5e', px, false, matchTick);
         const car4X = ((matchTick * 2.5 + 640) % (w + 560)) - 280;
-        drawStreetCar(ctx, car4X, h + 260, 1, '#38bdf8', px, false, matchTick);
+        drawStreetCar(ctx, car4X, h + 265, 1, '#38bdf8', px, true, matchTick);
+        // Parked Hydraulic Lowrider bouncing near South Bodega (x = w * 0.72, y = h + 228)
+        const lowHop = Math.round(Math.abs(Math.sin(matchTick * 0.18)) * 6);
+        drawStreetCar(ctx, w * 0.72, h + 226 - lowHop, -1, '#a855f7', px, false, matchTick);
 
-        // Animated Bouncing Basketballs on Left & Right Outer Streetball Half-Courts + Boombox Soundwaves
-        for (const sideX of [-256, w + 256]) {
-          const hop = Math.abs(Math.sin(matchTick * 0.14 + (sideX < 0 ? 0 : 1.4))) * 18;
-          const bx = sideX;
-          const by = h * 0.46 - hop;
-          fillPxRect(ctx, bx - 5, h * 0.46 + 4, 10, 4, 'rgba(15, 23, 42, 0.35)', px);
-          fillPxRect(ctx, bx - 7, by - 7, 14, 14, GRAPHICS_CONFIG.palette.outline, px);
-          fillPxRect(ctx, bx - 5, by - 5, 10, 10, '#f97316', px);
-          // Pulsing Boombox Equalizer Bars
-          const beatH = 6 + Math.round(Math.abs(Math.sin(matchTick * 0.22)) * 12);
-          fillPxRect(ctx, sideX - 14, h - 172 - beatH, 6, beatH, '#22d3ee', px);
-          fillPxRect(ctx, sideX - 4, h - 176 - beatH, 6, beatH + 4, '#f472b6', px);
-          fillPxRect(ctx, sideX + 6, h - 170 - beatH, 6, beatH, '#fde047', px);
-        }
+        // West Streetball Half-Court (x = -260, y = h * 0.30): Bouncing Basketball + Boombox Soundwaves (y = h * 0.68)
+        const hop = Math.abs(Math.sin(matchTick * 0.15)) * 20;
+        const bx = -252 + Math.sin(matchTick * 0.06) * 18;
+        const by = h * 0.32 - hop;
+        fillPxRect(ctx, bx - 5, h * 0.32 + 4, 10, 4, 'rgba(15, 23, 42, 0.35)', px);
+        fillPxRect(ctx, bx - 7, by - 7, 14, 14, GRAPHICS_CONFIG.palette.outline, px);
+        fillPxRect(ctx, bx - 5, by - 5, 10, 10, '#f97316', px);
+
+        const beatH = 6 + Math.round(Math.abs(Math.sin(matchTick * 0.22)) * 14);
+        fillPxRect(ctx, -260 - 14, h * 0.68 - 22 - beatH, 6, beatH, '#22d3ee', px);
+        fillPxRect(ctx, -260 - 4, h * 0.68 - 26 - beatH, 6, beatH + 4, '#f472b6', px);
+        fillPxRect(ctx, -260 + 6, h * 0.68 - 20 - beatH, 6, beatH, '#fde047', px);
+
+        // East Concrete Skate Bowl (x = w + 268, y = h * 0.32): Carving Skateboarder
+        const skatePhase = matchTick * 0.075;
+        const skX = w + 268 + Math.cos(skatePhase) * 38;
+        const skY = h * 0.32 + Math.sin(skatePhase * 2) * 44;
+        fillPxRect(ctx, skX - 10, skY + 4, 20, 6, GRAPHICS_CONFIG.palette.outline, px);
+        fillPxRect(ctx, skX - 8, skY + 5, 16, 4, '#facc15', px);
+        fillPxRect(ctx, skX - 6, skY - 8, 12, 12, GRAPHICS_CONFIG.palette.outline, px);
+        fillPxRect(ctx, skX - 4, skY - 6, 8, 8, '#22d3ee', px);
         ctx.restore();
       } else if (selectedPitchTheme === 'RIO_CLAY') {
-        // 2C. Animated Outer Ocean Waves, Cruising 16-Bit Sailboats & Gliding Seagulls
+        // 2C. South Atlantic Ocean Surf Waves & Sailboats, East Beach Volleyball Rally, West Samba Beats & Seagulls
         ctx.save();
         ctx.fillStyle = '#ffffff';
         for (let i = 0; i < 24; i++) {
           const wx = -240 + ((i * 179 + Math.floor(matchTick * 0.8)) % (w + 480));
-          const wyTop = -265 + Math.sin(matchTick * 0.06 + i) * 8;
-          const wyBot = h + 265 + Math.cos(matchTick * 0.06 + i) * 8;
+          const wyBot = h + 258 + Math.cos(matchTick * 0.06 + i) * 8;
           ctx.globalAlpha = 0.45 + 0.35 * Math.sin(matchTick * 0.08 + i);
-          ctx.fillRect(Math.round(wx), Math.round(wyTop), 18, 4);
-          ctx.fillRect(Math.round(wx), Math.round(wyBot), 18, 4);
+          ctx.fillRect(Math.round(wx), Math.round(wyBot), 20, 4);
         }
         ctx.globalAlpha = 1;
 
-        // Cruising 16-Bit Tropical Sailboats in Top & Bottom Outer Ocean
+        // Cruising 16-Bit Tropical Sailboats in South Atlantic Ocean (y = h + 282)
         for (let b = 0; b < 2; b++) {
           const dir = b === 0 ? 1 : -1;
           const bx = b === 0
             ? ((matchTick * 1.1 + 220) % (w + 360)) - 180
             : w + 180 - ((matchTick * 1.0 + 540) % (w + 360));
-          const by = b === 0 ? -285 + Math.sin(matchTick * 0.05) * 4 : h + 285 + Math.cos(matchTick * 0.05) * 4;
-          // White water wake
+          const by = h + 282 + Math.cos(matchTick * 0.05 + b * 2) * 5;
           fillPxRect(ctx, bx - dir * 28, by + 4, 18, 4, '#e0f2fe', px);
-          // Hull & Sail
           fillPxRect(ctx, bx - 18, by, 36, 10, GRAPHICS_CONFIG.palette.outline, px);
           fillPxRect(ctx, bx - 15, by + 2, 30, 6, b === 0 ? '#f43f5e' : '#facc15', px);
           fillPxRect(ctx, bx - 8, by - 20, 16, 20, GRAPHICS_CONFIG.palette.outline, px);
           fillPxRect(ctx, bx - 5, by - 17, 12, 16, '#ffffff', px);
         }
 
-        // Gliding pixel seagulls over the outer boardwalk
+        // East Beach Volleyball Court (x = w + 268, y = h * 0.34): Rallying Volleyball Arcing Over Net
+        const vbPhase = (matchTick * 0.045) % (Math.PI * 2);
+        const vbY = h * 0.34 + Math.sin(vbPhase) * 52;
+        const vbArc = Math.abs(Math.cos(vbPhase)) * 18;
+        const vbX = w + 268 + Math.sin(vbPhase * 2) * 8;
+        fillPxRect(ctx, vbX - 4, vbY + 4, 8, 4, 'rgba(15, 23, 42, 0.28)', px);
+        fillPxRect(ctx, vbX - 6, vbY - vbArc - 6, 12, 12, GRAPHICS_CONFIG.palette.outline, px);
+        fillPxRect(ctx, vbX - 4, vbY - vbArc - 4, 8, 8, '#fef08a', px);
+
+        // West Samba Percussion Stage (x = -268, y = h * 0.68): Floating Carnival Sound Rings
+        const sambaR = 14 + ((matchTick * 0.55) % 36);
+        ctx.strokeStyle = 'rgba(250, 204, 21, 0.65)';
+        ctx.lineWidth = 2.5;
+        ctx.beginPath();
+        ctx.arc(-268, h * 0.68, sambaR, 0, Math.PI * 2);
+        ctx.stroke();
+
+        // Gliding pixel seagulls over the outer boardwalk & ocean
         for (let g = 0; g < 4; g++) {
           const gx = ((matchTick * (1.6 + g * 0.25) + g * 520) % (w + 360)) - 180;
           const gy = (g % 2 === 0 ? -225 : h + 225) + Math.sin(matchTick * 0.05 + g * 2) * 14;
@@ -6015,7 +6906,7 @@ export default function App() {
         }
         ctx.restore();
       } else if (selectedPitchTheme === 'TWILIGHT_SYNTH') {
-        // 2D. Sweeping Cyber-Synth Neon Searchlights & Cruising Hover-Spinners in Outer Skyline
+        // 2D. Sweeping Cyber-Synth Searchlights, South Outrun Supercars, West Holo-Equalizer & Hover-Spinners
         ctx.save();
         for (const sl of [
           { x: 260, y: -215, sign: 1, col: 'rgba(244, 114, 182, 0.22)' },
@@ -6034,36 +6925,63 @@ export default function App() {
           ctx.fill();
         }
 
-        // Flying 16-Bit Cyber Hover-Spinners with Neon Thruster Trails in Outer Highway
+        // West Drive-In Holo-Screen (x = -275, y = h * 0.30): Live Pulsing Synthwave Equalizer Bars
+        for (let eq = 0; eq < 8; eq++) {
+          const eqY = h * 0.30 - 52 + eq * 14;
+          const eqW = 14 + Math.round(Math.abs(Math.sin(matchTick * 0.18 + eq * 0.7)) * 34);
+          fillPxRect(ctx, -295, eqY, eqW, 8, eq % 2 === 0 ? '#22d3ee' : '#f472b6', px);
+        }
+
+        // South Outrun Highway (y = h + 245 & h + 278): Speeding Cyber-Supercars with Neon Tail Trails
         for (let s = 0; s < 2; s++) {
           const dir = s === 0 ? 1 : -1;
           const hx = s === 0
-            ? ((matchTick * 4.2 + 120) % (w + 480)) - 240
-            : w + 240 - ((matchTick * 3.8 + 380) % (w + 480));
-          const hy = s === 0 ? -225 + Math.sin(matchTick * 0.08) * 6 : h + 225 + Math.cos(matchTick * 0.08) * 6;
-          fillPxRect(ctx, hx - dir * 38, hy - 3, 28, 6, s === 0 ? '#22d3ee' : '#f472b6', px);
-          fillPxRect(ctx, hx - 18, hy - 9, 36, 18, GRAPHICS_CONFIG.palette.outline, px);
-          fillPxRect(ctx, hx - 15, hy - 6, 30, 12, '#312e81', px);
+            ? ((matchTick * 4.5 + 120) % (w + 540)) - 270
+            : w + 270 - ((matchTick * 4.1 + 380) % (w + 540));
+          const hy = s === 0 ? h + 244 : h + 276;
+          fillPxRect(ctx, hx - dir * 44, hy - 3, 34, 6, s === 0 ? '#22d3ee' : '#f472b6', px);
+          fillPxRect(ctx, hx - 20, hy - 9, 40, 18, GRAPHICS_CONFIG.palette.outline, px);
+          fillPxRect(ctx, hx - 16, hy - 6, 32, 12, '#312e81', px);
           fillPxRect(ctx, hx - 6, hy - 4, 14, 8, '#67e8f9', px);
         }
         ctx.restore();
       } else if (selectedPitchTheme === 'ARCTIC_ICE') {
-        // 2E. Shimmering Aurora Borealis Ribbons, Falling Pixel Snowflakes & Waddling Penguins in Outer Glacier
+        // 2E. Aurora Borealis Ribbons, West Ski Gondola Cabins, East Hot Spring Steam, South Penguins & Snowflakes
         ctx.save();
-        // Aurora Borealis Shimmering Curtains at Top & Bottom Outer Horizon
+        // Aurora Borealis Shimmering Curtains at North Horizon
         for (let a = 0; a < 10; a++) {
           const ax = 80 + a * ((w - 160) / 10) + Math.sin(matchTick * 0.03 + a) * 24;
           const waveY = Math.sin(matchTick * 0.05 + a * 0.8) * 12;
           ctx.fillStyle = a % 2 === 0 ? 'rgba(45, 212, 191, 0.24)' : 'rgba(168, 85, 247, 0.22)';
           ctx.fillRect(Math.round(ax), Math.round(-290 + waveY), 95, 28);
-          ctx.fillRect(Math.round(ax), Math.round(h + 260 - waveY), 95, 28);
         }
 
-        // Waddling 16-Bit Pixel Penguins along Top & Bottom Outer Snowbanks
+        // West Alpine Ski Gondola Cableway (x = -290 & -260): Moving Red & Gold Cabins along Steel Cable
+        for (let gIdx = 0; gIdx < 2; gIdx++) {
+          const cabX = gIdx === 0 ? -290 : -260;
+          const cabY = gIdx === 0
+            ? -220 + ((matchTick * 1.4 + 140) % (h + 440))
+            : h + 220 - ((matchTick * 1.4 + 320) % (h + 440));
+          fillPxRect(ctx, cabX - 14, cabY - 12, 28, 24, GRAPHICS_CONFIG.palette.outline, px);
+          fillPxRect(ctx, cabX - 11, cabY - 9, 22, 18, gIdx === 0 ? '#ef4444' : '#facc15', px);
+          fillPxRect(ctx, cabX - 7, cabY - 5, 14, 8, '#bae6fd', px);
+        }
+
+        // East Geothermal Hot Spring (x = w + 272, y = h * 0.32): Rising Warm Steam Wisps
+        for (let st = 0; st < 4; st++) {
+          const stPhase = (matchTick * 0.6 + st * 18) % 56;
+          const stX = w + 252 + st * 14 + Math.sin(matchTick * 0.06 + st) * 6;
+          const stY = h * 0.32 + 10 - stPhase;
+          ctx.globalAlpha = Math.max(0, 0.55 * (1 - stPhase / 56));
+          fillPxRect(ctx, stX - 6, stY - 6, 12, 12, '#f8fafc', px);
+        }
+        ctx.globalAlpha = 1;
+
+        // Waddling 16-Bit Pixel Penguins on South Icebergs (y = h + 215..255)
         for (let p = 0; p < 4; p++) {
-          const pxBase = p % 2 === 0 ? 540 : w - 540;
-          const pyBase = p < 2 ? -205 : h + 205;
-          const waddleX = pxBase + Math.sin(matchTick * 0.03 + p * 1.7) * 38;
+          const pxBase = 240 + p * 310;
+          const pyBase = h + 218 + (p % 2) * 28;
+          const waddleX = pxBase + Math.sin(matchTick * 0.03 + p * 1.7) * 34;
           const hopY = Math.abs(Math.sin(matchTick * 0.16 + p)) * 4;
           fillPxRect(ctx, waddleX - 8, pyBase - 10 - hopY, 16, 20, '#0f172a', px);
           fillPxRect(ctx, waddleX - 5, pyBase - 4 - hopY, 10, 12, '#ffffff', px);
@@ -6082,23 +7000,44 @@ export default function App() {
         ctx.globalAlpha = 1;
         ctx.restore();
       } else if (selectedPitchTheme === 'VOLCANO_FORGE') {
-        // 2F. Roaring 16-Bit Fire Brazier Flames (Matched 1:1 to Outer Caldera Pedestals) & Rising Volcanic Ember Sparks
+        // 2F. Roaring Fire Braziers, West Forge Anvil Sparks, East Rolling Magma Minecart & Rising Volcanic Embers
         ctx.save();
         for (const bz of [
-          { x: 240, y: -214 },
-          { x: w - 240, y: -214 },
-          { x: 240, y: h + 214 },
-          { x: w - 240, y: h + 214 },
-          { x: -232, y: 155 },
-          { x: -232, y: h - 155 },
-          { x: w + 232, y: 155 },
-          { x: w + 232, y: h - 155 },
+          { x: w * 0.25 - 64, y: -255 },
+          { x: w * 0.25 + 64, y: -255 },
+          { x: w * 0.30, y: h + 245 },
+          { x: w * 0.55, y: h + 255 },
         ]) {
           const flicker = Math.round(Math.sin(matchTick * 0.24 + bz.x) * 6);
           fillPxRect(ctx, bz.x - 10, bz.y - 22 - Math.abs(flicker), 20, 18 + Math.abs(flicker), '#ef4444', px);
           fillPxRect(ctx, bz.x - 7, bz.y - 18 - Math.abs(flicker), 14, 14, '#f97316', px);
           fillPxRect(ctx, bz.x - 4, bz.y - 12 - Math.abs(flicker) * 0.5, 8, 8, '#fde047', px);
         }
+
+        // West Dwarven Anvil Forge (x = -272, y = h * 0.32): Periodic Hammer-Strike Spark Bursts
+        const anvilPhase = (matchTick * 0.12) % (Math.PI * 2);
+        if (Math.sin(anvilPhase) > 0.55) {
+          for (let sp = 0; sp < 5; sp++) {
+            const ang = (sp * Math.PI) / 4 + anvilPhase;
+            const dist = 10 + (matchTick % 16);
+            fillPxRect(
+              ctx,
+              -272 + Math.cos(ang) * dist,
+              h * 0.32 + Math.sin(ang) * dist,
+              6,
+              6,
+              sp % 2 === 0 ? '#fde047' : '#fb923c',
+              px
+            );
+          }
+        }
+
+        // East Ore Railway Track (x = w + 272): Rolling Iron Minecart with Glowing Magma Ore
+        const cartY = h * 0.5 + Math.sin(matchTick * 0.022) * (h * 0.36);
+        fillPxRect(ctx, w + 272 - 22, cartY - 26, 44, 52, GRAPHICS_CONFIG.palette.outline, px);
+        fillPxRect(ctx, w + 272 - 18, cartY - 22, 36, 44, '#334155', px);
+        fillPxRect(ctx, w + 272 - 12, cartY - 16, 24, 32, '#f97316', px);
+        fillPxRect(ctx, w + 272 - 6, cartY - 10, 12, 20, '#fde047', px);
 
         // Rising Glowing Volcanic Ember Sparks & Lava Bubbles in Outer Caldera
         for (let e = 0; e < 36; e++) {
@@ -6110,10 +7049,26 @@ export default function App() {
         }
         ctx.restore();
       } else if (selectedPitchTheme === 'TURF_AUTUMN') {
-        // 2G. Live Drifting Golden/Crimson Autumn Maple Leaves in Outer Park
+        // 2G. West Cider Mill Turning Waterwheel & Campfire Flames, East Hot-Air Balloon Bobbing & Swirling Autumn Leaves
         ctx.save();
+        // West Cider Mill Waterwheel (x = -275, y = h * 0.32 + 42): Splash Droplets & Creek Ripples
+        const splashOff = (matchTick * 0.8) % 24;
+        fillPxRect(ctx, -238, h * 0.32 + 34 + splashOff, 10, 6, '#e0f2fe', px);
+        fillPxRect(ctx, -232, h * 0.32 + 48 + ((splashOff + 12) % 24), 8, 5, '#bae6fd', px);
+
+        // West Stone Campfire Ring (x = -285, y = h * 0.85): Flickering Warm Flames
+        const fireH = 12 + Math.round(Math.abs(Math.sin(matchTick * 0.22)) * 10);
+        fillPxRect(ctx, -285 - 8, h * 0.85 - fireH, 16, fireH, '#f97316', px);
+        fillPxRect(ctx, -285 - 4, h * 0.85 - fireH + 4, 8, Math.max(4, fireH - 4), '#fde047', px);
+
+        // East Harvest Hot-Air Balloon Burner Glow (x = w + 295, y = h * 0.25 + 28)
+        if (Math.sin(matchTick * 0.08) > 0.2) {
+          fillPxRect(ctx, w + 295 - 6, h * 0.25 + 24, 12, 10, '#fde047', px);
+        }
+
+        // Drifting Golden/Crimson Autumn Maple & Ginkgo Leaves
         const leafColors = ['#ea580c', '#dc2626', '#facc15', '#f97316'];
-        for (let l = 0; l < 32; l++) {
+        for (let l = 0; l < 36; l++) {
           const lx = -260 + ((l * 179 + Math.floor(matchTick * 0.85 + Math.sin(matchTick * 0.05 + l) * 18)) % (w + 520));
           const ly = -280 + ((l * 107 + Math.floor(matchTick * 0.95)) % (h + 560));
           if (lx > -168 && lx < w + 168 && ly > -168 && ly < h + 168) continue;
@@ -6122,23 +7077,33 @@ export default function App() {
         }
         ctx.restore();
       } else if (selectedPitchTheme === 'TURF_SAKURA') {
-        // 2H. Swimming Koi Fish in Outer Imperial Ponds & Swirling Pink Sakura Petals
+        // 2H. Swimming Nishikigoi Koi & Floating Paper Lanterns in East Jade River & West Zen Pond + Swirling Sakura Petals
         ctx.save();
         for (const pond of [
-          { x: -234, y: h * 0.2 },
-          { x: -234, y: h * 0.8 },
-          { x: w + 234, y: h * 0.2 },
-          { x: w + 234, y: h * 0.8 },
+          { x: w + 265, y: h * 0.22 },
+          { x: w + 265, y: h * 0.64 },
+          { x: w + 265, y: h * 0.82 },
+          { x: -265, y: h * 0.70 },
         ]) {
           const koiAng = matchTick * 0.045 + pond.y * 0.01;
-          const kx = pond.x + Math.cos(koiAng) * 14;
+          const kx = pond.x + Math.cos(koiAng) * 16;
           const ky = pond.y + Math.sin(koiAng) * 14;
-          fillPxRect(ctx, kx - 5, ky - 3, 10, 6, '#f97316', px);
+          fillPxRect(ctx, kx - 6, ky - 3, 12, 6, '#f97316', px);
           fillPxRect(ctx, kx + 2, ky - 2, 4, 4, '#ffffff', px);
         }
 
+        // Floating Glowing Paper Lanterns drifting along East Jade River (x = w + 265)
+        for (let lIdx = 0; lIdx < 3; lIdx++) {
+          const ly = -200 + ((matchTick * 0.55 + lIdx * 340) % (h + 400));
+          if (Math.abs(ly - h * 0.42) > 48) {
+            const lx = w + 265 + Math.sin(ly * 0.012) * 18;
+            fillPxRect(ctx, lx - 6, ly - 6, 12, 12, GRAPHICS_CONFIG.palette.outline, px);
+            fillPxRect(ctx, lx - 4, ly - 4, 8, 8, '#fef08a', px);
+          }
+        }
+
         const petalColors = ['#fbcfe8', '#f472b6', '#ffe4e6'];
-        for (let p = 0; p < 36; p++) {
+        for (let p = 0; p < 38; p++) {
           const pxPos = -260 + ((p * 167 + Math.floor(matchTick * 1.05 + Math.sin(matchTick * 0.06 + p) * 16)) % (w + 520));
           const pyPos = -280 + ((p * 97 + Math.floor(matchTick * 0.9)) % (h + 560));
           if (pxPos > -168 && pxPos < w + 168 && pyPos > -168 && pyPos < h + 168) continue;
@@ -6147,37 +7112,96 @@ export default function App() {
         }
         ctx.restore();
       } else if (selectedPitchTheme === 'TURF_CHAMPIONS') {
-        // 2I. Gleaming Trophy Sparkles on the 4 Outer Championship Trophy Plinths
+        // 2I. North Trophy Plaza Fountain Spray & Giant Silver Cup Gleam, West VIP Red Carpet Flashes & South Sky-Trackers
         ctx.save();
-        for (const tp of [
-          { x: -234, y: h * 0.24 },
-          { x: -234, y: h * 0.76 },
-          { x: w + 234, y: h * 0.24 },
-          { x: w + 234, y: h * 0.76 },
-        ]) {
-          const gleamR = 10 + Math.sin(matchTick * 0.14 + tp.y) * 5;
-          ctx.strokeStyle = 'rgba(254, 240, 138, 0.85)';
-          ctx.lineWidth = 2;
-          ctx.beginPath();
-          ctx.arc(tp.x, tp.y, gleamR, 0, Math.PI * 2);
-          ctx.stroke();
+        // North Plaza Fountain Spray (x = w * 0.26, y = -255) & Giant Champions Cup Sparkle (x = w * 0.50, y = -262)
+        const ftnSpray = 10 + ((matchTick * 0.45) % 20);
+        ctx.strokeStyle = 'rgba(224, 242, 254, 0.78)';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(w * 0.26, -255, ftnSpray, 0, Math.PI * 2);
+        ctx.stroke();
+
+        const gleamR = 14 + Math.sin(matchTick * 0.14) * 6;
+        ctx.strokeStyle = 'rgba(254, 240, 138, 0.88)';
+        ctx.lineWidth = 2.5;
+        ctx.beginPath();
+        ctx.arc(w * 0.50, -262, gleamR, 0, Math.PI * 2);
+        ctx.stroke();
+
+        // West VIP Red Carpet Photographer Camera Flashes (x = -215, y = h * 0.50)
+        if (matchTick % 28 < 4) {
+          fillPxRect(ctx, -228, h * 0.45 - 8, 16, 16, '#ffffff', px);
+        } else if ((matchTick + 14) % 28 < 4) {
+          fillPxRect(ctx, -228, h * 0.55 - 8, 16, 16, '#ffffff', px);
         }
+
+        // East OB Van Rotating Satellite Dish (x = w + 265, y = h * 0.28 - 28)
+        const dishSwing = Math.sin(matchTick * 0.05) * 6;
+        fillPxRect(ctx, w + 265 + dishSwing - 6, h * 0.28 - 32, 12, 8, '#38bdf8', px);
         ctx.restore();
       } else {
-        // 2J. Sparkling Fountain Water Jets in Outer Royal Botanical Park
+        // 2J. CLASSIC_TURF Living Asymmetric Diorama:
+        // North-West Glasshouse Fountain Spray, North-East Kids 1v1 Mini-Pitch Rally,
+        // East Canal Drifting Wooden Rowboat & Swimming Ducks, West TV OB Dish, South Commuter Train!
         ctx.save();
-        for (const ftn of [
-          { x: -234, y: h * 0.24 },
-          { x: -234, y: h * 0.76 },
-          { x: w + 234, y: h * 0.24 },
-          { x: w + 234, y: h * 0.76 },
-        ]) {
-          const sprayR = 8 + ((matchTick * 0.45) % 18);
-          ctx.strokeStyle = 'rgba(224, 242, 254, 0.75)';
-          ctx.lineWidth = 2;
-          ctx.beginPath();
-          ctx.arc(ftn.x, ftn.y, sprayR, 0, Math.PI * 2);
-          ctx.stroke();
+        // 1. North-West Glasshouse Terrace Fountain Spray (x = w * 0.48, y = -255)
+        const sprayR = 8 + ((matchTick * 0.45) % 20);
+        ctx.strokeStyle = 'rgba(224, 242, 254, 0.78)';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(w * 0.48, -255, sprayR, 0, Math.PI * 2);
+        ctx.stroke();
+
+        // 2. North-East Youth 1v1 Mini-Pitch (x = w * 0.77, y = -258): Two Mini Academy Players Rallying a Ball!
+        const rallyPhase = matchTick * 0.055;
+        const kid1X = w * 0.77 - 48 + Math.sin(rallyPhase) * 10;
+        const kid2X = w * 0.77 + 48 + Math.cos(rallyPhase) * 10;
+        const miniBallX = w * 0.77 + Math.sin(rallyPhase * 1.5) * 44;
+        const miniBallY = -258 + Math.cos(rallyPhase * 3) * 12;
+        fillPxRect(ctx, kid1X - 6, -264, 12, 12, GRAPHICS_CONFIG.palette.outline, px);
+        fillPxRect(ctx, kid1X - 4, -262, 8, 8, '#38bdf8', px);
+        fillPxRect(ctx, kid2X - 6, -264, 12, 12, GRAPHICS_CONFIG.palette.outline, px);
+        fillPxRect(ctx, kid2X - 4, -262, 8, 8, '#fb7185', px);
+        fillPxRect(ctx, miniBallX - 4, miniBallY - 4, 8, 8, '#ffffff', px);
+
+        // 3. East Park Canal (x = w + 266): Drifting Wooden Rowboat & Swimming Mallard Ducks
+        const boatY = -140 + Math.sin(matchTick * 0.015) * 75;
+        fillPxRect(ctx, w + 266 - 14, boatY - 24, 28, 48, GRAPHICS_CONFIG.palette.outline, px);
+        fillPxRect(ctx, w + 266 - 10, boatY - 20, 20, 40, '#9a3412', px);
+        fillPxRect(ctx, w + 266 - 8, boatY - 8, 16, 16, '#fdba74', px);
+        // Oars
+        const oarSwing = Math.sin(matchTick * 0.08) * 6;
+        fillPxRect(ctx, w + 266 - 22, boatY + oarSwing, 8, 4, '#fde047', px);
+        fillPxRect(ctx, w + 266 + 14, boatY - oarSwing, 8, 4, '#fde047', px);
+        // Swimming Mallard Ducks in lower canal reach (y = h * 0.65..0.82)
+        for (let d = 0; d < 2; d++) {
+          const dy = h * 0.68 + d * 48 + Math.sin(matchTick * 0.03 + d * 2) * 16;
+          const dx = w + 264 + Math.cos(matchTick * 0.04 + d) * 10;
+          fillPxRect(ctx, dx - 5, dy - 4, 10, 8, '#15803d', px);
+          fillPxRect(ctx, dx + 3, dy - 2, 4, 4, '#facc15', px);
+        }
+
+        // 4. West Broadcast Compound TV OB Van Dish Pulse (x = -265, y = h * 0.68 - 30)
+        const obPulse = 6 + ((matchTick * 0.4) % 18);
+        ctx.strokeStyle = 'rgba(56, 189, 248, 0.65)';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(-253, h * 0.68 - 28, obPulse, 0, Math.PI * 2);
+        ctx.stroke();
+
+        // 5. South Commuter Rail Track (y = h + 278): Sleek Emerald & Silver Commuter Train Gliding Past
+        const commuterX = w + 420 - ((matchTick * 3.4) % (w + 840));
+        for (let cIdx = 0; cIdx < 2; cIdx++) {
+          const cx = commuterX + cIdx * 124;
+          if (cx > -CACHE_PAD_X - 130 && cx < w + CACHE_PAD_X + 130) {
+            fillPxRect(ctx, cx - 56, h + 262, 112, 30, GRAPHICS_CONFIG.palette.outline, px);
+            fillPxRect(ctx, cx - 52, h + 266, 104, 22, '#f8fafc', px);
+            fillPxRect(ctx, cx - 52, h + 274, 104, 6, '#10b981', px);
+            for (let wx = -38; wx <= 30; wx += 22) {
+              fillPxRect(ctx, cx + wx, h + 268, 14, 6, '#38bdf8', px);
+            }
+          }
         }
         ctx.restore();
       }
@@ -6376,12 +7400,11 @@ export default function App() {
 
         // Subtle Theme-Specific Stadium Celebration Accents
         if (stadiumFx.effectStyle === 'BOTANICAL_FOUNTAIN') {
-          // Classic Sunlit Turf: 4 Outer Park Fountains erupt with higher sparkling cyan/gold water rings
+          // Classic Sunlit Turf: North Glasshouse Fountain & East Canal erupt with sparkling cyan/gold water rings
           for (const ftn of [
-            { x: -234, y: h * 0.24 },
-            { x: -234, y: h * 0.76 },
-            { x: w + 234, y: h * 0.24 },
-            { x: w + 234, y: h * 0.76 },
+            { x: w * 0.48, y: -255 },
+            { x: w + 266, y: h * 0.22 },
+            { x: w + 266, y: h * 0.72 },
           ]) {
             ctx.strokeStyle = '#38bdf8';
             ctx.lineWidth = 3;
@@ -6421,12 +7444,15 @@ export default function App() {
           ctx.ellipse(w * 0.5, h * 0.5, 110 + goalElapsed * 1.5, 48 + goalElapsed * 0.6, goalElapsed * 0.04, 0, Math.PI * 2);
           ctx.stroke();
         } else if (stadiumFx.effectStyle === 'STREET_GRAFFITI_BASS') {
-          // Urban Street Concrete: Booming Boombox Soundwave Rings on Left & Right Outer Courts
-          for (const sx of [-256, w + 256]) {
+          // Urban Street Concrete: Booming Boombox Soundwave Rings on West Streetball Court & East Skate Bowl
+          for (const pt of [
+            { x: -260, y: h * 0.68 },
+            { x: w + 268, y: h * 0.32 },
+          ]) {
             ctx.strokeStyle = '#facc15';
             ctx.lineWidth = 3.5;
             ctx.beginPath();
-            ctx.arc(sx, h - 140, 18 + ((goalElapsed * 2.2) % 55), 0, Math.PI * 2);
+            ctx.arc(pt.x, pt.y, 18 + ((goalElapsed * 2.2) % 55), 0, Math.PI * 2);
             ctx.stroke();
           }
         } else if (stadiumFx.effectStyle === 'CARNIVAL_STREAMERS') {
@@ -6464,12 +7490,12 @@ export default function App() {
             ctx.stroke();
           }
         } else if (stadiumFx.effectStyle === 'VOLCANO_MAGMA_PLUME') {
-          // Magma Caldera Citadel: Outer Caldera Fire Braziers Surge with Tall Molten Gold Pillars
+          // Magma Caldera Citadel: Outer Caldera Fire Braziers & West Forge Surge with Tall Molten Gold Pillars
           for (const bz of [
-            { x: 240, y: -214 },
-            { x: w - 240, y: -214 },
-            { x: 240, y: h + 214 },
-            { x: w - 240, y: h + 214 },
+            { x: w * 0.25 - 64, y: -255 },
+            { x: w * 0.25 + 64, y: -255 },
+            { x: w * 0.30, y: h + 245 },
+            { x: w * 0.55, y: h + 255 },
           ]) {
             fillPxRect(ctx, bz.x - 14, bz.y - 42, 28, 34, '#f97316', px);
             fillPxRect(ctx, bz.x - 8, bz.y - 36, 16, 26, '#fde047', px);
@@ -6981,6 +8007,13 @@ export default function App() {
         if (rematchSameBtn) rematchSameBtn.classList.add('hidden');
         if (mainMenuBtn) mainMenuBtn.classList.add('hidden');
 
+        // Restore the Home Menu's selected stadium so Shuffle Mode only randomizes during matches
+        selectedPitchTheme = homeMenuStadiumId;
+        applyPitchTheme(selectedPitchTheme);
+        sound.setPitchTheme(selectedPitchTheme);
+        rebuildStaticPitchCache();
+        syncHomeArenaSelectorUI();
+
         setMatchmakingIdleUI();
         if (menuOverlay) menuOverlay.classList.remove('hidden');
         syncMenuFocusVisual(true);
@@ -7385,19 +8418,20 @@ export default function App() {
       );
       if (preferredArenaMode !== 'RANDOM' && unlockedSet.has(preferredArenaMode)) {
         selectedPitchTheme = preferredArenaMode;
-      } else {
-        // Pick from the player's unlocked stadiums
+      } else if (preferredArenaMode === 'RANDOM') {
+        // Randomly select from the player's unlocked stadiums ONLY when loading a match
         const unlockedThemes = PITCH_THEMES.filter((t) => unlockedSet.has(t.id));
         const safePool = unlockedThemes.length > 0 ? unlockedThemes : [PITCH_THEMES[0]];
         const differentPool = safePool.filter((t) => t.id !== selectedPitchTheme);
         const finalPool = differentPool.length > 0 ? differentPool : safePool;
         const randomTheme = finalPool[Math.floor(Math.random() * finalPool.length)];
         selectedPitchTheme = randomTheme.id;
+      } else {
+        selectedPitchTheme = homeMenuStadiumId;
       }
       applyPitchTheme(selectedPitchTheme);
       sound.setPitchTheme(selectedPitchTheme);
       rebuildStaticPitchCache();
-      syncHomeArenaSelectorUI();
     }
 
     function syncHomeArenaSelectorUI() {
@@ -7405,47 +8439,48 @@ export default function App() {
         userProfile.unlockedStadiums && userProfile.unlockedStadiums.length > 0
           ? userProfile.unlockedStadiums
           : DEFAULT_UNLOCKED_STADIUMS;
-      if (!unlockedList.includes(selectedPitchTheme)) {
-        selectedPitchTheme = unlockedList[0];
+      if (!unlockedList.includes(homeMenuStadiumId)) {
+        homeMenuStadiumId = unlockedList[0];
+      }
+      if (gameState === 'MENU' && selectedPitchTheme !== homeMenuStadiumId) {
+        selectedPitchTheme = homeMenuStadiumId;
         applyPitchTheme(selectedPitchTheme);
         sound.setPitchTheme(selectedPitchTheme);
         rebuildStaticPitchCache();
       }
-      const activeTheme =
-        PITCH_THEMES.find((t) => t.id === selectedPitchTheme) || PITCH_THEMES[0];
-      const activeShopItem =
-        SHOP_STADIUM_ITEMS.find((s) => s.id === selectedPitchTheme) || SHOP_STADIUM_ITEMS[0];
+      const homeTheme =
+        PITCH_THEMES.find((t) => t.id === homeMenuStadiumId) || PITCH_THEMES[0];
+      const homeShopItem =
+        SHOP_STADIUM_ITEMS.find((s) => s.id === homeMenuStadiumId) || SHOP_STADIUM_ITEMS[0];
       const nameEl = document.getElementById('activeStadiumNameText');
       const modePillEl = document.getElementById('activeStadiumModePill');
       const countEl = document.getElementById('stadiumUnlockedCountText');
       const shuffleBtn = document.getElementById('stadiumShuffleBtn');
-      const swatchEl = document.getElementById('activeStadiumSwatch');
+      const previewEl = document.getElementById('homeStadiumTrueRatioPreview');
 
       if (nameEl) {
-        nameEl.innerText = activeTheme.name;
+        nameEl.innerText = homeTheme.name;
       }
       if (modePillEl) {
-        modePillEl.innerText =
-          preferredArenaMode === 'RANDOM'
-            ? 'SHUFFLE UNLOCKED'
-            : `${activeShopItem.tierLabel} ARENA`;
-        modePillEl.style.backgroundColor =
-          preferredArenaMode === 'RANDOM' ? '#fde047' : activeShopItem.accentHex;
+        const isRandom = preferredArenaMode === 'RANDOM';
+        modePillEl.innerText = isRandom
+          ? '🎲 SHUFFLE ON MATCH LOAD'
+          : `${homeShopItem.tierLabel} ARENA LOCKED`;
+        modePillEl.style.backgroundColor = isRandom ? '#fde047' : homeShopItem.accentHex;
         modePillEl.style.color = '#0f172a';
       }
       if (countEl) {
         countEl.innerText = `${unlockedList.length}/${PITCH_THEMES.length} UNLOCKED`;
       }
-      if (swatchEl) {
-        swatchEl.style.background = `linear-gradient(135deg, ${activeTheme.turf.stripeLight} 0%, ${activeTheme.turf.stripeDark} 100%)`;
-        swatchEl.style.borderColor = '#0f172a';
+      if (previewEl) {
+        previewEl.innerHTML = getTrueRatioStadiumSvgHtml(homeMenuStadiumId);
       }
       if (shuffleBtn) {
         const isRandom = preferredArenaMode === 'RANDOM';
-        shuffleBtn.innerText = isRandom ? '🎲 Shuffle: ON' : '🎲 Shuffle';
+        shuffleBtn.innerText = isRandom ? '🎲 Shuffle: ON' : '🎲 Shuffle: OFF';
         shuffleBtn.className = isRandom
-          ? 'btn-clean py-1.5 px-2.5 rounded-xl bg-amber-300 border-2 border-slate-900 text-slate-950 font-black text-[10px] uppercase tracking-wider shadow-[0_2px_0_#0f172a] cursor-pointer shrink-0'
-          : 'btn-clean py-1.5 px-2.5 rounded-xl bg-white hover:bg-slate-100 border-2 border-slate-900 text-slate-700 font-black text-[10px] uppercase tracking-wider shadow-[0_2px_0_#0f172a] cursor-pointer shrink-0';
+          ? 'btn-clean py-1 px-2.5 rounded-lg bg-amber-300 border-2 border-slate-900 text-slate-950 font-black text-[10px] uppercase tracking-wider shadow-[0_2px_0_#0f172a] cursor-pointer shrink-0'
+          : 'btn-clean py-1 px-2.5 rounded-lg bg-white hover:bg-slate-100 border-2 border-slate-900 text-slate-700 font-black text-[10px] uppercase tracking-wider shadow-[0_2px_0_#0f172a] cursor-pointer shrink-0';
       }
     }
 
@@ -7461,10 +8496,11 @@ export default function App() {
       const pool = unlockedThemes.length > 0 ? unlockedThemes : [PITCH_THEMES[0]];
       const currentIdx = Math.max(
         0,
-        pool.findIndex((t) => t.id === selectedPitchTheme)
+        pool.findIndex((t) => t.id === homeMenuStadiumId)
       );
       const nextIdx = (currentIdx + step + pool.length) % pool.length;
       const chosen = pool[nextIdx];
+      homeMenuStadiumId = chosen.id;
       preferredArenaMode = chosen.id;
       selectedPitchTheme = chosen.id;
       applyPitchTheme(chosen.id);
@@ -7477,12 +8513,12 @@ export default function App() {
       sound.init();
       sound.playUiSelect();
       if (preferredArenaMode === 'RANDOM') {
-        preferredArenaMode = selectedPitchTheme;
-        syncHomeArenaSelectorUI();
+        preferredArenaMode = homeMenuStadiumId;
       } else {
+        // Keep the Home Menu stadium untouched; only pick randomly when a match loads!
         preferredArenaMode = 'RANDOM';
-        pickRandomPitchArena();
       }
+      syncHomeArenaSelectorUI();
     }
 
     function populateTournamentBracketVisual() {
@@ -8092,6 +9128,111 @@ export default function App() {
       }
     }
 
+    function resetProfileSettingsUI() {
+      const settingsPanel = document.getElementById('profileSettingsPanel');
+      const confirmBox = document.getElementById('deleteAccountConfirmBox');
+      const initBtn = document.getElementById('deleteAccountInitBtn');
+      const resetBanner = document.getElementById('deleteAccountStatusBanner');
+      if (settingsPanel) settingsPanel.classList.add('hidden');
+      if (confirmBox) confirmBox.classList.add('hidden');
+      if (initBtn) initBtn.classList.remove('hidden');
+      if (resetBanner) resetBanner.classList.add('hidden');
+    }
+
+    function handleToggleProfileSettings() {
+      sound.init();
+      sound.playUiSelect();
+      const settingsPanel = document.getElementById('profileSettingsPanel');
+      const confirmBox = document.getElementById('deleteAccountConfirmBox');
+      const initBtn = document.getElementById('deleteAccountInitBtn');
+      if (!settingsPanel) return;
+      const willOpen = settingsPanel.classList.contains('hidden');
+      settingsPanel.classList.toggle('hidden', !willOpen);
+      if (confirmBox) confirmBox.classList.add('hidden');
+      if (initBtn) initBtn.classList.remove('hidden');
+    }
+
+    function handleInitDeleteAccountPrompt() {
+      sound.init();
+      sound.playUiBack();
+      const confirmBox = document.getElementById('deleteAccountConfirmBox');
+      const initBtn = document.getElementById('deleteAccountInitBtn');
+      if (initBtn) initBtn.classList.add('hidden');
+      if (confirmBox) confirmBox.classList.remove('hidden');
+    }
+
+    function handleCancelDeleteAccountPrompt() {
+      sound.init();
+      sound.playUiSelect();
+      const confirmBox = document.getElementById('deleteAccountConfirmBox');
+      const initBtn = document.getElementById('deleteAccountInitBtn');
+      if (confirmBox) confirmBox.classList.add('hidden');
+      if (initBtn) initBtn.classList.remove('hidden');
+    }
+
+    function handleConfirmDeleteAndResetAccount() {
+      sound.init();
+      sound.playWhistle();
+      const freshProfile = createDefaultPlayerProfile();
+      userProfile = {
+        name: freshProfile.name,
+        iconType: freshProfile.iconType,
+        presetIcon: '#10',
+        photoDataUrl: freshProfile.photoDataUrl,
+        rankedWins: freshProfile.rankedWins,
+        rankedMatches: freshProfile.rankedMatches,
+        hasEditedProfile: false,
+        balance: freshProfile.balance,
+        jackpotPool: freshProfile.jackpotPool,
+        machineJackpots: {
+          CHAMPIONS_GOLD: POKIE_MACHINES.CHAMPIONS_GOLD.baseJackpot10,
+          COSMIC_NEON: POKIE_MACHINES.COSMIC_NEON.baseJackpot10,
+          VOLCANO_INFERNO: POKIE_MACHINES.VOLCANO_INFERNO.baseJackpot10,
+          HIGH_ROLLER_ROYAL: POKIE_MACHINES.HIGH_ROLLER_ROYAL.baseJackpot10,
+        },
+        unlockedStadiums: [...freshProfile.unlockedStadiums],
+        unlockedPokies: [...freshProfile.unlockedPokieMachines],
+      };
+      pendingAvatarDataUrl = null;
+      homeMenuStadiumId = 'CLASSIC_TURF';
+      preferredArenaMode = 'RANDOM';
+      selectedPitchTheme = 'CLASSIC_TURF';
+      selectedPokieMachine = 'CHAMPIONS_GOLD';
+      selectedPokieBet = 10;
+      selectedTournamentTier = 'CUP_100';
+      try {
+        window.localStorage.removeItem('rematch_profile_v1');
+      } catch {
+        // Ignore storage error
+      }
+      saveUserProfileToStorage();
+      void deleteProfileFromFirestoreLeaderboard();
+      applyPitchTheme(selectedPitchTheme);
+      sound.setPitchTheme(selectedPitchTheme);
+      sound.setPokieMachine(selectedPokieMachine);
+      rebuildStaticPitchCache();
+      syncProfileUI();
+      syncKitAndModeUI();
+      syncHomeArenaSelectorUI();
+      syncClubShopUI();
+      syncPokieMachineThemeAndBetUI();
+      renderLeaderboardRows();
+      renderModalAvatarPreview(null);
+      if (profileNameInput) {
+        profileNameInput.value = userProfile.name;
+      }
+      const confirmBox = document.getElementById('deleteAccountConfirmBox');
+      const initBtn = document.getElementById('deleteAccountInitBtn');
+      const resetBanner = document.getElementById('deleteAccountStatusBanner');
+      if (confirmBox) confirmBox.classList.add('hidden');
+      if (initBtn) initBtn.classList.remove('hidden');
+      if (resetBanner) {
+        resetBanner.innerText = '✅ ACCOUNT RESET TO DEFAULT ($30 BANKROLL • BRONZE I)';
+        resetBanner.classList.remove('hidden');
+      }
+      return userProfile;
+    }
+
     function openEditProfileModal() {
       sound.init();
       sound.playSwitch();
@@ -8104,6 +9245,7 @@ export default function App() {
         cameraStatusText.classList.add('hidden');
       }
       resetCouponInputUI();
+      resetProfileSettingsUI();
       syncProfileUI();
       renderModalAvatarPreview(pendingAvatarDataUrl);
       switchProfileModalView('overview');
@@ -8117,6 +9259,7 @@ export default function App() {
     function closeEditProfileModal() {
       stopProfileCameraStream();
       resetCouponInputUI();
+      resetProfileSettingsUI();
       if (editProfileModal) {
         editProfileModal.classList.add('hidden');
       }
@@ -8353,11 +9496,14 @@ export default function App() {
       }, 42);
     }
 
-    function getPokieSymbolVisual(symId: string) {
+    function getPokieSymbolVisual(symId: string, machineId: PokieMachineId = selectedPokieMachine) {
       const safeId = (symId in POKIE_SYMBOLS ? symId : 'DIAMOND_BALL') as PokieSymbolId;
       const spec = POKIE_SYMBOLS[safeId];
+      const mTheme = getPokieMachineSymbolTheme(machineId, safeId);
+      const pCol = mTheme.primaryColor;
+      const sCol = mTheme.secondaryColor;
 
-      // Bespoke 16-bit Pixel Art SVG Icons for each Arcade Pokie Symbol
+      // Bespoke 16-bit Pixel Art SVG Icons dynamically tinted per Pokie Machine
       const svgMap: Record<PokieSymbolId, string> = {
         MEGA_TROPHY: `<svg viewBox="0 0 16 16" class="w-7 h-7 sm:w-8 sm:h-8 drop-shadow-[0_2px_0_#0f172a]" shape-rendering="crispEdges" fill="none">
           <rect x="4" y="1" width="8" height="2" fill="#0f172a"/>
@@ -8365,13 +9511,13 @@ export default function App() {
           <rect x="4" y="7" width="8" height="3" fill="#0f172a"/>
           <rect x="6" y="10" width="4" height="2" fill="#0f172a"/>
           <rect x="4" y="12" width="8" height="3" fill="#0f172a"/>
-          <rect x="5" y="2" width="6" height="5" fill="#facc15"/>
-          <rect x="3" y="3" width="2" height="3" fill="#fde047"/>
-          <rect x="11" y="3" width="2" height="3" fill="#d97706"/>
+          <rect x="5" y="2" width="6" height="5" fill="${pCol}"/>
+          <rect x="3" y="3" width="2" height="3" fill="${sCol}"/>
+          <rect x="11" y="3" width="2" height="3" fill="${sCol}"/>
           <rect x="6" y="3" width="2" height="3" fill="#ffffff"/>
-          <rect x="5" y="7" width="6" height="2" fill="#f59e0b"/>
-          <rect x="7" y="10" width="2" height="2" fill="#facc15"/>
-          <rect x="5" y="13" width="6" height="1" fill="#fde047"/>
+          <rect x="5" y="7" width="6" height="2" fill="${sCol}"/>
+          <rect x="7" y="10" width="2" height="2" fill="${pCol}"/>
+          <rect x="5" y="13" width="6" height="1" fill="${pCol}"/>
         </svg>`,
         WILD_STAR: `<svg viewBox="0 0 16 16" class="w-7 h-7 sm:w-8 sm:h-8 drop-shadow-[0_2px_0_#0f172a]" shape-rendering="crispEdges" fill="none">
           <rect x="6" y="1" width="4" height="3" fill="#0f172a"/>
@@ -8379,12 +9525,12 @@ export default function App() {
           <rect x="3" y="9" width="10" height="3" fill="#0f172a"/>
           <rect x="2" y="12" width="4" height="3" fill="#0f172a"/>
           <rect x="10" y="12" width="4" height="3" fill="#0f172a"/>
-          <rect x="7" y="2" width="2" height="10" fill="#38bdf8"/>
-          <rect x="2" y="6" width="12" height="2" fill="#38bdf8"/>
-          <rect x="4" y="8" width="8" height="3" fill="#0284c7"/>
-          <rect x="3" y="12" width="3" height="2" fill="#38bdf8"/>
-          <rect x="10" y="12" width="3" height="2" fill="#38bdf8"/>
-          <rect x="6" y="6" width="4" height="3" fill="#fde047"/>
+          <rect x="7" y="2" width="2" height="10" fill="${pCol}"/>
+          <rect x="2" y="6" width="12" height="2" fill="${pCol}"/>
+          <rect x="4" y="8" width="8" height="3" fill="${sCol}"/>
+          <rect x="3" y="12" width="3" height="2" fill="${pCol}"/>
+          <rect x="10" y="12" width="3" height="2" fill="${pCol}"/>
+          <rect x="6" y="6" width="4" height="3" fill="${sCol}"/>
           <rect x="7" y="7" width="2" height="1" fill="#ffffff"/>
         </svg>`,
         DIAMOND_BALL: `<svg viewBox="0 0 16 16" class="w-7 h-7 sm:w-8 sm:h-8 drop-shadow-[0_2px_0_#0f172a]" shape-rendering="crispEdges" fill="none">
@@ -8392,139 +9538,88 @@ export default function App() {
           <rect x="3" y="2" width="10" height="12" fill="#0f172a"/>
           <rect x="2" y="4" width="12" height="8" fill="#0f172a"/>
           <rect x="5" y="14" width="6" height="1" fill="#0f172a"/>
-          <rect x="5" y="2" width="6" height="12" fill="#ffffff"/>
-          <rect x="3" y="4" width="10" height="8" fill="#f8fafc"/>
+          <rect x="5" y="2" width="6" height="12" fill="${pCol}"/>
+          <rect x="3" y="4" width="10" height="8" fill="${sCol}"/>
           <rect x="6" y="6" width="4" height="4" fill="#0f172a"/>
           <rect x="7" y="2" width="2" height="2" fill="#0f172a"/>
           <rect x="3" y="7" width="2" height="2" fill="#0f172a"/>
           <rect x="11" y="7" width="2" height="2" fill="#0f172a"/>
-          <rect x="5" y="4" width="2" height="2" fill="#38bdf8"/>
+          <rect x="5" y="4" width="2" height="2" fill="#ffffff"/>
         </svg>`,
         GOLD_BOOT: `<svg viewBox="0 0 16 16" class="w-7 h-7 sm:w-8 sm:h-8 drop-shadow-[0_2px_0_#0f172a]" shape-rendering="crispEdges" fill="none">
           <rect x="3" y="3" width="5" height="9" fill="#0f172a"/>
           <rect x="2" y="7" width="12" height="6" fill="#0f172a"/>
-          <rect x="4" y="4" width="3" height="6" fill="#f97316"/>
-          <rect x="3" y="8" width="10" height="3" fill="#fb923c"/>
-          <rect x="5" y="8" width="4" height="2" fill="#fde047"/>
+          <rect x="4" y="4" width="3" height="6" fill="${pCol}"/>
+          <rect x="3" y="8" width="10" height="3" fill="${sCol}"/>
+          <rect x="5" y="8" width="4" height="2" fill="${pCol}"/>
           <rect x="3" y="11" width="10" height="1" fill="#ffffff"/>
-          <rect x="3" y="13" width="2" height="2" fill="#facc15"/>
-          <rect x="7" y="13" width="2" height="2" fill="#facc15"/>
-          <rect x="11" y="13" width="2" height="2" fill="#facc15"/>
+          <rect x="3" y="13" width="2" height="2" fill="${pCol}"/>
+          <rect x="7" y="13" width="2" height="2" fill="${pCol}"/>
+          <rect x="11" y="13" width="2" height="2" fill="${pCol}"/>
         </svg>`,
         FIRE_FLAME: `<svg viewBox="0 0 16 16" class="w-7 h-7 sm:w-8 sm:h-8 drop-shadow-[0_2px_0_#0f172a]" shape-rendering="crispEdges" fill="none">
           <rect x="6" y="1" width="4" height="3" fill="#0f172a"/>
           <rect x="4" y="4" width="8" height="4" fill="#0f172a"/>
           <rect x="2" y="7" width="12" height="6" fill="#0f172a"/>
           <rect x="4" y="13" width="8" height="2" fill="#0f172a"/>
-          <rect x="7" y="2" width="2" height="3" fill="#f43f5e"/>
-          <rect x="5" y="5" width="6" height="4" fill="#f97316"/>
-          <rect x="3" y="8" width="10" height="4" fill="#fb7185"/>
-          <rect x="5" y="8" width="6" height="4" fill="#fde047"/>
+          <rect x="7" y="2" width="2" height="3" fill="${pCol}"/>
+          <rect x="5" y="5" width="6" height="4" fill="${sCol}"/>
+          <rect x="3" y="8" width="10" height="4" fill="${pCol}"/>
+          <rect x="5" y="8" width="6" height="4" fill="${sCol}"/>
           <rect x="6" y="10" width="4" height="3" fill="#ffffff"/>
         </svg>`,
         WHISTLE: `<svg viewBox="0 0 16 16" class="w-7 h-7 sm:w-8 sm:h-8 drop-shadow-[0_2px_0_#0f172a]" shape-rendering="crispEdges" fill="none">
           <rect x="2" y="5" width="12" height="7" fill="#0f172a"/>
           <rect x="3" y="4" width="6" height="9" fill="#0f172a"/>
-          <rect x="4" y="5" width="5" height="7" fill="#34d399"/>
-          <rect x="9" y="6" width="4" height="4" fill="#10b981"/>
-          <rect x="5" y="6" width="3" height="2" fill="#a7f3d0"/>
+          <rect x="4" y="5" width="5" height="7" fill="${pCol}"/>
+          <rect x="9" y="6" width="4" height="4" fill="${sCol}"/>
+          <rect x="5" y="6" width="3" height="2" fill="#ffffff"/>
           <rect x="6" y="8" width="2" height="2" fill="#0f172a"/>
         </svg>`,
         CHERRY_CARD: `<svg viewBox="0 0 16 16" class="w-7 h-7 sm:w-8 sm:h-8 drop-shadow-[0_2px_0_#0f172a]" shape-rendering="crispEdges" fill="none">
-          <rect x="7" y="2" width="5" height="2" fill="#22c55e"/>
-          <rect x="5" y="4" width="2" height="4" fill="#16a34a"/>
-          <rect x="9" y="4" width="2" height="4" fill="#16a34a"/>
+          <rect x="7" y="2" width="5" height="2" fill="${sCol}"/>
+          <rect x="5" y="4" width="2" height="4" fill="${sCol}"/>
+          <rect x="9" y="4" width="2" height="4" fill="${sCol}"/>
           <rect x="2" y="8" width="6" height="6" fill="#0f172a"/>
           <rect x="8" y="8" width="6" height="6" fill="#0f172a"/>
-          <rect x="3" y="9" width="4" height="4" fill="#f43f5e"/>
-          <rect x="9" y="9" width="4" height="4" fill="#e11d48"/>
-          <rect x="3" y="9" width="2" height="2" fill="#fda4af"/>
-          <rect x="9" y="9" width="2" height="2" fill="#fda4af"/>
+          <rect x="3" y="9" width="4" height="4" fill="${pCol}"/>
+          <rect x="9" y="9" width="4" height="4" fill="${pCol}"/>
+          <rect x="3" y="9" width="2" height="2" fill="#ffffff"/>
+          <rect x="9" y="9" width="2" height="2" fill="#ffffff"/>
         </svg>`,
         SCATTER_CROWN: `<svg viewBox="0 0 16 16" class="w-7 h-7 sm:w-8 sm:h-8 drop-shadow-[0_2px_0_#0f172a]" shape-rendering="crispEdges" fill="none">
           <rect x="1" y="3" width="14" height="11" fill="#0f172a"/>
-          <rect x="2" y="4" width="2" height="7" fill="#fde047"/>
-          <rect x="7" y="3" width="2" height="8" fill="#fde047"/>
-          <rect x="12" y="4" width="2" height="7" fill="#fde047"/>
-          <rect x="4" y="7" width="8" height="4" fill="#facc15"/>
-          <rect x="2" y="11" width="12" height="2" fill="#d97706"/>
-          <rect x="4" y="8" width="2" height="2" fill="#38bdf8"/>
-          <rect x="7" y="8" width="2" height="2" fill="#f43f5e"/>
-          <rect x="10" y="8" width="2" height="2" fill="#34d399"/>
+          <rect x="2" y="4" width="2" height="7" fill="${pCol}"/>
+          <rect x="7" y="3" width="2" height="8" fill="${pCol}"/>
+          <rect x="12" y="4" width="2" height="7" fill="${pCol}"/>
+          <rect x="4" y="7" width="8" height="4" fill="${pCol}"/>
+          <rect x="2" y="11" width="12" height="2" fill="${sCol}"/>
+          <rect x="4" y="8" width="2" height="2" fill="#ffffff"/>
+          <rect x="7" y="8" width="2" height="2" fill="${sCol}"/>
+          <rect x="10" y="8" width="2" height="2" fill="#ffffff"/>
         </svg>`,
       };
 
-      const tileThemeMap: Record<
-        PokieSymbolId,
-        { tileBg: string; pillBg: string; pillText: string; shortTag: string; multTag: string }
-      > = {
-        MEGA_TROPHY: {
-          tileBg: 'linear-gradient(180deg, #fef08a 0%, #facc15 100%)',
-          pillBg: '#0f172a',
-          pillText: '#fde047',
-          shortTag: 'GRAND CUP',
-          multTag: 'JACKPOT',
-        },
-        WILD_STAR: {
-          tileBg: 'linear-gradient(180deg, #e0f2fe 0%, #38bdf8 100%)',
-          pillBg: '#0f172a',
-          pillText: '#38bdf8',
-          shortTag: '2X WILD',
-          multTag: '40X',
-        },
-        DIAMOND_BALL: {
-          tileBg: 'linear-gradient(180deg, #f8fafc 0%, #cbd5e1 100%)',
-          pillBg: '#0f172a',
-          pillText: '#ffffff',
-          shortTag: 'GOLD BALL',
-          multTag: '20X',
-        },
-        GOLD_BOOT: {
-          tileBg: 'linear-gradient(180deg, #ffedd5 0%, #fb923c 100%)',
-          pillBg: '#0f172a',
-          pillText: '#fed7aa',
-          shortTag: 'STRIKER',
-          multTag: '12X',
-        },
-        FIRE_FLAME: {
-          tileBg: 'linear-gradient(180deg, #ffe4e6 0%, #fb7185 100%)',
-          pillBg: '#0f172a',
-          pillText: '#fecdd3',
-          shortTag: 'FLOW FIRE',
-          multTag: '6X',
-        },
-        WHISTLE: {
-          tileBg: 'linear-gradient(180deg, #d1fae5 0%, #34d399 100%)',
-          pillBg: '#0f172a',
-          pillText: '#a7f3d0',
-          shortTag: 'WHISTLE',
-          multTag: '3X',
-        },
-        CHERRY_CARD: {
-          tileBg: 'linear-gradient(180deg, #fae8ff 0%, #e879f9 100%)',
-          pillBg: '#0f172a',
-          pillText: '#f5d0fe',
-          shortTag: 'CHERRY',
-          multTag: '2X/1X',
-        },
-        SCATTER_CROWN: {
-          tileBg: 'linear-gradient(180deg, #fef3c7 0%, #f472b6 100%)',
-          pillBg: '#0f172a',
-          pillText: '#fde047',
-          shortTag: 'CROWN ORB',
-          multTag: 'HOLD&SPIN',
-        },
+      const multTagMap: Record<PokieSymbolId, string> = {
+        MEGA_TROPHY: 'JACKPOT',
+        WILD_STAR: '40X',
+        DIAMOND_BALL: '20X',
+        GOLD_BOOT: '12X',
+        FIRE_FLAME: '6X',
+        WHISTLE: '3X',
+        CHERRY_CARD: '2X/1X',
+        SCATTER_CROWN: 'HOLD&SPIN',
       };
 
-      const theme = tileThemeMap[safeId];
       return {
         ...spec,
         svg: svgMap[safeId],
-        tileBg: theme.tileBg,
-        pillBg: theme.pillBg,
-        pillText: theme.pillText,
-        shortTag: theme.shortTag,
-        multTag: theme.multTag,
+        tileBg: mTheme.tileBg,
+        pillBg: mTheme.pillBg,
+        pillText: mTheme.pillText,
+        shortTag: mTheme.shortTag,
+        borderHex: mTheme.borderHex,
+        multTag: multTagMap[safeId],
       };
     }
 
@@ -8560,6 +9655,16 @@ export default function App() {
       teaserReel2 = false,
       stoppedReels: [boolean, boolean, boolean] = [false, false, false]
     ) {
+      const mId = selectedPokieMachine;
+      const cellShapeClass =
+        mId === 'COSMIC_NEON'
+          ? 'rounded-md border-[2.5px]'
+          : mId === 'VOLCANO_INFERNO'
+            ? 'rounded-lg border-[3px]'
+            : mId === 'HIGH_ROLLER_ROYAL'
+              ? 'rounded-xl border-[3px]'
+              : 'rounded-xl border-[2.5px]';
+
       for (let col = 0; col < 3; col++) {
         const reelColEl = document.getElementById(`slotReelCol${col}`);
         if (reelColEl) {
@@ -8571,14 +9676,14 @@ export default function App() {
           const cellEl = document.getElementById(`slotCell_${col}_${row}`);
           if (!cellEl) continue;
           const symId = grid[col]?.[row] || 'DIAMOND_BALL';
-          const vis = getPokieSymbolVisual(symId);
+          const vis = getPokieSymbolVisual(symId, mId);
           const isWinner = winningCells.has(`${col}_${row}`);
           const isCenterRow = row === 1;
           cellEl.style.background = isWinner
             ? 'linear-gradient(180deg, #ffffff 0%, #fef08a 45%, #facc15 100%)'
             : vis.tileBg;
-          cellEl.style.borderColor = '#0f172a';
-          cellEl.className = `slot-symbol-cell relative rounded-2xl border-[2.5px] p-1 sm:p-1.5 flex flex-col items-center justify-center text-center transition-all duration-150 select-none min-h-[58px] sm:min-h-[64px] ${
+          cellEl.style.borderColor = isWinner ? '#dc2626' : vis.borderHex;
+          cellEl.className = `slot-symbol-cell relative ${cellShapeClass} p-1 sm:p-1.5 flex flex-col items-center justify-center text-center transition-all duration-150 select-none min-h-[58px] sm:min-h-[64px] ${
             isWinner
               ? 'slot-cell-winner z-10'
               : isCenterRow
@@ -8587,10 +9692,10 @@ export default function App() {
           }`;
           cellEl.innerHTML = `
             <span class="absolute top-1 right-1 px-1 py-0.2 rounded text-[7px] font-mono-num font-black uppercase tracking-tighter border border-slate-900/30" style="background:${
-              isWinner ? '#dc2626' : 'rgba(255,255,255,0.88)'
-            };color:${isWinner ? '#ffffff' : '#0f172a'}">${isWinner ? 'WIN!' : vis.multTag}</span>
+              isWinner ? '#dc2626' : vis.pillBg
+            };color:${isWinner ? '#ffffff' : vis.pillText}">${isWinner ? 'WIN!' : vis.multTag}</span>
             <div class="my-0.5 flex items-center justify-center">${vis.svg}</div>
-            <span class="text-[8px] sm:text-[9px] font-black uppercase tracking-wider mt-0.5 px-2 py-0.2 rounded-full border border-slate-900 whitespace-nowrap" style="background:${vis.pillBg};color:${vis.pillText}">${vis.shortTag}</span>
+            <span class="text-[8px] sm:text-[9px] font-black uppercase tracking-wider mt-0.5 px-2 py-0.2 rounded border border-slate-900 whitespace-nowrap" style="background:${vis.pillBg};color:${vis.pillText}">${vis.shortTag}</span>
           `;
         }
       }
@@ -8598,6 +9703,7 @@ export default function App() {
 
     function syncPokieMachineThemeAndBetUI() {
       const machine = POKIE_MACHINES[selectedPokieMachine] || POKIE_MACHINES.CHAMPIONS_GOLD;
+      sound.setPokieMachine(selectedPokieMachine);
       const cabinetCard = document.getElementById('slotCabinetCard');
       const cabinetHeader = document.getElementById('slotCabinetHeader');
       const cabinetTagline = document.getElementById('slotCabinetTagline');
@@ -8651,7 +9757,7 @@ export default function App() {
       }
 
       if (reelHousing) {
-        reelHousing.style.backgroundColor = machine.reelHousingBg;
+        reelHousing.style.background = machine.reelHousingBg;
         reelHousing.style.borderColor = machine.reelBorderHex;
       }
 
@@ -9714,6 +10820,7 @@ export default function App() {
         sound.playSlotWin('BIG');
         userProfile.balance = res.newBalance;
         userProfile.unlockedStadiums = res.unlockedItems;
+        homeMenuStadiumId = stadiumId;
         preferredArenaMode = stadiumId;
         selectedPitchTheme = stadiumId;
         applyPitchTheme(stadiumId);
@@ -9731,15 +10838,15 @@ export default function App() {
           ? `${res.message} — USE THE HOME MENU STADIUM BAR TO SELECT OR SHUFFLE!`
           : res.message;
         banner.className = res.success
-          ? 'p-2.5 rounded-2xl bg-emerald-200 border-2 border-slate-900 text-emerald-950 font-black text-[11px] uppercase tracking-wide text-center mb-2.5 shadow-[0_2px_0_#0f172a]'
-          : 'p-2.5 rounded-2xl bg-rose-200 border-2 border-slate-900 text-rose-950 font-black text-[11px] uppercase tracking-wide text-center mb-2.5 shadow-[0_2px_0_#0f172a]';
+          ? 'p-2.5 rounded-xl bg-emerald-200 border-2 border-slate-900 text-emerald-950 font-black text-[11px] uppercase tracking-wide text-center mb-2.5 shadow-[0_2px_0_#0f172a]'
+          : 'p-2.5 rounded-xl bg-rose-200 border-2 border-slate-900 text-rose-950 font-black text-[11px] uppercase tracking-wide text-center mb-2.5 shadow-[0_2px_0_#0f172a]';
         banner.classList.remove('hidden');
       }
       return res;
     }
 
     // =========================================================================
-    // ONLINE LEADERBOARD MODAL (REAL PLAYER PROFILES • SORT BY RANK OR MONEY)
+    // ONLINE LEADERBOARD MODAL (REAL PLAYER PROFILES + CPU LADDER RIVALS)
     // =========================================================================
     let currentLeaderboardSort: LeaderboardSortMode = 'RANK';
     let onlineLeaderboardEntries: LeaderboardEntry[] = [];
@@ -9760,6 +10867,10 @@ export default function App() {
         updatedAt: Date.now(),
       };
       const map = new Map<string, LeaderboardEntry>();
+      // Seed ladder with the loaded CPU playerbase profiles so the leaderboard is rich & competitive
+      for (const cpuEntry of SEEDED_CPU_LEADERBOARD_PROFILES) {
+        map.set(cpuEntry.uid, cpuEntry);
+      }
       for (const e of onlineLeaderboardEntries) {
         map.set(e.uid, e);
       }
@@ -9821,22 +10932,23 @@ export default function App() {
           const pos = idx + 1;
           const medal = pos === 1 ? '🥇' : pos === 2 ? '🥈' : pos === 3 ? '🥉' : `#${pos}`;
           const initials = (entry.name || 'PL').trim().slice(0, 2).toUpperCase() || 'PL';
+          const avatarBgHex = entry.avatarBgHex || '#38bdf8';
           const avatarHtml =
             entry.iconType === 'photo' && entry.photoDataUrl
               ? `<img src="${entry.photoDataUrl}" alt="${entry.name}" class="w-full h-full object-cover" />`
-              : `<span class="text-xs font-black text-slate-900">${initials}</span>`;
+              : `<span class="text-xs font-black text-slate-950">${initials}</span>`;
 
           return `
-            <div class="p-2.5 sm:p-3 rounded-2xl border-2 border-slate-900 ${
+            <div class="p-2.5 sm:p-3 rounded-xl border-2 border-slate-900 ${
               isYou ? 'bg-amber-50 shadow-[0_3px_0_#0f172a]' : 'bg-white shadow-[0_2px_0_#0f172a]'
             } flex items-center justify-between gap-2.5">
               <div class="flex items-center gap-2.5 min-w-0">
-                <div class="w-8 h-8 rounded-xl ${
+                <div class="w-8 h-8 rounded-lg ${
                   pos <= 3 ? 'bg-amber-300' : 'bg-slate-100'
                 } border-2 border-slate-900 font-mono-num text-xs font-black text-slate-900 flex items-center justify-center shrink-0">
                   ${medal}
                 </div>
-                <div class="w-10 h-10 rounded-2xl bg-sky-400 border-2 border-slate-900 overflow-hidden flex items-center justify-center shrink-0" style="border-color:${rankTier.borderHex}">
+                <div class="w-10 h-10 rounded-xl border-2 border-slate-900 overflow-hidden flex items-center justify-center shrink-0" style="background:${avatarBgHex};border-color:${rankTier.borderHex}">
                   ${avatarHtml}
                 </div>
                 <div class="min-w-0">
@@ -9850,7 +10962,7 @@ export default function App() {
                     <span class="px-1.5 py-0.2 rounded bg-slate-900 text-amber-300 font-mono-num text-[8px] font-black uppercase">LVL ${lvlSummary.clubLevel}</span>
                   </div>
                   <div class="flex items-center gap-1.5 mt-0.5">
-                    <span class="inline-flex items-center gap-1 px-2 py-0.2 rounded-full border text-[9px] font-black" style="background:${rankTier.badgeBgHex};color:${rankTier.badgeTextHex};border-color:${rankTier.borderHex}">
+                    <span class="inline-flex items-center gap-1 px-2 py-0.2 rounded border text-[9px] font-black" style="background:${rankTier.badgeBgHex};color:${rankTier.badgeTextHex};border-color:${rankTier.borderHex}">
                       ${getRankCrestSvgHtml(rankTier, 'w-3 h-3')}
                       <span>${rankTier.name}</span>
                     </span>
@@ -10080,6 +11192,34 @@ export default function App() {
     }
 
     if (editProfileBtn) editProfileBtn.addEventListener('click', openEditProfileModal);
+    const profileSettingsToggleBtn = document.getElementById('profileSettingsToggleBtn');
+    const deleteAccountInitBtn = document.getElementById('deleteAccountInitBtn');
+    const deleteAccountCancelBtn = document.getElementById('deleteAccountCancelBtn');
+    const deleteAccountConfirmBtn = document.getElementById('deleteAccountConfirmBtn');
+    if (profileSettingsToggleBtn) {
+      profileSettingsToggleBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        handleToggleProfileSettings();
+      });
+    }
+    if (deleteAccountInitBtn) {
+      deleteAccountInitBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        handleInitDeleteAccountPrompt();
+      });
+    }
+    if (deleteAccountCancelBtn) {
+      deleteAccountCancelBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        handleCancelDeleteAccountPrompt();
+      });
+    }
+    if (deleteAccountConfirmBtn) {
+      deleteAccountConfirmBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        handleConfirmDeleteAndResetAccount();
+      });
+    }
     if (switchToEditProfileBtn) {
       switchToEditProfileBtn.addEventListener('click', (e) => {
         e.stopPropagation();
@@ -11270,15 +12410,22 @@ export default function App() {
           activeJackpotChallenge,
           preferredArenaMode,
           selectedPitchTheme,
+          homeMenuStadiumId,
         };
       },
       cycleStadium(step = 1) {
         cycleUnlockedStadium(step);
-        return { preferredArenaMode, selectedPitchTheme };
+        return { preferredArenaMode, selectedPitchTheme, homeMenuStadiumId };
       },
       toggleShuffleStadium() {
         toggleShuffleArenaMode();
-        return { preferredArenaMode, selectedPitchTheme };
+        return { preferredArenaMode, selectedPitchTheme, homeMenuStadiumId };
+      },
+      getDifficultyProfile() {
+        return getActiveDifficultyPreset();
+      },
+      deleteAndResetAccount() {
+        return handleConfirmDeleteAndResetAccount();
       },
     };
     (window as unknown as Record<string, unknown>).__TIKI_TAKA_TEST__ = (
@@ -11323,8 +12470,8 @@ export default function App() {
         id="landscapeLockOverlay"
         className="hidden fixed inset-0 z-[60] bg-slate-950/92 backdrop-blur-md flex-col items-center justify-center p-6 text-center"
       >
-        <div className="glass-modal rounded-[28px] max-w-sm w-full p-6 border-3 border-slate-900 shadow-[0_10px_0_#0f172a] flex flex-col items-center">
-          <div className="w-16 h-16 rounded-2xl bg-amber-300 border-2 border-slate-900 shadow-[0_4px_0_#0f172a] flex items-center justify-center mb-4">
+        <div className="glass-modal rounded-2xl max-w-sm w-full p-6 border-3 border-slate-900 shadow-[0_10px_0_#0f172a] flex flex-col items-center">
+          <div className="w-16 h-16 rounded-xl bg-amber-300 border-2 border-slate-900 shadow-[0_4px_0_#0f172a] flex items-center justify-center mb-4">
             <svg
               className="w-9 h-9 text-slate-900 animate-phone-rotate"
               viewBox="0 0 24 24"
@@ -11338,7 +12485,7 @@ export default function App() {
               <line x1="12" y1="18" x2="12.01" y2="18" />
             </svg>
           </div>
-          <div className="inline-flex items-center space-x-1.5 px-3 py-0.5 rounded-full bg-sky-100 border border-sky-400 text-[10px] font-black uppercase tracking-widest text-sky-900 mb-2">
+          <div className="inline-flex items-center space-x-1.5 px-3 py-0.5 rounded bg-sky-100 border border-sky-400 text-[10px] font-black uppercase tracking-widest text-sky-900 mb-2">
             <span>LANDSCAPE ARENA MODE</span>
           </div>
           <h2 className="text-xl font-black text-slate-900 tracking-tight">
@@ -11357,29 +12504,29 @@ export default function App() {
         </div>
       </div>
 
-      {/* Boot-Up Start Page ("PRESS ANY BUTTON TO START") over the clean original stadium background */}
+      {/* Boot-Up Start Page ("PRESS ANY BUTTON TO START") — Bold TIKI TAKA 0.2 Text Only */}
       <div
         id="splashScreen"
-        className="fixed inset-0 z-50 flex flex-col items-center justify-center p-4 sm:p-10 bg-slate-950/10 cursor-pointer overflow-hidden"
+        className="fixed inset-0 z-50 flex flex-col items-center justify-center p-4 sm:p-10 bg-slate-950/15 cursor-pointer overflow-hidden"
       >
         <div className="relative z-10 flex flex-col items-center text-center my-auto max-w-5xl px-4">
-          <div className="w-16 h-16 sm:w-22 sm:h-22 rounded-3xl bg-sky-400 flex items-center justify-center border-[3px] border-slate-900 shadow-[0_6px_0_#0f172a] mb-3 sm:mb-5">
-            <PixelSoccerBallIcon className="w-9 h-9 sm:w-13 sm:h-13" />
-          </div>
-
-          <div className="flex flex-nowrap items-baseline justify-center gap-3.5 sm:gap-6 md:gap-8 mb-6 sm:mb-12 whitespace-nowrap">
-            <span className="font-display text-5xl sm:text-7xl md:text-8xl lg:text-9xl font-black tracking-wide text-white drop-shadow-[0_6px_0_#0f172a]">
-              TIKI TAKA
-            </span>
-            <span className="font-mono-num text-4xl sm:text-6xl md:text-7xl lg:text-8xl font-black tracking-tight text-amber-300 drop-shadow-[0_6px_0_#0f172a]">
-              0.2
-            </span>
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-2.5 sm:gap-5 mb-6 sm:mb-10">
+            <div className="relative inline-block transform -skew-x-6">
+              <span className="font-display text-5xl sm:text-7xl md:text-8xl lg:text-9xl font-black tracking-wider text-white drop-shadow-[0_8px_0_#0f172a] [text-stroke:3px_#0f172a]">
+                TIKI TAKA
+              </span>
+            </div>
+            <div className="transform -skew-x-6 px-3.5 py-1 sm:px-5 sm:py-1.5 bg-gradient-to-b from-amber-300 via-amber-400 to-orange-500 border-[3px] border-slate-950 shadow-[0_6px_0_#0f172a] flex flex-col items-center">
+              <span className="font-mono-num text-2xl sm:text-4xl md:text-5xl font-black tracking-tight text-slate-950 leading-none">
+                0.2
+              </span>
+            </div>
           </div>
 
           <button
             id="splashStartBtn"
             type="button"
-            className="bg-transparent border-0 p-0 text-white font-black text-base sm:text-2xl tracking-[0.22em] uppercase cursor-pointer drop-shadow-[0_3px_0_#0f172a] focus:outline-none"
+            className="px-6 py-2.5 sm:px-8 sm:py-3 rounded-lg bg-slate-950/85 border-2 border-amber-400 text-amber-300 font-display text-sm sm:text-xl tracking-[0.2em] uppercase cursor-pointer shadow-[0_5px_0_#0f172a] focus:outline-none"
           >
             <span className="animate-pulse">PRESS ANY BUTTON TO START</span>
           </button>
@@ -11936,25 +13083,22 @@ export default function App() {
           id="menuModalCard"
           className="w-full max-w-2xl lg:max-w-5xl flex flex-col gap-3 sm:gap-4 text-center relative my-auto"
         >
-          {/* Top Bar: Title Lockup & Clickable Player Profile Card */}
+          {/* Top Bar: Clean TIKI TAKA 0.2 Text Wordmark (No Logo Icon) & Clickable Player Profile Card */}
           <div
             id="menuTopBar"
-            className="glass-modal rounded-3xl px-4 py-3 sm:px-6 sm:py-3.5 flex flex-col sm:flex-row items-center justify-center sm:justify-between gap-2.5 sm:gap-3"
+            className="glass-modal rounded-2xl px-3.5 py-2 sm:px-5 sm:py-2.5 flex flex-wrap items-center justify-between gap-2 sm:gap-3"
           >
-            <div className="flex items-center justify-center space-x-2.5 sm:space-x-3">
-              <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-2xl bg-sky-400 flex items-center justify-center border-2 border-slate-900 shadow-[0_3px_0_#0f172a] shrink-0">
-                <PixelSoccerBallIcon className="w-5 h-5 sm:w-7 sm:h-7" />
-              </div>
-              <div className="text-left">
-                <div
-                  id="menuTitleVisible"
-                  className="flex items-baseline gap-2 sm:gap-3 text-xl sm:text-3xl md:text-4xl font-black tracking-tight text-slate-900 whitespace-nowrap"
-                >
-                  <span className="font-display tracking-wide">TIKI TAKA</span>
-                  <span className="font-mono-num text-xl sm:text-3xl md:text-4xl font-black text-amber-400 drop-shadow-[0_2px_0_#0f172a]">
-                    0.2
-                  </span>
-                </div>
+            <div className="flex items-center">
+              <div
+                id="menuTitleVisible"
+                className="flex items-center gap-1.5 sm:gap-2 text-lg sm:text-2xl md:text-3xl font-black tracking-wide text-slate-900 whitespace-nowrap"
+              >
+                <span className="font-display tracking-wide transform -skew-x-6 inline-block">
+                  TIKI TAKA
+                </span>
+                <span className="font-mono-num text-xs sm:text-lg md:text-xl font-black px-2 py-0.5 bg-amber-300 text-slate-950 border-2 border-slate-900 shadow-[0_2px_0_#0f172a] transform -skew-x-6 inline-block leading-none">
+                  0.2
+                </span>
               </div>
               <h1 id="menuTitle" className="sr-only">
                 TIKI TAKA 0.2
@@ -12133,49 +13277,60 @@ export default function App() {
                 </div>
               </div>
 
-              {/* 3. Home Arena Selector & Shuffle Bar (Moved out of Club Shop for instant Home Menu switching) */}
-              <div id="stadiumSelectorWrap" className="pt-1 border-t-2 border-slate-100">
-                <div className="flex items-center justify-between mb-1.5 px-1">
-                  <span className="text-[11px] font-black uppercase tracking-wider text-slate-500">
-                    MATCH STADIUM ARENA
-                  </span>
-                  <span
-                    id="stadiumUnlockedCountText"
-                    className="font-mono-num text-[9.5px] font-black uppercase tracking-wider text-emerald-700"
+              {/* 3. Home Arena Selector & Shuffle Bar (Uncramped, Clean Layout for Mobile & PC, No Ratio Text) */}
+              <div id="stadiumSelectorWrap" className="pt-1.5 border-t-2 border-slate-200">
+                <div className="flex flex-wrap items-center justify-between gap-1.5 mb-1.5 px-0.5">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10.5px] sm:text-[11px] font-black uppercase tracking-wider text-slate-600">
+                      MATCH STADIUM
+                    </span>
+                    <span
+                      id="stadiumUnlockedCountText"
+                      className="font-mono-num text-[9px] sm:text-[9.5px] font-black uppercase tracking-wider px-1.5 py-0.2 rounded bg-emerald-100 border border-emerald-500 text-emerald-800"
+                    >
+                      1/10 UNLOCKED
+                    </span>
+                  </div>
+                  <button
+                    id="stadiumShuffleBtn"
+                    type="button"
+                    title="When ON, keeps your Home Menu arena steady and randomly selects an unlocked stadium when a match loads"
+                    className="btn-clean py-1 px-2.5 rounded-lg bg-amber-300 border-2 border-slate-900 text-slate-950 font-black text-[10px] uppercase tracking-wider shadow-[0_2px_0_#0f172a] cursor-pointer shrink-0"
                   >
-                    1/10 UNLOCKED
-                  </span>
+                    🎲 Shuffle: ON
+                  </button>
                 </div>
-                <div className="p-2 rounded-2xl bg-slate-100 border-2 border-slate-900 flex items-center justify-between gap-2">
+
+                <div className="p-2 sm:p-2.5 rounded-xl bg-slate-100 border-2 border-slate-900 flex items-center justify-between gap-2 sm:gap-3">
                   <button
                     id="stadiumPrevBtn"
                     type="button"
                     aria-label="Previous Unlocked Stadium"
-                    className="btn-clean w-8 h-8 rounded-xl bg-white hover:bg-slate-200 border-2 border-slate-900 text-slate-900 font-black text-xs flex items-center justify-center cursor-pointer shrink-0 shadow-[0_2px_0_#0f172a]"
+                    className="btn-clean w-8 h-8 sm:w-9 sm:h-9 rounded-lg bg-white hover:bg-slate-200 border-2 border-slate-900 text-slate-900 font-black text-xs flex items-center justify-center cursor-pointer shrink-0 shadow-[0_2px_0_#0f172a]"
                   >
                     ◀
                   </button>
-                  <div className="flex items-center gap-2 min-w-0 flex-1">
-                    <span
-                      id="activeStadiumSwatch"
-                      className="w-6 h-6 rounded-lg border-2 border-slate-900 shrink-0 shadow-xs"
-                      style={{
-                        background: 'linear-gradient(135deg, #63d297 0%, #52b788 100%)',
+                  <div className="flex items-center gap-2.5 sm:gap-3 min-w-0 flex-1">
+                    <div
+                      id="homeStadiumTrueRatioPreview"
+                      className="w-20 sm:w-24 md:w-28 aspect-[2720/1580] rounded-md border-2 border-slate-900 bg-slate-950 overflow-hidden shrink-0 shadow-[0_2px_0_#0f172a]"
+                      dangerouslySetInnerHTML={{
+                        __html: getTrueRatioStadiumSvgHtml('CLASSIC_TURF'),
                       }}
                     />
-                    <div className="min-w-0 flex-1">
+                    <div className="min-w-0 flex-1 text-left">
                       <div
                         id="activeStadiumNameText"
-                        className="text-xs sm:text-sm font-black text-slate-900 truncate leading-tight"
+                        className="text-xs sm:text-sm md:text-base font-black text-slate-900 leading-tight break-words"
                       >
-                        🎲 Shuffle (Sunlit Classic)
+                        Sunlit Classic
                       </div>
-                      <div className="flex items-center gap-1.5 mt-0.5">
+                      <div className="flex flex-wrap items-center gap-1.5 mt-1">
                         <span
                           id="activeStadiumModePill"
-                          className="px-1.5 py-0.2 rounded text-[8px] font-black uppercase tracking-wider border border-slate-900 bg-amber-300 text-slate-950"
+                          className="inline-block px-2 py-0.5 rounded text-[8.5px] sm:text-[9px] font-black uppercase tracking-wider border border-slate-900 bg-amber-300 text-slate-950 leading-none"
                         >
-                          SHUFFLE UNLOCKED
+                          🎲 SHUFFLE ON MATCH LOAD
                         </span>
                       </div>
                     </div>
@@ -12184,17 +13339,9 @@ export default function App() {
                     id="stadiumNextBtn"
                     type="button"
                     aria-label="Next Unlocked Stadium"
-                    className="btn-clean w-8 h-8 rounded-xl bg-white hover:bg-slate-200 border-2 border-slate-900 text-slate-900 font-black text-xs flex items-center justify-center cursor-pointer shrink-0 shadow-[0_2px_0_#0f172a]"
+                    className="btn-clean w-8 h-8 sm:w-9 sm:h-9 rounded-lg bg-white hover:bg-slate-200 border-2 border-slate-900 text-slate-900 font-black text-xs flex items-center justify-center cursor-pointer shrink-0 shadow-[0_2px_0_#0f172a]"
                   >
                     ▶
-                  </button>
-                  <button
-                    id="stadiumShuffleBtn"
-                    type="button"
-                    title="Shuffle between your unlocked stadiums"
-                    className="btn-clean py-1.5 px-2.5 rounded-xl bg-amber-300 border-2 border-slate-900 text-slate-950 font-black text-[10px] uppercase tracking-wider shadow-[0_2px_0_#0f172a] cursor-pointer shrink-0"
-                  >
-                    🎲 Shuffle: ON
                   </button>
                 </div>
               </div>
@@ -12203,24 +13350,24 @@ export default function App() {
             {/* Right Column: Locker-Room 1v1 Online Matchmaking Card */}
             <div
               id="matchmakingCard"
-              className="sm:col-span-5 w-full p-4 sm:p-5 rounded-3xl bg-white border-3 border-slate-900 shadow-[0_6px_0_#0f172a] text-left transition-all duration-300 relative overflow-hidden flex flex-col justify-between"
+              className="sm:col-span-5 w-full p-3.5 sm:p-5 rounded-3xl bg-white border-3 border-slate-900 shadow-[0_6px_0_#0f172a] text-left transition-all duration-300 relative overflow-hidden flex flex-col justify-between"
             >
-              <div className="flex items-center justify-between text-[11px] font-extrabold uppercase tracking-wider mb-3 px-1">
+              <div className="flex items-center justify-between text-[11px] font-extrabold uppercase tracking-wider mb-2.5 sm:mb-3 px-1">
                 <span id="mmStatusLabel" className="flex items-center space-x-2 text-slate-800 transition-colors min-w-0">
                   <i id="mmStatusIcon" className="fa-solid fa-futbol text-sky-500 text-xs shrink-0" />
-                  <span id="mmStatusText" className="truncate">Casual 1v1 Queue</span>
+                  <span id="mmStatusText" className="truncate">Casual 1v1 Matchmaking</span>
                 </span>
                 <span id="mmSearchTimer" className="font-mono-num text-[11px] font-bold text-sky-600 hidden shrink-0 ml-2">
                   0.0s
                 </span>
               </div>
 
-              <div className="grid grid-cols-2 gap-3 relative items-stretch my-auto">
+              <div className="grid grid-cols-2 gap-2.5 sm:gap-3 relative items-stretch my-auto">
                 {/* Left Card: YOU */}
-                <div className="bg-slate-50 rounded-2xl p-3 sm:p-4 border-2 border-slate-900 shadow-[0_3px_0_rgba(15,23,42,0.08)] flex flex-col items-center justify-center text-center min-w-0">
+                <div className="bg-slate-50 rounded-2xl p-2.5 sm:p-3.5 border-2 border-slate-900 shadow-[0_3px_0_rgba(15,23,42,0.08)] flex flex-col items-center justify-center text-center min-w-0">
                   <div
                     id="mmYouAvatar"
-                    className="w-12 h-12 sm:w-16 sm:h-16 rounded-2xl bg-sky-400 border-[3px] border-amber-600 text-slate-900 font-black text-xs flex flex-col items-center justify-center shadow-xs mb-1.5 sm:mb-2 relative overflow-hidden transition-colors shrink-0"
+                    className="w-12 h-12 sm:w-15 sm:h-15 rounded-2xl bg-sky-400 border-[3px] border-amber-600 text-slate-900 font-black text-xs flex flex-col items-center justify-center shadow-xs mb-1.5 relative overflow-hidden transition-colors shrink-0"
                   >
                     <img
                       id="mmYouAvatarImg"
@@ -12236,11 +13383,11 @@ export default function App() {
                     </span>
                   </div>
                   <div id="mmYouTitle" className="text-xs sm:text-sm font-black text-slate-900 truncate max-w-full px-1">
-                    Player (Home Kit)
+                    Player
                   </div>
                   <div
                     id="mmYouPill"
-                    className="inline-flex items-center space-x-1 mt-1 px-2.5 py-0.5 rounded-full bg-sky-100 text-[10px] sm:text-[11px] font-extrabold text-sky-800 max-w-full"
+                    className="inline-flex items-center space-x-1 mt-1 px-2 py-0.5 rounded-full bg-sky-100 text-[9.5px] sm:text-[10.5px] font-extrabold text-sky-800 max-w-full"
                   >
                     <span id="mmYouDot" className="w-1.5 h-1.5 rounded-full bg-sky-500 shrink-0" />
                     <span id="mmYouMeta" className="truncate">Home Kit (Sky)</span>
@@ -12250,7 +13397,7 @@ export default function App() {
                 {/* Center Floating VS Badge */}
                 <div
                   id="mmVsBadge"
-                  className="w-8 h-8 sm:w-10 sm:h-10 rounded-2xl bg-amber-300 text-slate-900 font-black text-xs flex items-center justify-center shadow-[0_3px_0_#0f172a] border-2 border-slate-900 absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-10 transition-colors duration-200"
+                  className="w-8 h-8 sm:w-9 sm:h-9 rounded-2xl bg-amber-300 text-slate-900 font-black text-[11px] sm:text-xs flex items-center justify-center shadow-[0_3px_0_#0f172a] border-2 border-slate-900 absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-10 transition-colors duration-200"
                 >
                   VS
                 </div>
@@ -12258,20 +13405,20 @@ export default function App() {
                 {/* Right Card: RIVAL SLOT */}
                 <div
                   id="mmOpponentSlotCard"
-                  className="bg-gradient-to-b from-rose-50 to-white rounded-2xl p-3 sm:p-4 border-2 border-dashed border-rose-300 flex flex-col items-center justify-center text-center transition-colors duration-200 min-w-0"
+                  className="bg-gradient-to-b from-rose-50 to-white rounded-2xl p-2.5 sm:p-3.5 border-2 border-dashed border-rose-300 flex flex-col items-center justify-center text-center transition-colors duration-200 min-w-0"
                 >
                   <div
                     id="mmOpponentAvatar"
-                    className="w-12 h-12 sm:w-16 sm:h-16 rounded-2xl bg-rose-100/80 border-2 border-dashed border-rose-300 text-rose-500 font-black text-sm flex items-center justify-center mb-1.5 sm:mb-2 relative transition-colors duration-200 shrink-0"
+                    className="w-12 h-12 sm:w-15 sm:h-15 rounded-2xl bg-rose-100/80 border-2 border-dashed border-rose-300 text-rose-500 font-black text-sm flex items-center justify-center mb-1.5 relative transition-colors duration-200 shrink-0"
                   >
                     <i className="fa-solid fa-user-astronaut text-sm" />
                   </div>
                   <div id="mmOpponentName" className="text-xs sm:text-sm font-black text-rose-500 truncate max-w-full px-1">
-                    Searching Slot
+                    Open Slot
                   </div>
                   <div
                     id="mmOpponentPingPill"
-                    className="inline-flex items-center space-x-1 mt-1 px-2.5 py-0.5 rounded-full bg-rose-100 text-[10px] sm:text-[11px] font-extrabold text-rose-800 max-w-full"
+                    className="inline-flex items-center space-x-1 mt-1 px-2 py-0.5 rounded-full bg-rose-100 text-[9.5px] sm:text-[10.5px] font-extrabold text-rose-800 max-w-full"
                   >
                     <span id="mmOpponentMeta" className="truncate">Away Kit (Coral)</span>
                   </div>
@@ -12806,7 +13953,7 @@ export default function App() {
               <span>Edit Name &amp; Avatar</span>
             </button>
 
-            {/* Coupon Code Redemption Section at the Bottom of Player Profile UI (Extra text only pops up after code entry, resets on close) */}
+            {/* Coupon Code Redemption Section */}
             <div
               id="profileCouponSection"
               className="p-3.5 rounded-2xl bg-amber-50/90 border-2 border-slate-900 shadow-[0_3px_0_#0f172a]"
@@ -12837,6 +13984,79 @@ export default function App() {
                 </button>
               </div>
               <div id="couponFeedbackText" className="hidden" />
+            </div>
+
+            {/* Settings Button & Delete Account Confirmation Flow at Bottom of Profile Tab */}
+            <div id="profileSettingsWrap" className="pt-1 border-t-2 border-slate-200">
+              <button
+                id="profileSettingsToggleBtn"
+                type="button"
+                className="btn-clean w-full py-2.5 px-4 rounded-xl bg-slate-200 hover:bg-slate-300 border-2 border-slate-900 text-slate-800 font-black text-xs uppercase tracking-wider shadow-[0_2px_0_#0f172a] cursor-pointer flex items-center justify-center gap-2"
+              >
+                <i className="fa-solid fa-gear text-xs" />
+                <span>Settings</span>
+              </button>
+
+              <div
+                id="profileSettingsPanel"
+                className="hidden mt-2.5 p-3 rounded-2xl bg-slate-100 border-2 border-slate-900 shadow-[0_3px_0_#0f172a] space-y-2.5"
+              >
+                <div className="flex items-center justify-between">
+                  <span className="text-[10.5px] font-black uppercase tracking-wider text-slate-700">
+                    ACCOUNT &amp; DATA SETTINGS
+                  </span>
+                  <span className="text-[9px] font-mono-num font-bold text-slate-500">
+                    LOCAL + CLOUD SAVE
+                  </span>
+                </div>
+
+                <div
+                  id="deleteAccountStatusBanner"
+                  className="hidden p-2 rounded-xl bg-emerald-200 border-2 border-slate-900 text-emerald-950 font-black text-[10px] uppercase tracking-wide text-center"
+                />
+
+                <button
+                  id="deleteAccountInitBtn"
+                  type="button"
+                  className="btn-clean w-full py-2.5 px-4 rounded-xl bg-rose-500 hover:bg-rose-400 border-2 border-slate-900 text-white font-black text-xs uppercase tracking-wider shadow-[0_2px_0_#0f172a] cursor-pointer flex items-center justify-center gap-2"
+                >
+                  <i className="fa-solid fa-trash-can text-xs" />
+                  <span>Delete Account</span>
+                </button>
+
+                <div
+                  id="deleteAccountConfirmBox"
+                  className="hidden p-3 rounded-xl bg-rose-50 border-2 border-rose-600 space-y-2.5 text-left"
+                >
+                  <div className="flex items-start gap-2">
+                    <i className="fa-solid fa-triangle-exclamation text-rose-600 text-sm mt-0.5 shrink-0" />
+                    <div>
+                      <div className="text-xs font-black uppercase tracking-wide text-rose-900">
+                        WARNING: PERMANENT ACCOUNT RESET
+                      </div>
+                      <p className="text-[11px] font-bold text-rose-800 mt-0.5 leading-snug">
+                        You will lose all your progress, bankroll, competitive rank, unlocked stadiums, and pokie machines. This action cannot be undone.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex flex-col sm:flex-row items-center gap-2 pt-1">
+                    <button
+                      id="deleteAccountConfirmBtn"
+                      type="button"
+                      className="btn-clean w-full sm:flex-1 py-2.5 px-3 rounded-xl bg-rose-600 hover:bg-rose-500 border-2 border-slate-900 text-white font-black text-[11px] uppercase tracking-wider shadow-[0_2px_0_#0f172a] cursor-pointer text-center"
+                    >
+                      Are You Sure? Reset Account
+                    </button>
+                    <button
+                      id="deleteAccountCancelBtn"
+                      type="button"
+                      className="btn-clean w-full sm:w-auto py-2.5 px-4 rounded-xl bg-white hover:bg-slate-100 border-2 border-slate-900 text-slate-800 font-black text-[11px] uppercase tracking-wider shadow-[0_2px_0_#0f172a] cursor-pointer text-center"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -13025,7 +14245,7 @@ export default function App() {
               className="hidden p-2 rounded-xl bg-rose-200 border-2 border-slate-900 text-rose-950 font-black text-[10px] uppercase tracking-wide text-center shadow-[0_2px_0_#0f172a]"
             />
 
-            {/* 4 Distinct Pokie Machine Buttons (Locked machines appear greyed out with LOCKED overlay until bought) */}
+            {/* 4 Visually Distinct Pokie Machine Cabinets (Each with bespoke cabinet artwork & silhouette) */}
             <div id="slotMachineSelectorBar" className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
               {POKIE_MACHINE_LIST.map((m) => {
                 const isHighRoller = m.id === 'HIGH_ROLLER_ROYAL';
@@ -13040,7 +14260,7 @@ export default function App() {
                     data-machine-id={m.id}
                     data-unlocked={isDefaultUnlocked ? 'true' : 'false'}
                     style={{ background: m.headerGradient }}
-                    className={`slot-machine-select-btn relative p-3.5 rounded-2xl border-3 border-slate-900 shadow-[0_4px_0_#0f172a] text-left transition-all flex flex-col justify-between min-h-[116px] overflow-hidden ${
+                    className={`slot-machine-select-btn relative p-3 rounded-xl border-3 border-slate-900 shadow-[0_4px_0_#0f172a] text-left transition-all flex flex-col justify-between min-h-[156px] overflow-hidden ${
                       isDefaultUnlocked
                         ? 'hover:translate-y-[-1px] cursor-pointer'
                         : 'cursor-not-allowed grayscale opacity-75'
@@ -13053,7 +14273,7 @@ export default function App() {
                         isDefaultUnlocked ? 'hidden ' : ''
                       }absolute inset-0 z-20 bg-slate-950/75 backdrop-blur-[1.5px] flex flex-col items-center justify-center p-2 text-center`}
                     >
-                      <div className="px-3 py-1 rounded-full bg-amber-300 border-2 border-slate-950 text-slate-950 font-black text-[10px] sm:text-xs uppercase tracking-widest shadow-[0_3px_0_#000000]">
+                      <div className="px-3 py-1 rounded bg-amber-300 border-2 border-slate-950 text-slate-950 font-black text-[10px] sm:text-xs uppercase tracking-widest shadow-[0_3px_0_#000000]">
                         🔒 LOCKED • ${m.unlockPrice.toLocaleString()}
                       </div>
                       <div className="text-[9px] font-extrabold uppercase tracking-wider text-white mt-1">
@@ -13061,10 +14281,15 @@ export default function App() {
                       </div>
                     </div>
 
+                    {/* Bespoke Pokie Machine Illustration Preview */}
+                    <div className="mb-2">
+                      <ShopPokiePreviewIllustration machineId={m.id} />
+                    </div>
+
                     <div>
                       <div className="flex items-center justify-between gap-1.5">
                         <span
-                          className="text-[8.5px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full border border-slate-950"
+                          className="text-[8.5px] font-black uppercase tracking-widest px-2 py-0.5 rounded border border-slate-950"
                           style={{ backgroundColor: m.accentHex, color: '#0f172a' }}
                         >
                           {stakesBadgeText}
@@ -13075,7 +14300,7 @@ export default function App() {
                       </div>
                       <div
                         id={`slotMachineName_${m.id}`}
-                        className="text-sm sm:text-base font-black uppercase tracking-tight text-white mt-1.5"
+                        className="text-sm sm:text-base font-black uppercase tracking-tight text-white mt-1"
                       >
                         {m.name}
                       </div>
@@ -13087,7 +14312,7 @@ export default function App() {
                       </div>
                     </div>
 
-                    <div className="mt-2.5 pt-2 border-t border-white/15 flex items-center justify-between">
+                    <div className="mt-2 pt-2 border-t border-white/15 flex items-center justify-between">
                       <div>
                         <div className="text-[7.5px] font-black uppercase tracking-widest text-amber-300">
                           GRAND JACKPOT
@@ -13101,7 +14326,7 @@ export default function App() {
                       </div>
                       <span
                         id={`slotMachineCtaPill_${m.id}`}
-                        className="px-2.5 py-1 rounded-xl font-black text-[9.5px] uppercase tracking-wider border-2 border-slate-950 shadow-[0_2px_0_#000000]"
+                        className="px-2.5 py-1 rounded-lg font-black text-[9.5px] uppercase tracking-wider border-2 border-slate-950 shadow-[0_2px_0_#000000]"
                         style={{ backgroundColor: m.accentHex, color: '#0f172a' }}
                       >
                         {isDefaultUnlocked ? 'PLAY MACHINE →' : `🔒 $${m.unlockPrice.toLocaleString()} IN SHOP`}

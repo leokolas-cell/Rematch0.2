@@ -56,11 +56,19 @@ import {
   purchaseShopStadium,
   purchaseShopPokieMachine,
   sortLeaderboardEntries,
+  computeMatchDifficultyProfile,
+  SEEDED_CPU_LEADERBOARD_PROFILES,
+  createDefaultPlayerProfile,
+  getPokieMachineSymbolTheme,
+  POKIE_SYMBOLS,
+  getStadiumSurroundingsDiorama,
+  STADIUM_SURROUNDINGS_DIORAMAS,
   GAME_TITLE,
   FIREBASE_CLOUD_TITLE,
   type LeaderboardEntry,
   type PlayerStateSnapshot,
   type KeeperStateSnapshot,
+  type PokieSymbolId,
 } from './rules.ts';
 import {
   GRAPHICS_CONFIG,
@@ -70,7 +78,12 @@ import {
   STADIUM_GOAL_EFFECTS,
   getStadiumGoalEffect,
 } from './graphicsConfig.ts';
-import { STADIUM_MUSIC_PROFILES, getStadiumMusicProfile } from './soundEngine.ts';
+import {
+  STADIUM_MUSIC_PROFILES,
+  getStadiumMusicProfile,
+  POKIE_SOUND_PROFILES,
+  getPokieSoundProfile,
+} from './soundEngine.ts';
 
 test('Expanded PITCH specification provides spread-out tiki-taka passing room and 3-game Tournament config', () => {
   assert.equal(PITCH.width, 2720);
@@ -1039,6 +1052,139 @@ test('TIKI TAKA 0.2 branding, Firebase cloud title, and Rank & Division symbols 
   assert.equal(lvlSummary.clubLevel, 3); // 1 + floor(270 / 100) = 3
   assert.equal(lvlSummary.xpInCurrentLevel, 70);
   assert.equal(lvlSummary.xpForNextLevel, 100);
+});
+
+test('computeMatchDifficultyProfile increases CPU difficulty as player climbs higher ranks and advances further in a tournament', () => {
+  // 1. Ranked mode difficulty scales monotonically from Bronze I (0 wins) to Star League (6+ wins)
+  const rankedBronze = computeMatchDifficultyProfile('RANKED', 0, 0);
+  const rankedSilver = computeMatchDifficultyProfile('RANKED', 2, 0);
+  const rankedPlat = computeMatchDifficultyProfile('RANKED', 4, 0);
+  const rankedStar = computeMatchDifficultyProfile('RANKED', 6, 0);
+  const rankedStarVeteran = computeMatchDifficultyProfile('RANKED', 10, 0);
+
+  assert.ok(rankedSilver.cpuSpeed > rankedBronze.cpuSpeed);
+  assert.ok(rankedPlat.cpuSpeed > rankedSilver.cpuSpeed);
+  assert.ok(rankedStar.cpuSpeed > rankedPlat.cpuSpeed);
+  assert.ok(rankedStarVeteran.cpuSpeed > rankedStar.cpuSpeed);
+  assert.ok(rankedStar.keeperSpeed > rankedBronze.keeperSpeed);
+  assert.ok(rankedStar.tackleChance > rankedBronze.tackleChance);
+  assert.ok(rankedStar.decisionDelay < rankedBronze.decisionDelay);
+
+  // 2. Tournament mode difficulty increases across Round 0 (QF) -> Round 1 (SF) -> Round 2 (GF)
+  const tourneyQf = computeMatchDifficultyProfile('TOURNAMENT', 2, 0, 'CUP_100');
+  const tourneySf = computeMatchDifficultyProfile('TOURNAMENT', 2, 1, 'CUP_100');
+  const tourneyGf = computeMatchDifficultyProfile('TOURNAMENT', 2, 2, 'CUP_100');
+
+  assert.ok(tourneySf.cpuSpeed > tourneyQf.cpuSpeed);
+  assert.ok(tourneyGf.cpuSpeed > tourneySf.cpuSpeed);
+  assert.ok(tourneySf.keeperSpeed > tourneyQf.keeperSpeed);
+  assert.ok(tourneyGf.keeperSpeed > tourneySf.keeperSpeed);
+  assert.ok(tourneyGf.decisionDelay < tourneyQf.decisionDelay);
+
+  // 3. Tournament mode ALSO scales with the player's rank AND higher tournament cup tiers
+  const tourneyBronzeQf = computeMatchDifficultyProfile('TOURNAMENT', 0, 0, 'CUP_100');
+  const tourneyDiamondQf = computeMatchDifficultyProfile('TOURNAMENT', 5, 0, 'CUP_100');
+  const tourneyHighTierQf = computeMatchDifficultyProfile('TOURNAMENT', 5, 0, 'CUP_10000');
+
+  assert.ok(tourneyDiamondQf.cpuSpeed > tourneyBronzeQf.cpuSpeed);
+  assert.ok(tourneyHighTierQf.cpuSpeed > tourneyDiamondQf.cpuSpeed);
+});
+
+test('SEEDED_CPU_LEADERBOARD_PROFILES provides CPU playerbase profiles across all rank tiers and sorts cleanly', () => {
+  assert.ok(SEEDED_CPU_LEADERBOARD_PROFILES.length >= 12);
+  const names = SEEDED_CPU_LEADERBOARD_PROFILES.map((p) => p.name);
+  assert.ok(names.includes('Dinho_10'));
+  assert.ok(names.includes('BondiCurve_99'));
+  assert.ok(names.includes('smithstreamer007'));
+
+  const sortedByRank = sortLeaderboardEntries(SEEDED_CPU_LEADERBOARD_PROFILES, 'RANK');
+  assert.equal(sortedByRank[0].name, 'Dinho_10');
+  assert.equal(sortedByRank[sortedByRank.length - 1].name, 'smithstreamer007');
+});
+
+test('createDefaultPlayerProfile returns clean starter account state for Delete Account reset flow', () => {
+  const fresh = createDefaultPlayerProfile();
+  assert.equal(fresh.name, 'Player');
+  assert.equal(fresh.rankedWins, 0);
+  assert.equal(fresh.rankedMatches, 0);
+  assert.equal(fresh.balance, 30);
+  assert.deepEqual(fresh.unlockedStadiums, ['CLASSIC_TURF']);
+  assert.deepEqual(fresh.unlockedPokieMachines, ['CHAMPIONS_GOLD']);
+  assert.equal(fresh.selectedStadiumId, 'CLASSIC_TURF');
+  assert.equal(fresh.stadiumShuffleEnabled, false);
+});
+
+test('All 4 Pokie Machines have distinct visual symbol themes, cabinet backgrounds, and Web Audio sound profiles', () => {
+  const symbolIds = Object.keys(POKIE_SYMBOLS) as PokieSymbolId[];
+  for (const symId of symbolIds) {
+    const shortTags = new Set<string>();
+    const displayNames = new Set<string>();
+    const tileBgs = new Set<string>();
+    for (const machine of POKIE_MACHINE_LIST) {
+      const theme = getPokieMachineSymbolTheme(machine.id, symId);
+      assert.equal(theme.machineId, machine.id);
+      assert.equal(theme.symbolId, symId);
+      shortTags.add(theme.shortTag);
+      displayNames.add(theme.displayName);
+      tileBgs.add(theme.tileBg);
+    }
+    assert.equal(shortTags.size, 4, `Expected 4 distinct shortTags across machines for symbol ${symId}`);
+    assert.equal(displayNames.size, 4, `Expected 4 distinct displayNames across machines for symbol ${symId}`);
+    assert.equal(tileBgs.size, 4, `Expected 4 distinct tileBgs across machines for symbol ${symId}`);
+  }
+
+  // Verify 4 distinct pokie machine sound profiles
+  const soundTitles = new Set<string>();
+  const tickBaseFreqs = new Set<number>();
+  const spinNotesKeys = new Set<string>();
+  for (const machine of POKIE_MACHINE_LIST) {
+    const sp = getPokieSoundProfile(machine.id);
+    assert.equal(sp.id, machine.id);
+    soundTitles.add(sp.title);
+    tickBaseFreqs.add(sp.tickBaseFreq);
+    spinNotesKeys.add(sp.spinNotes.join(','));
+  }
+  assert.equal(soundTitles.size, 4);
+  assert.equal(tickBaseFreqs.size, 4);
+  assert.equal(spinNotesKeys.size, 4);
+  assert.equal(Object.keys(POKIE_SOUND_PROFILES).length, 4);
+});
+
+test('All 10 Stadiums have asymmetric, non-repetitive 4-quadrant surroundings dioramas and dynamic ambient elements', () => {
+  assert.equal(Object.keys(STADIUM_SURROUNDINGS_DIORAMAS).length, 10);
+  const dioramaTitles = new Set<string>();
+  const allQuadrantTitles = new Set<string>();
+
+  for (const theme of PITCH_THEMES) {
+    const diorama = getStadiumSurroundingsDiorama(theme.id);
+    assert.equal(diorama.id, theme.id);
+    assert.equal(diorama.isAsymmetric, true);
+    dioramaTitles.add(diorama.dioramaTitle);
+
+    const { west, east, north, south } = diorama.quadrants;
+    const localLandmarks = new Set([
+      west.primaryLandmark,
+      east.primaryLandmark,
+      north.primaryLandmark,
+      south.primaryLandmark,
+    ]);
+    assert.equal(
+      localLandmarks.size,
+      4,
+      `Expected 4 distinct primary landmarks across West/East/North/South for ${theme.id}`
+    );
+
+    allQuadrantTitles.add(west.title);
+    allQuadrantTitles.add(east.title);
+    allQuadrantTitles.add(north.title);
+    allQuadrantTitles.add(south.title);
+
+    assert.ok(diorama.floraOrPropVarieties.length >= 4, `Expected >=4 flora/prop varieties for ${theme.id}`);
+    assert.ok(diorama.dynamicAmbientElements.length >= 4, `Expected >=4 dynamic ambient elements for ${theme.id}`);
+  }
+
+  assert.equal(dioramaTitles.size, 10, 'All 10 stadiums have unique diorama titles');
+  assert.equal(allQuadrantTitles.size, 40, 'All 40 stadium exterior quadrants across the 10 arenas are unique');
 });
 
 
