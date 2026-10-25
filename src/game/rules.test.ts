@@ -38,12 +38,27 @@ import {
   POKIE_MACHINES,
   POKIE_MACHINE_LIST,
   getMachineEffectiveJackpot,
+  TOURNAMENT_TIERS,
+  TOURNAMENT_TIER_LIST,
   calculateMatchMoneyReward,
   redeemCouponCode,
   evaluatePokieGrid,
   spinPokieReels,
   createHoldAndSpinSession,
   stepHoldAndSpinSession,
+  JACKPOT_CHALLENGE_DURATION_SECONDS,
+  createJackpotChallengeState,
+  evaluateJackpotChallengeOutcome,
+  DEFAULT_UNLOCKED_STADIUMS,
+  DEFAULT_UNLOCKED_POKIES,
+  SHOP_STADIUM_ITEMS,
+  SHOP_POKIE_ITEMS,
+  purchaseShopStadium,
+  purchaseShopPokieMachine,
+  sortLeaderboardEntries,
+  GAME_TITLE,
+  FIREBASE_CLOUD_TITLE,
+  type LeaderboardEntry,
   type PlayerStateSnapshot,
   type KeeperStateSnapshot,
 } from './rules.ts';
@@ -684,7 +699,15 @@ test('buildGoalCelebrationMessage generates dynamic headlines & callouts for goa
   assert.ok(profileGoal.pitchCallouts.some((c) => c.text.includes('LEO')));
 });
 
-test('calculateMatchMoneyReward scales payouts by game mode, win/loss, goals scored, and Mercy Rule KO', () => {
+test('calculateMatchMoneyReward scales payouts by game mode, win/loss, goals scored, Mercy Rule KO, and Tournament Tiers ($100, $1,000, $10,000)', () => {
+  assert.equal(TOURNAMENT_TIER_LIST.length, 3);
+  assert.equal(TOURNAMENT_TIERS.CUP_100.entryFee, 100);
+  assert.equal(TOURNAMENT_TIERS.CUP_1000.entryFee, 1000);
+  assert.equal(TOURNAMENT_TIERS.CUP_10000.entryFee, 10000);
+  assert.equal(TOURNAMENT_TIERS.CUP_100.totalCupPrize, 500);
+  assert.equal(TOURNAMENT_TIERS.CUP_1000.totalCupPrize, 5000);
+  assert.equal(TOURNAMENT_TIERS.CUP_10000.totalCupPrize, 50000);
+
   const casualLoss = calculateMatchMoneyReward({
     gameMode: 'CASUAL',
     didWin: false,
@@ -711,14 +734,35 @@ test('calculateMatchMoneyReward scales payouts by game mode, win/loss, goals sco
   assert.ok(rankedMercyWin.totalReward > casualWin.totalReward);
   assert.equal(rankedMercyWin.specialBonus, 13); // +8 Mercy Rule +5 Clean Sheet
 
-  const tournamentFinalWin = calculateMatchMoneyReward({
+  const cup100FinalWin = calculateMatchMoneyReward({
     gameMode: 'TOURNAMENT',
     didWin: true,
     goalsFor: 4,
     goalsAgainst: 1,
     tournamentRound: 2,
+    tournamentTier: 'CUP_100',
   });
-  assert.ok(tournamentFinalWin.totalReward >= 70);
+  assert.ok(cup100FinalWin.totalReward >= 320);
+
+  const cup1000FinalWin = calculateMatchMoneyReward({
+    gameMode: 'TOURNAMENT',
+    didWin: true,
+    goalsFor: 4,
+    goalsAgainst: 1,
+    tournamentRound: 2,
+    tournamentTier: 'CUP_1000',
+  });
+  assert.equal(cup1000FinalWin.totalReward, cup100FinalWin.totalReward * 10);
+
+  const cup10000FinalWin = calculateMatchMoneyReward({
+    gameMode: 'TOURNAMENT',
+    didWin: true,
+    goalsFor: 4,
+    goalsAgainst: 1,
+    tournamentRound: 2,
+    tournamentTier: 'CUP_10000',
+  });
+  assert.equal(cup10000FinalWin.totalReward, cup100FinalWin.totalReward * 100);
 });
 
 test('redeemCouponCode grants 10 spins ($100) for HACK code and rejects invalid codes', () => {
@@ -791,35 +835,40 @@ test('evaluatePokieGrid and spinPokieReels implement authentic 5-payline, 2x Wil
   assert.equal(forcedJackpot.grid[2][1], 'MEGA_TROPHY');
 });
 
-test('POKIE_MACHINES, $10/$100 bet scaling, and Hold & Spin (Hold & Win) bonus mode mechanics work accurately', () => {
-  assert.deepEqual(SLOT_BET_OPTIONS, [10, 100]);
-  assert.equal(POKIE_MACHINE_LIST.length, 3);
+test('POKIE_MACHINES (including $1,000 High Roller), $10/$100/$1,000 bet scaling, and Hold & Spin bonus mechanics work accurately', () => {
+  assert.deepEqual(SLOT_BET_OPTIONS, [10, 100, 1000]);
+  assert.equal(POKIE_MACHINE_LIST.length, 4);
 
-  // Verify each of the 3 stadium-themed machines has distinct aesthetics and jackpots
+  // Verify each of the 4 machines has distinct aesthetics, allowed bets, and jackpots
   const champ = POKIE_MACHINES.CHAMPIONS_GOLD;
   const cosmic = POKIE_MACHINES.COSMIC_NEON;
   const volcano = POKIE_MACHINES.VOLCANO_INFERNO;
+  const highRoller = POKIE_MACHINES.HIGH_ROLLER_ROYAL;
   assert.equal(champ.baseJackpot10, 500);
   assert.equal(cosmic.baseJackpot10, 750);
   assert.equal(volcano.baseJackpot10, 1000);
+  assert.equal(highRoller.defaultBet, 1000);
+  assert.deepEqual(highRoller.allowedBets, [1000]);
+  assert.equal(highRoller.isHighRoller, true);
 
-  // Verify $10 vs $100 bet scaling on effective jackpot and line payouts
+  // Verify $10, $100, and $1,000 bet scaling on effective jackpot
   assert.equal(getMachineEffectiveJackpot('CHAMPIONS_GOLD', 10, 500), 500);
   assert.equal(getMachineEffectiveJackpot('CHAMPIONS_GOLD', 100, 500), 5000);
   assert.equal(getMachineEffectiveJackpot('COSMIC_NEON', 100, 760), 7600);
   assert.equal(getMachineEffectiveJackpot('VOLCANO_INFERNO', 100, 1000), 10000);
+  assert.equal(getMachineEffectiveJackpot('HIGH_ROLLER_ROYAL', 1000, 1000), 100000);
 
-  const spin100 = spinPokieReels(100, 10000, Math.random, [6, 5, 6], 'VOLCANO_INFERNO');
-  assert.equal(spin100.triggersHoldAndSpin, true);
-  assert.equal(spin100.scatterCount, 3);
-  assert.equal(spin100.scatterPayout, 100 * 15); // $1,500 scatter win on $100 spin
+  const spin1000 = spinPokieReels(1000, 100000, Math.random, [6, 5, 6], 'HIGH_ROLLER_ROYAL');
+  assert.equal(spin1000.triggersHoldAndSpin, true);
+  assert.equal(spin1000.scatterCount, 3);
+  assert.equal(spin1000.scatterPayout, 1000 * 15); // $15,000 scatter win on $1,000 High Roller spin!
 
   // Initialize Hold & Spin bonus session with 3 locked orbs
   const session = createHoldAndSpinSession({
     machineId: 'COSMIC_NEON',
     betAmount: 100,
     grandJackpotPool: 7500,
-    triggerPositions: spin100.scatterPositions,
+    triggerPositions: spin1000.scatterPositions,
     rng: () => 0.1, // Deterministic 1X CASH orbs ($100 each)
   });
   assert.equal(session.respinsRemaining, 3);
@@ -841,8 +890,155 @@ test('POKIE_MACHINES, $10/$100 bet scaling, and Hold & Spin (Hold & Win) bonus m
   assert.equal(fullGridStep.totalBonusWin, fullGridStep.orbsTotalValue + 7500);
 });
 
+test('createJackpotChallengeState and evaluateJackpotChallengeOutcome enforce 30-second sudden-death goal rules in machine stadium', () => {
+  assert.equal(JACKPOT_CHALLENGE_DURATION_SECONDS, 30);
 
+  const cosmicChallenge = createJackpotChallengeState('COSMIC_NEON', 100, 7500);
+  assert.equal(cosmicChallenge.active, true);
+  assert.equal(cosmicChallenge.pitchThemeId, 'COSMIC_SPACE');
+  assert.equal(cosmicChallenge.durationSeconds, 30);
+  assert.equal(cosmicChallenge.jackpotPrize, 7500);
 
+  // Ongoing at 0-0 with 18s left
+  const ongoing = evaluateJackpotChallengeOutcome(cosmicChallenge, 0, 0, 18);
+  assert.equal(ongoing.ended, false);
+  assert.equal(ongoing.didWinJackpot, false);
 
+  // Scoring 1 goal within 30s wins the full $7,500 Jackpot!
+  const winOutcome = evaluateJackpotChallengeOutcome(cosmicChallenge, 1, 0, 14);
+  assert.equal(winOutcome.ended, true);
+  assert.equal(winOutcome.didWinJackpot, true);
+  assert.equal(winOutcome.payout, 7500);
+
+  // Conceding 1 goal immediately loses the Jackpot ($0)
+  const concedeOutcome = evaluateJackpotChallengeOutcome(cosmicChallenge, 0, 1, 22);
+  assert.equal(concedeOutcome.ended, true);
+  assert.equal(concedeOutcome.didWinJackpot, false);
+  assert.equal(concedeOutcome.payout, 0);
+
+  // Timer hitting 0s at 0-0 loses the Jackpot ($0)
+  const timeoutOutcome = evaluateJackpotChallengeOutcome(cosmicChallenge, 0, 0, 0);
+  assert.equal(timeoutOutcome.ended, true);
+  assert.equal(timeoutOutcome.didWinJackpot, false);
+  assert.equal(timeoutOutcome.payout, 0);
+
+  // HOLD_AND_SPIN challenge gate: scoring 1 goal unlocks the Hold & Spin ("Spin to Win") screen!
+  const holdGateChallenge = createJackpotChallengeState('VOLCANO_INFERNO', 100, 10000, 'HOLD_AND_SPIN', [
+    { reel: 0, row: 1 },
+    { reel: 1, row: 1 },
+    { reel: 2, row: 1 },
+  ]);
+  assert.equal(holdGateChallenge.challengeType, 'HOLD_AND_SPIN');
+  assert.equal(holdGateChallenge.triggerPositions?.length, 3);
+  const holdWinOutcome = evaluateJackpotChallengeOutcome(holdGateChallenge, 1, 0, 20);
+  assert.equal(holdWinOutcome.ended, true);
+  assert.equal(holdWinOutcome.didWinJackpot, true);
+  assert.equal(holdWinOutcome.unlocksHoldAndSpin, true);
+  assert.equal(holdWinOutcome.payout, 0); // Actual payout is won inside the Hold & Spin screen!
+});
+
+test('Club Shop unlocks stadiums ($0 starter up to single $100k stadium) and pokies ($0 starter up to $80k High Roller)', () => {
+  assert.deepEqual(DEFAULT_UNLOCKED_STADIUMS, ['CLASSIC_TURF']);
+  assert.deepEqual(DEFAULT_UNLOCKED_POKIES, ['CHAMPIONS_GOLD']);
+
+  // Verify pricing constraints: only ONE stadium costs $100,000, High Roller pokie costs $80,000
+  const stadiumsAt100k = SHOP_STADIUM_ITEMS.filter((s) => s.price === 100000);
+  assert.equal(stadiumsAt100k.length, 1);
+  assert.equal(stadiumsAt100k[0].id, 'COSMIC_SPACE');
+  assert.ok(SHOP_STADIUM_ITEMS.every((s) => s.price <= 100000));
+
+  const highRollerShop = SHOP_POKIE_ITEMS.find((p) => p.id === 'HIGH_ROLLER_ROYAL');
+  assert.equal(highRollerShop?.price, 80000);
+
+  // Buying a stadium with insufficient funds fails
+  const failStad = purchaseShopStadium('URBAN_CONCRETE', 150, DEFAULT_UNLOCKED_STADIUMS);
+  assert.equal(failStad.success, false);
+  assert.equal(failStad.insufficientFunds, true);
+  assert.equal(failStad.newBalance, 150);
+
+  // Buying URBAN_CONCRETE ($200) succeeds and deducts balance
+  const buyStad = purchaseShopStadium('URBAN_CONCRETE', 500, DEFAULT_UNLOCKED_STADIUMS);
+  assert.equal(buyStad.success, true);
+  assert.equal(buyStad.newBalance, 300);
+  assert.ok(buyStad.unlockedItems.includes('URBAN_CONCRETE'));
+
+  // Buying High Roller Pokie ($80,000) succeeds when balance >= 80000
+  const buyPokie = purchaseShopPokieMachine('HIGH_ROLLER_ROYAL', 95000, DEFAULT_UNLOCKED_POKIES);
+  assert.equal(buyPokie.success, true);
+  assert.equal(buyPokie.newBalance, 15000);
+  assert.ok(buyPokie.unlockedItems.includes('HIGH_ROLLER_ROYAL'));
+});
+
+test('sortLeaderboardEntries orders player profiles by RANK (wins descending) or MONEY (balance descending)', () => {
+  const sample: LeaderboardEntry[] = [
+    {
+      uid: 'u1',
+      name: 'Rich_Rookie',
+      iconType: 'preset',
+      presetIcon: '💎',
+      photoDataUrl: null,
+      rankedWins: 1,
+      rankedMatches: 3,
+      balance: 120000,
+    },
+    {
+      uid: 'u2',
+      name: 'Star_Striker',
+      iconType: 'preset',
+      presetIcon: '👑',
+      photoDataUrl: null,
+      rankedWins: 9,
+      rankedMatches: 10,
+      balance: 4500,
+    },
+    {
+      uid: 'u3',
+      name: 'Mid_Pro',
+      iconType: 'preset',
+      presetIcon: '⚽',
+      photoDataUrl: null,
+      rankedWins: 4,
+      rankedMatches: 6,
+      balance: 28000,
+    },
+  ];
+
+  const byRank = sortLeaderboardEntries(sample, 'RANK');
+  assert.deepEqual(
+    byRank.map((e) => e.uid),
+    ['u2', 'u3', 'u1']
+  );
+
+  const byMoney = sortLeaderboardEntries(sample, 'MONEY');
+  assert.deepEqual(
+    byMoney.map((e) => e.uid),
+    ['u1', 'u3', 'u2']
+  );
+});
+
+test('TIKI TAKA 0.2 branding, Firebase cloud title, and Rank & Division symbols + Club Level XP bar calculations work accurately', () => {
+  assert.equal(GAME_TITLE, 'TIKI TAKA 0.2');
+  assert.equal(FIREBASE_CLOUD_TITLE, 'TIKI TAKA 0.2 • GLOBAL CLUB CLOUD');
+
+  // Verify every rank tier has a unique symbolId, divisionNumeral, and shortLabel
+  const symbols = new Set(RANK_TIERS.map((r) => r.symbolId));
+  assert.equal(symbols.size, RANK_TIERS.length);
+  assert.equal(RANK_TIERS[0].divisionNumeral, 'I');
+  assert.equal(RANK_TIERS[0].symbolId, 'BRONZE_SHIELD_1');
+  assert.equal(RANK_TIERS[1].divisionNumeral, 'II');
+  assert.equal(RANK_TIERS[1].symbolId, 'BRONZE_SHIELD_2');
+  assert.equal(RANK_TIERS[3].symbolId, 'GOLD_CROWN');
+  assert.equal(RANK_TIERS[6].divisionNumeral, 'MAX');
+  assert.equal(RANK_TIERS[6].symbolId, 'STAR_CHAMPION');
+
+  // Verify Club Level & XP progression across wins and matches
+  const lvlSummary = computeRankProgressSummary(2, 1, 4, 2);
+  assert.equal(lvlSummary.rankedUp, true);
+  assert.equal(lvlSummary.leveledUp, true);
+  assert.equal(lvlSummary.rankPoints, 2 * 100 + 2 * 35); // 270 RP
+  assert.equal(lvlSummary.clubLevel, 3); // 1 + floor(270 / 100) = 3
+  assert.equal(lvlSummary.xpInCurrentLevel, 70);
+  assert.equal(lvlSummary.xpForNextLevel, 100);
+});
 
 

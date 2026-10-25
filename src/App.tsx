@@ -43,6 +43,8 @@ import {
   POKIE_MACHINES,
   POKIE_MACHINE_LIST,
   getMachineEffectiveJackpot,
+  TOURNAMENT_TIERS,
+  TOURNAMENT_TIER_LIST,
   POKIE_SYMBOLS,
   POKIE_PAYLINES,
   VIRTUAL_REEL_STRIPS,
@@ -52,13 +54,40 @@ import {
   getPokieGridFromStops,
   createHoldAndSpinSession,
   stepHoldAndSpinSession,
+  JACKPOT_CHALLENGE_DURATION_SECONDS,
+  createJackpotChallengeState,
+  evaluateJackpotChallengeOutcome,
+  DEFAULT_UNLOCKED_STADIUMS,
+  DEFAULT_UNLOCKED_POKIES,
+  SHOP_STADIUM_ITEMS,
+  SHOP_POKIE_ITEMS,
+  purchaseShopStadium,
+  purchaseShopPokieMachine,
+  sortLeaderboardEntries,
+  GAME_TITLE,
+  FIREBASE_CLOUD_TITLE,
+  type RankTierInfo,
+  type RankSymbolId,
   type PokieMachineId,
   type PokieBetAmount,
+  type TournamentTierId,
   type HoldAndSpinSessionState,
+  type JackpotChallengeState,
+  type JackpotChallengeType,
+  type LeaderboardEntry,
+  type LeaderboardSortMode,
   type PokieSymbolId,
   type PokieEvaluationResult,
   type GoalCelebrationSpec,
 } from './game/rules';
+import {
+  auth,
+  FIREBASE_SERVICE_NAME,
+  subscribeToAuthChanges,
+  signInWithGoogleForLeaderboard,
+  syncProfileToFirestoreLeaderboard,
+  subscribeToOnlineLeaderboard,
+} from './firebase';
 import {
   GRAPHICS_CONFIG,
   PITCH_THEMES,
@@ -96,6 +125,152 @@ declare global {
     webkitAudioContext?: typeof AudioContext;
     GRAPHICS_CONFIG?: typeof GRAPHICS_CONFIG;
   }
+}
+
+function getRankCrestSvgHtml(rankInfo: RankTierInfo, sizeClass = 'w-4 h-4'): string {
+  const { symbolId, borderHex, badgeBgHex, badgeTextHex, divisionNumeral } = rankInfo;
+  switch (symbolId) {
+    case 'BRONZE_SHIELD_1':
+      return `<svg class="${sizeClass} shrink-0 inline-block" viewBox="0 0 24 24" fill="none"><path d="M12 2L4 5.5V11.5C4 16.8 7.4 20.9 12 22.5C16.6 20.9 20 16.8 20 11.5V5.5L12 2Z" fill="${badgeBgHex}" stroke="#0f172a" stroke-width="2.2"/><path d="M12 4.5L6.5 7V11.3C6.5 15.2 8.9 18.4 12 19.8C15.1 18.4 17.5 15.2 17.5 11.3V7L12 4.5Z" fill="${borderHex}"/><rect x="10.8" y="8" width="2.4" height="7.5" rx="1" fill="#fffbeb"/></svg>`;
+    case 'BRONZE_SHIELD_2':
+      return `<svg class="${sizeClass} shrink-0 inline-block" viewBox="0 0 24 24" fill="none"><path d="M12 2L4 5.5V11.5C4 16.8 7.4 20.9 12 22.5C16.6 20.9 20 16.8 20 11.5V5.5L12 2Z" fill="${badgeBgHex}" stroke="#0f172a" stroke-width="2.2"/><path d="M12 4.2L6.2 6.8V11.3C6.2 15.3 8.7 18.6 12 20C15.3 18.6 17.8 15.3 17.8 11.3V6.8L12 4.2Z" fill="${borderHex}"/><rect x="8.6" y="8" width="2.2" height="7.5" rx="0.9" fill="#fffbeb"/><rect x="13.2" y="8" width="2.2" height="7.5" rx="0.9" fill="#fffbeb"/></svg>`;
+    case 'SILVER_CREST':
+      return `<svg class="${sizeClass} shrink-0 inline-block" viewBox="0 0 24 24" fill="none"><polygon points="12,1.8 20.5,6.5 18.5,17.5 12,22.2 5.5,17.5 3.5,6.5" fill="${badgeBgHex}" stroke="#0f172a" stroke-width="2.2"/><polygon points="12,4.4 17.8,7.8 16.3,15.8 12,19.2 7.7,15.8 6.2,7.8" fill="${borderHex}"/><path d="M8 12.5L12 8.5L16 12.5L12 16.5Z" fill="#f8fafc"/></svg>`;
+    case 'GOLD_CROWN':
+      return `<svg class="${sizeClass} shrink-0 inline-block" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9.8" fill="${badgeBgHex}" stroke="#0f172a" stroke-width="2.2"/><path d="M5.5 16.5L4.5 8.5L9 12L12 6.5L15 12L19.5 8.5L18.5 16.5H5.5Z" fill="#f59e0b" stroke="#0f172a" stroke-width="1.8" stroke-linejoin="round"/><circle cx="12" cy="14" r="1.4" fill="#fffbeb"/></svg>`;
+    case 'PLATINUM_STAR':
+      return `<svg class="${sizeClass} shrink-0 inline-block" viewBox="0 0 24 24" fill="none"><polygon points="12,1.8 19.5,5.5 21.5,13.5 16.5,20.5 7.5,20.5 2.5,13.5 4.5,5.5" fill="${badgeBgHex}" stroke="#0f172a" stroke-width="2.2"/><polygon points="12,4.5 14.2,9.2 19.3,9.8 15.5,13.3 16.5,18.3 12,15.8 7.5,18.3 8.5,13.3 4.7,9.8 9.8,9.2" fill="${borderHex}" stroke="#0f172a" stroke-width="1.4"/></svg>`;
+    case 'DIAMOND_GEM':
+      return `<svg class="${sizeClass} shrink-0 inline-block" viewBox="0 0 24 24" fill="none"><polygon points="7,3 17,3 22,9.5 12,21.5 2,9.5" fill="${badgeBgHex}" stroke="#0f172a" stroke-width="2.2" stroke-linejoin="round"/><polygon points="8.5,5.5 15.5,5.5 18.8,9.5 12,18.2 5.2,9.5" fill="${borderHex}"/><polygon points="12,6.5 15.5,9.5 12,15.5 8.5,9.5" fill="#e0e7ff"/></svg>`;
+    case 'STAR_CHAMPION':
+    default:
+      return `<svg class="${sizeClass} shrink-0 inline-block" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" fill="#fde047" stroke="#0f172a" stroke-width="2.2"/><polygon points="12,2.5 14.9,8.4 21.4,9.3 16.7,13.9 17.8,20.4 12,17.3 6.2,20.4 7.3,13.9 2.6,9.3 9.1,8.4" fill="${borderHex}" stroke="#0f172a" stroke-width="1.8" stroke-linejoin="round"/><circle cx="12" cy="12.5" r="2.2" fill="#fffbeb"/><title>${divisionNumeral} ${badgeTextHex}</title></svg>`;
+  }
+}
+
+function ShopPokiePreviewIllustration({ machineId }: { machineId: PokieMachineId }) {
+  const m = POKIE_MACHINES[machineId];
+  const reelIcons =
+    machineId === 'HIGH_ROLLER_ROYAL'
+      ? ['👑', '🏆', '💎']
+      : machineId === 'VOLCANO_INFERNO'
+        ? ['🔥', '🏆', '👑']
+        : machineId === 'COSMIC_NEON'
+          ? ['⚡', '👑', '⭐']
+          : ['⚽', '🏆', '👑'];
+  return (
+    <div
+      className="w-full h-24 rounded-xl border-2 border-slate-900 overflow-hidden relative flex flex-col justify-between p-2 shadow-[inset_0_2px_8px_rgba(0,0,0,0.45)]"
+      style={{ background: m.headerGradient }}
+    >
+      {/* Top Marquee Chase Lights */}
+      <div className="flex items-center justify-between px-1">
+        <div className="flex items-center gap-1">
+          {[0, 1, 2, 3, 4].map((d) => (
+            <span
+              key={d}
+              className="w-1.5 h-1.5 rounded-full border border-slate-950"
+              style={{ backgroundColor: d % 2 === 0 ? m.accentHex : '#ffffff' }}
+            />
+          ))}
+        </div>
+        <span
+          className="px-1.5 py-0.2 rounded text-[7.5px] font-mono-num font-black uppercase border border-slate-950"
+          style={{ backgroundColor: m.accentHex, color: '#0f172a' }}
+        >
+          {m.stadiumName}
+        </span>
+      </div>
+
+      {/* Mini 3-Reel Arcade Window */}
+      <div className="my-auto mx-auto w-full max-w-[190px] grid grid-cols-3 gap-1.5 bg-slate-950/90 p-1.5 rounded-xl border-2 border-amber-400/80 shadow-[0_2px_0_#000000]">
+        {reelIcons.map((ic, idx) => (
+          <div
+            key={idx}
+            className="h-9 rounded-lg bg-white border border-slate-900 flex items-center justify-center text-base shadow-inner"
+          >
+            <span>{ic}</span>
+          </div>
+        ))}
+      </div>
+
+      {/* Bottom Cabinet Accent Strip */}
+      <div className="flex items-center justify-between text-[7.5px] font-mono-num font-black text-white/90 px-0.5">
+        <span>3x3 • 5 PAYLINES</span>
+        <span style={{ color: m.accentHex }}>HOLD &amp; SPIN</span>
+      </div>
+    </div>
+  );
+}
+
+function ShopStadiumPreviewIllustration({ stadiumId }: { stadiumId: PitchThemeId }) {
+  const theme = PITCH_THEMES.find((t) => t.id === stadiumId) || PITCH_THEMES[0];
+  const shopItem = SHOP_STADIUM_ITEMS.find((s) => s.id === stadiumId) || SHOP_STADIUM_ITEMS[0];
+  const { turf, apron } = theme;
+  const lineHex = turf.chalk || theme.swatchLine || '#ffffff';
+  const glowHex = shopItem.accentHex || '#fde047';
+  return (
+    <div
+      className="w-full h-22 rounded-xl border-2 border-slate-900 overflow-hidden relative p-2 flex items-center justify-center shadow-[inset_0_2px_6px_rgba(0,0,0,0.35)]"
+      style={{ backgroundColor: apron.base }}
+    >
+      {/* Stadium Concourse Frame */}
+      <div
+        className="w-full h-full rounded-lg border-2 border-slate-900 relative overflow-hidden flex items-stretch"
+        style={{ backgroundColor: turf.stripeLight }}
+      >
+        {/* Mowed Turf Stripes */}
+        {[0, 1, 2, 3, 4, 5].map((idx) => (
+          <div
+            key={idx}
+            className="flex-1 h-full"
+            style={{ backgroundColor: idx % 2 === 0 ? turf.stripeLight : turf.stripeDark }}
+          />
+        ))}
+
+        {/* Top-Down Pitch Chalk Lines & Center Circle */}
+        <svg className="absolute inset-0 w-full h-full" viewBox="0 0 160 72" fill="none">
+          <rect
+            x="8"
+            y="6"
+            width="144"
+            height="60"
+            rx="3"
+            stroke={lineHex}
+            strokeWidth="2"
+            strokeOpacity="0.9"
+          />
+          <line x1="80" y1="6" x2="80" y2="66" stroke={lineHex} strokeWidth="1.8" strokeOpacity="0.85" />
+          <circle cx="80" cy="36" r="13" stroke={lineHex} strokeWidth="1.8" strokeOpacity="0.85" />
+          <circle cx="80" cy="36" r="2.2" fill={lineHex} />
+          {/* Left & Right Penalty Boxes */}
+          <rect x="8" y="19" width="18" height="34" stroke={lineHex} strokeWidth="1.6" strokeOpacity="0.85" />
+          <rect x="134" y="19" width="18" height="34" stroke={lineHex} strokeWidth="1.6" strokeOpacity="0.85" />
+          {/* Left & Right Goal Cages */}
+          <rect x="3" y="27" width="5" height="18" fill={lineHex} fillOpacity="0.55" />
+          <rect x="152" y="27" width="5" height="18" fill={lineHex} fillOpacity="0.55" />
+        </svg>
+
+        {/* Corner Floodlight Glow Dots */}
+        <span
+          className="absolute top-1 left-1 w-2 h-2 rounded-full border border-slate-950"
+          style={{ backgroundColor: glowHex }}
+        />
+        <span
+          className="absolute top-1 right-1 w-2 h-2 rounded-full border border-slate-950"
+          style={{ backgroundColor: glowHex }}
+        />
+        <span
+          className="absolute bottom-1 left-1 w-2 h-2 rounded-full border border-slate-950"
+          style={{ backgroundColor: glowHex }}
+        />
+        <span
+          className="absolute bottom-1 right-1 w-2 h-2 rounded-full border border-slate-950"
+          style={{ backgroundColor: glowHex }}
+        />
+      </div>
+    </div>
+  );
 }
 
 export default function App() {
@@ -2096,7 +2271,7 @@ export default function App() {
     let userKitChoice: KitChoice = 'HOME';
     let tournamentRound = 0; // 0 = Quarter-Final (Game 1), 1 = Semi-Final (Game 2), 2 = Grand Final (Game 3)
 
-    // User Profile State (Name + Preset Icon or Camera Photo + Ranked Progression + Balance & Pokie Jackpot)
+    // User Profile State (Name + Preset Icon or Camera Photo + Ranked Progression + Balance + Pokie Jackpots + Shop Unlocks)
     interface UserProfile {
       name: string;
       iconType: 'preset' | 'photo';
@@ -2108,6 +2283,8 @@ export default function App() {
       balance: number;
       jackpotPool: number;
       machineJackpots: Record<PokieMachineId, number>;
+      unlockedStadiums: PitchThemeId[];
+      unlockedPokies: PokieMachineId[];
     }
 
     const PRESET_ICONS: { id: string; label: string; html: string }[] = [
@@ -2121,6 +2298,10 @@ export default function App() {
 
     let selectedPokieMachine: PokieMachineId = 'CHAMPIONS_GOLD';
     let selectedPokieBet: PokieBetAmount = 10;
+    let pokieModalScreen: 'LOBBY' | 'CABINET' = 'LOBBY';
+    let selectedTournamentTier: TournamentTierId = 'CUP_100';
+    let pendingJackpotChallenge: JackpotChallengeState | null = null;
+    let activeJackpotChallenge: JackpotChallengeState | null = null;
 
     let userProfile: UserProfile = {
       name: 'Player',
@@ -2136,7 +2317,10 @@ export default function App() {
         CHAMPIONS_GOLD: POKIE_MACHINES.CHAMPIONS_GOLD.baseJackpot10,
         COSMIC_NEON: POKIE_MACHINES.COSMIC_NEON.baseJackpot10,
         VOLCANO_INFERNO: POKIE_MACHINES.VOLCANO_INFERNO.baseJackpot10,
+        HIGH_ROLLER_ROYAL: POKIE_MACHINES.HIGH_ROLLER_ROYAL.baseJackpot10,
       },
+      unlockedStadiums: [...DEFAULT_UNLOCKED_STADIUMS],
+      unlockedPokies: [...DEFAULT_UNLOCKED_POKIES],
     };
 
     try {
@@ -2145,6 +2329,18 @@ export default function App() {
         const parsed = JSON.parse(saved);
         if (parsed && typeof parsed.name === 'string') {
           const parsedMj = parsed.machineJackpots || {};
+          const validStadIds = new Set<string>(PITCH_THEMES.map((t) => t.id));
+          const savedStadiums = Array.isArray(parsed.unlockedStadiums)
+            ? (parsed.unlockedStadiums.filter((id: unknown) => typeof id === 'string' && validStadIds.has(id)) as PitchThemeId[])
+            : [];
+          if (!savedStadiums.includes('CLASSIC_TURF')) savedStadiums.unshift('CLASSIC_TURF');
+
+          const validPokieIds = new Set<string>(POKIE_MACHINE_LIST.map((m) => m.id));
+          const savedPokies = Array.isArray(parsed.unlockedPokies)
+            ? (parsed.unlockedPokies.filter((id: unknown) => typeof id === 'string' && validPokieIds.has(id)) as PokieMachineId[])
+            : [];
+          if (!savedPokies.includes('CHAMPIONS_GOLD')) savedPokies.unshift('CHAMPIONS_GOLD');
+
           userProfile = {
             name: parsed.name.trim().slice(0, 16) || 'Player',
             iconType: parsed.iconType === 'photo' && parsed.photoDataUrl ? 'photo' : 'preset',
@@ -2174,7 +2370,13 @@ export default function App() {
                 typeof parsedMj.VOLCANO_INFERNO === 'number' && parsedMj.VOLCANO_INFERNO >= POKIE_MACHINES.VOLCANO_INFERNO.baseJackpot10
                   ? Math.floor(parsedMj.VOLCANO_INFERNO)
                   : POKIE_MACHINES.VOLCANO_INFERNO.baseJackpot10,
+              HIGH_ROLLER_ROYAL:
+                typeof parsedMj.HIGH_ROLLER_ROYAL === 'number' && parsedMj.HIGH_ROLLER_ROYAL >= POKIE_MACHINES.HIGH_ROLLER_ROYAL.baseJackpot10
+                  ? Math.floor(parsedMj.HIGH_ROLLER_ROYAL)
+                  : POKIE_MACHINES.HIGH_ROLLER_ROYAL.baseJackpot10,
             },
+            unlockedStadiums: savedStadiums,
+            unlockedPokies: savedPokies,
           };
         }
       }
@@ -2187,6 +2389,17 @@ export default function App() {
         window.localStorage.setItem('rematch_profile_v1', JSON.stringify(userProfile));
       } catch {
         // Ignore storage access errors
+      }
+      if (auth.currentUser) {
+        void syncProfileToFirestoreLeaderboard({
+          name: userProfile.name,
+          iconType: userProfile.iconType,
+          presetIcon: userProfile.presetIcon,
+          photoDataUrl: userProfile.photoDataUrl,
+          rankedWins: userProfile.rankedWins,
+          rankedMatches: userProfile.rankedMatches,
+          balance: userProfile.balance,
+        });
       }
     }
 
@@ -2514,9 +2727,16 @@ export default function App() {
           .slice(0, 2)
           .toUpperCase() || 'PL';
 
+      const progressSummary = computeRankProgressSummary(
+        userProfile.rankedWins,
+        userProfile.rankedWins,
+        userProfile.rankedMatches,
+        userProfile.rankedMatches
+      );
+
       if (menuNameEl) menuNameEl.innerText = userProfile.name;
       if (menuRankBadgeEl) {
-        menuRankBadgeEl.innerText = rankInfo.name;
+        menuRankBadgeEl.innerHTML = `${getRankCrestSvgHtml(rankInfo, 'w-3.5 h-3.5')}<span>${rankInfo.name}</span><span class="opacity-75 font-mono-num">• LVL ${progressSummary.clubLevel}</span>`;
         menuRankBadgeEl.style.color = rankInfo.badgeTextHex;
         menuRankBadgeEl.style.backgroundColor = rankInfo.badgeBgHex;
         menuRankBadgeEl.style.borderColor = rankInfo.borderHex;
@@ -2567,6 +2787,7 @@ export default function App() {
       const ovNextRankText = document.getElementById('overviewNextRankText');
       const ovProgressBar = document.getElementById('overviewRankProgressBar');
       const slotBalEl = document.getElementById('slotBalanceDisplay');
+      const pokieLobbyBalEl = document.getElementById('pokieLobbyBalanceText');
       const slotJackpotEl = document.getElementById('slotJackpotDisplay');
       const slotSpinsLeftEl = document.getElementById('slotSpinsLeftDisplay');
 
@@ -2575,7 +2796,11 @@ export default function App() {
           CHAMPIONS_GOLD: POKIE_MACHINES.CHAMPIONS_GOLD.baseJackpot10,
           COSMIC_NEON: POKIE_MACHINES.COSMIC_NEON.baseJackpot10,
           VOLCANO_INFERNO: POKIE_MACHINES.VOLCANO_INFERNO.baseJackpot10,
+          HIGH_ROLLER_ROYAL: POKIE_MACHINES.HIGH_ROLLER_ROYAL.baseJackpot10,
         };
+      }
+      if (!userProfile.machineJackpots.HIGH_ROLLER_ROYAL) {
+        userProfile.machineJackpots.HIGH_ROLLER_ROYAL = POKIE_MACHINES.HIGH_ROLLER_ROYAL.baseJackpot10;
       }
 
       if (ovAvatarBox) {
@@ -2594,11 +2819,43 @@ export default function App() {
       }
       if (ovName) ovName.innerText = userProfile.name;
       if (ovRankBadge) {
-        ovRankBadge.innerText = rankInfo.name;
+        ovRankBadge.innerHTML = `${getRankCrestSvgHtml(rankInfo, 'w-3.5 h-3.5')}<span>${rankInfo.name}</span>`;
         ovRankBadge.style.backgroundColor = rankInfo.badgeBgHex;
         ovRankBadge.style.color = rankInfo.badgeTextHex;
         ovRankBadge.style.borderColor = rankInfo.borderHex;
       }
+      const ovRankSymbolBox = document.getElementById('overviewRankSymbolBox');
+      if (ovRankSymbolBox) {
+        ovRankSymbolBox.innerHTML = getRankCrestSvgHtml(rankInfo, 'w-9 h-9');
+        ovRankSymbolBox.style.backgroundColor = rankInfo.badgeBgHex;
+        ovRankSymbolBox.style.borderColor = rankInfo.borderHex;
+      }
+      const ovClubLevelBadge = document.getElementById('overviewClubLevelBadge');
+      if (ovClubLevelBadge) {
+        ovClubLevelBadge.innerText = `CLUB LVL ${progressSummary.clubLevel}`;
+      }
+      const ovRankPointsText = document.getElementById('overviewRankPointsText');
+      if (ovRankPointsText) {
+        ovRankPointsText.innerText = `${progressSummary.rankPoints} RP`;
+      }
+      const ovLevelXpText = document.getElementById('overviewLevelXpText');
+      if (ovLevelXpText) {
+        ovLevelXpText.innerText = `${progressSummary.xpInCurrentLevel} / ${progressSummary.xpForNextLevel} XP TO LVL ${progressSummary.clubLevel + 1}`;
+      }
+      const ovLevelProgressBar = document.getElementById('overviewLevelProgressBar');
+      if (ovLevelProgressBar) {
+        ovLevelProgressBar.style.width = `${progressSummary.levelProgressPct}%`;
+      }
+      RANK_TIERS.forEach((tier, idx) => {
+        const nodeEl = document.getElementById(`overviewTierNode${idx}`);
+        if (!nodeEl) return;
+        const isReached = idx <= rankInfo.index;
+        const isCurrent = idx === rankInfo.index;
+        nodeEl.style.backgroundColor = isReached ? tier.badgeBgHex : '#f1f5f9';
+        nodeEl.style.borderColor = isReached ? tier.borderHex : '#cbd5e1';
+        nodeEl.style.transform = isCurrent ? 'scale(1.12)' : 'scale(1)';
+        nodeEl.style.opacity = isReached ? '1' : '0.55';
+      });
       if (menuBalanceTextEl) {
         menuBalanceTextEl.innerText = `$${userProfile.balance.toLocaleString()}`;
       }
@@ -2607,6 +2864,9 @@ export default function App() {
       }
       if (slotBalEl) {
         slotBalEl.innerText = `$${userProfile.balance.toLocaleString()}`;
+      }
+      if (pokieLobbyBalEl) {
+        pokieLobbyBalEl.innerText = `$${userProfile.balance.toLocaleString()}`;
       }
 
       const activeEffectiveJackpot = getMachineEffectiveJackpot(
@@ -2622,7 +2882,8 @@ export default function App() {
       for (const m of POKIE_MACHINE_LIST) {
         const mJpEl = document.getElementById(`slotMachineJackpot_${m.id}`);
         if (mJpEl) {
-          const eff = getMachineEffectiveJackpot(m.id, selectedPokieBet, userProfile.machineJackpots[m.id]);
+          const previewBet = m.allowedBets.includes(selectedPokieBet) ? selectedPokieBet : m.defaultBet;
+          const eff = getMachineEffectiveJackpot(m.id, previewBet, userProfile.machineJackpots[m.id]);
           mJpEl.innerText = `$${eff.toLocaleString()}`;
         }
       }
@@ -2631,9 +2892,8 @@ export default function App() {
         slotSpinsLeftEl.innerText = `${spinsAvailable} ${spinsAvailable === 1 ? 'SPIN' : 'SPINS'} READY`;
       }
       if (ovWinsText) {
-        ovWinsText.innerText = `${userProfile.rankedWins} ${userProfile.rankedWins === 1 ? 'Win' : 'Wins'}`;
+        ovWinsText.innerText = `${userProfile.rankedWins} ${userProfile.rankedWins === 1 ? 'Win' : 'Wins'} • Div ${rankInfo.divisionNumeral}`;
       }
-      const progressSummary = computeRankProgressSummary(userProfile.rankedWins);
       if (ovNextRankText) {
         ovNextRankText.innerText = progressSummary.subtext;
       }
@@ -2644,6 +2904,27 @@ export default function App() {
 
     function syncUserProfileUI() {
       syncProfileUI();
+    }
+
+    function syncTournamentTierSelectorUI() {
+      const tourneyTierWrap = document.getElementById('tournamentTierSelectorWrap');
+      const tourneyEntryBanner = document.getElementById('tourneyEntryStatusBanner');
+      if (tourneyTierWrap) {
+        const showTierSelector = currentGameMode === 'TOURNAMENT' && gameState !== 'PAUSED' && gameState !== 'MATCH_OVER';
+        tourneyTierWrap.classList.toggle('hidden', !showTierSelector);
+      }
+      for (const tier of TOURNAMENT_TIER_LIST) {
+        const btn = document.getElementById(`tourneyTierBtn_${tier.id}`);
+        if (!btn) continue;
+        const isSelected = tier.id === selectedTournamentTier;
+        btn.className = isSelected
+          ? 'tourney-tier-btn p-2 rounded-2xl border-[2.5px] border-slate-900 shadow-[0_3px_0_#0f172a] text-left transition-all cursor-pointer scale-[1.02]'
+          : 'tourney-tier-btn p-2 rounded-2xl border-2 border-slate-300 bg-white hover:bg-slate-50 text-left transition-all cursor-pointer opacity-85 hover:opacity-100';
+        btn.style.backgroundColor = isSelected ? tier.badgeBgHex : '#ffffff';
+      }
+      if (tourneyEntryBanner && currentGameMode !== 'TOURNAMENT') {
+        tourneyEntryBanner.classList.add('hidden');
+      }
     }
 
     function syncKitAndModeUI() {
@@ -2665,6 +2946,7 @@ export default function App() {
 
       // 2. Update Player Card in Home Menu (Rank shown on BOTH Ranked & Tournament; hidden on Casual)
       syncProfileUI();
+      syncTournamentTierSelectorUI();
       const mmYouPill = document.getElementById('mmYouPill');
       const mmYouDot = document.getElementById('mmYouDot');
       const mmYouMeta = document.getElementById('mmYouMeta');
@@ -2717,16 +2999,23 @@ export default function App() {
           : 'flex items-center space-x-1.5 sm:space-x-2 bg-sky-500 text-white px-2 py-0.5 sm:px-3 sm:py-1 rounded-lg sm:rounded-xl border-2 border-slate-900 shadow-xs transition-colors';
       }
 
-      // 4. Update Tournament HUD Badge & Ensure Bracket Initialized
+      // 4. Update Tournament or Jackpot Challenge HUD Badge & Ensure Bracket Initialized
       const hudTourneyBadge = document.getElementById('hudTourneyBadge');
-      if (currentGameMode === 'TOURNAMENT') {
-        if (!tournamentBracket.initialized) {
-          initTournamentBracket();
-        }
+      if (activeJackpotChallenge && activeJackpotChallenge.active) {
         if (hudTourneyBadge) {
           hudTourneyBadge.classList.remove('hidden');
           hudTourneyBadge.classList.add('inline-flex');
-          hudTourneyBadge.innerText = `CUP ${tournamentRound + 1}/${TOTAL_TOURNAMENT_GAMES} · ${TOURNAMENT_ROUNDS[tournamentRound].toUpperCase()} · ${rankInfo.name.toUpperCase()}`;
+          hudTourneyBadge.innerText = `🎰 $${activeJackpotChallenge.jackpotPrize.toLocaleString()} JACKPOT • 30s GOAL CHALLENGE`;
+        }
+      } else if (currentGameMode === 'TOURNAMENT') {
+        if (!tournamentBracket.initialized) {
+          initTournamentBracket();
+        }
+        const activeTier = TOURNAMENT_TIERS[selectedTournamentTier] || TOURNAMENT_TIERS.CUP_100;
+        if (hudTourneyBadge) {
+          hudTourneyBadge.classList.remove('hidden');
+          hudTourneyBadge.classList.add('inline-flex');
+          hudTourneyBadge.innerText = `${activeTier.shortName.toUpperCase()} (${tournamentRound + 1}/${TOTAL_TOURNAMENT_GAMES}) · ${TOURNAMENT_ROUNDS[tournamentRound].toUpperCase()}`;
         }
       } else {
         if (hudTourneyBadge) {
@@ -2759,13 +3048,15 @@ export default function App() {
       const vsOverlay = document.getElementById('preMatchVsOverlay');
       if (vsOverlay) vsOverlay.classList.add('hidden');
 
+      const activeTourneyTier = TOURNAMENT_TIERS[selectedTournamentTier] || TOURNAMENT_TIERS.CUP_100;
+
       if (card) card.className = 'sm:col-span-5 w-full p-4 sm:p-5 rounded-3xl bg-white border-3 border-slate-900 shadow-[0_6px_0_#0f172a] text-left transition-all duration-300 relative overflow-hidden flex flex-col justify-between';
       if (statusLabel) statusLabel.className = 'flex items-center space-x-2 text-slate-800 transition-colors';
       if (statusIcon) statusIcon.className = 'fa-solid fa-trophy text-amber-500 text-xs';
       if (statusText) {
         statusText.innerText =
           currentGameMode === 'TOURNAMENT'
-            ? `Knockout Cup • ${TOURNAMENT_ROUNDS[tournamentRound]} (Game ${tournamentRound + 1}/3)`
+            ? `${activeTourneyTier.name} • ${TOURNAMENT_ROUNDS[tournamentRound]} (${tournamentRound + 1}/3)`
             : currentGameMode === 'RANKED'
               ? 'Ranked 1v1 Matchmaking'
               : 'Casual 1v1 Matchmaking';
@@ -2804,17 +3095,19 @@ export default function App() {
         startBtnEl.classList.remove('hidden');
         startBtnEl.removeAttribute('disabled');
         startBtnEl.className =
-          'indie-cta-btn w-full sm:w-auto sm:min-w-[240px] sm:max-w-[320px] min-h-[46px] sm:min-h-[50px] py-3 sm:py-3.5 px-7 rounded-2xl bg-sky-500 hover:bg-sky-400 text-white font-black text-sm sm:text-base tracking-wide cursor-pointer flex items-center justify-center space-x-2.5 mx-auto';
+          'indie-cta-btn w-full sm:w-auto sm:min-w-[210px] min-h-[44px] sm:min-h-[48px] py-2.5 sm:py-3 px-5 sm:px-6 rounded-2xl bg-sky-500 hover:bg-sky-400 text-white font-black text-xs sm:text-sm tracking-wide cursor-pointer flex items-center justify-center space-x-2 mx-auto';
       }
       if (startBtnTextEl) {
         startBtnTextEl.innerText =
           currentGameMode === 'TOURNAMENT'
-            ? `FIND ${TOURNAMENT_ROUNDS[tournamentRound].toUpperCase()} MATCH`
+            ? tournamentRound === 0
+              ? `ENTER ${activeTourneyTier.shortName.toUpperCase()} ($${activeTourneyTier.entryFee.toLocaleString()})`
+              : `PLAY ${TOURNAMENT_ROUNDS[tournamentRound].toUpperCase()} (${tournamentRound + 1}/3)`
             : currentGameMode === 'RANKED'
               ? 'FIND RANKED MATCH'
               : 'FIND CASUAL MATCH';
       }
-      if (startIconEl) startIconEl.className = 'fa-solid fa-play text-sm';
+      if (startIconEl) startIconEl.className = 'fa-solid fa-play text-xs';
     }
 
     function syncOpponentUi() {
@@ -2923,7 +3216,7 @@ export default function App() {
     let lastGoalWorldY = PITCH.height * 0.5;
     let dribbleSoundTimer = 0;
 
-    let ledBannerMessage = 'REMATCH 0.2 • 3 PASSES = SUPER FLOW';
+    let ledBannerMessage = `${GAME_TITLE} • 3 PASSES = SUPER FLOW`;
     let ledBannerTimer = 0;
 
     interface RippleVfx { x: number; y: number; r: number; maxR: number; alpha: number; color: string; }
@@ -3278,12 +3571,11 @@ export default function App() {
         const isPortraitPhone = w < h;
         const isCompactPhoneLandscape = h <= 550 && w > h;
         if (isPortraitPhone) {
-          // Portrait Mobile Optimization: closer dynamic zoom & upward pitch offset for bottom thumbstick/buttons, while revealing rich top & bottom stadium grandstands and outer fan plazas
+          // Portrait Mobile Optimization: generous field space & full goal visibility so goals and surrounding pitch are always in view
           canvasOffsetY = -18;
-          const fitScaleX = w / (PITCH.width + 80);
-          const fitScaleY = h / (PITCH.height + 360);
-          const fitScale = Math.min(fitScaleX, fitScaleY);
-          viewScale = Math.max(0.28, fitScale * 1.48);
+          const fitScaleX = w / 1820;
+          const fitScaleY = h / (PITCH.height + 340);
+          viewScale = Math.max(0.20, Math.min(fitScaleX, fitScaleY));
         } else {
           // Landscape Mobile & Tablet Arena Framing: comfortable zoom so players and ball are crisp and close
           canvasOffsetY = isCompactPhoneLandscape ? 10 : 14;
@@ -3388,8 +3680,8 @@ export default function App() {
               : 'L-Click: Pass / Hold to Curve • R-Click: Send Run';
           }
         }
-        if (mobileActionText) mobileActionText.innerText = 'Kick';
-        if (mobileSecondaryText) mobileSecondaryText.innerText = 'Send Run';
+        if (mobileActionText) mobileActionText.innerText = 'KICK';
+        if (mobileSecondaryText) mobileSecondaryText.innerText = 'RUN';
       } else {
         if (dot) dot.className = 'w-2.5 h-2.5 rounded-full bg-rose-500';
         if (text) {
@@ -3398,8 +3690,8 @@ export default function App() {
               ? `Defending vs ${currentOpponent.tag} • X/R2: Tackle • O/R1: Switch`
               : `Defending vs ${currentOpponent.tag} • L-Click: Tackle • R-Click: Switch`;
         }
-        if (mobileActionText) mobileActionText.innerText = 'Tackle';
-        if (mobileSecondaryText) mobileSecondaryText.innerText = 'Switch';
+        if (mobileActionText) mobileActionText.innerText = 'TACKLE';
+        if (mobileSecondaryText) mobileSecondaryText.innerText = 'SWITCH';
       }
     }
 
@@ -4326,8 +4618,9 @@ export default function App() {
       sound.playMatchFound();
       triggerScreenTransition(() => {
         const splashEl = document.getElementById('splashScreen');
-        const menuOverlayEl = document.getElementById('menuOverlay');
         if (splashEl) splashEl.classList.add('hidden');
+        if (gameState !== 'SPLASH') return;
+        const menuOverlayEl = document.getElementById('menuOverlay');
         if (menuOverlayEl) menuOverlayEl.classList.remove('hidden');
         gameState = 'MENU';
         syncBodyStateAttr('MENU');
@@ -4348,6 +4641,8 @@ export default function App() {
       const mainMenuBtn = document.getElementById('mainMenuBtn');
       const startBtnEl = document.getElementById('startBtn');
       const openSlotBtnEl = document.getElementById('openSlotMachineBtn');
+      const openShopBtnEl = document.getElementById('openShopBtn');
+      const openLeaderboardBtnEl = document.getElementById('openLeaderboardBtn');
       if (!modalCard) return;
 
       if (state === 'SPLASH' || state === 'PLAYING' || state === 'GOAL_CELEBRATION') {
@@ -4381,6 +4676,8 @@ export default function App() {
         if (profileBar) profileBar.classList.add('hidden');
         if (editProfileBtn) editProfileBtn.classList.add('hidden');
         if (openSlotBtnEl) openSlotBtnEl.classList.add('hidden');
+        if (openShopBtnEl) openShopBtnEl.classList.add('hidden');
+        if (openLeaderboardBtnEl) openLeaderboardBtnEl.classList.add('hidden');
         if (howToPlayWrap) howToPlayWrap.classList.add('hidden');
         if (howToPlayPanel) howToPlayPanel.classList.add('hidden');
         if (mainMenuBtn) {
@@ -4416,6 +4713,8 @@ export default function App() {
         if (profileBar) profileBar.classList.remove('hidden');
         if (editProfileBtn) editProfileBtn.classList.remove('hidden');
         if (openSlotBtnEl) openSlotBtnEl.classList.remove('hidden');
+        if (openShopBtnEl) openShopBtnEl.classList.remove('hidden');
+        if (openLeaderboardBtnEl) openLeaderboardBtnEl.classList.remove('hidden');
         if (howToPlayWrap) howToPlayWrap.classList.remove('hidden');
         if (mainMenuBtn) mainMenuBtn.classList.add('hidden');
         if (startBtnEl) startBtnEl.classList.remove('hidden');
@@ -5209,9 +5508,36 @@ export default function App() {
       });
 
       activeGoalCelebration = celebrationSpec;
-      goalBannerText = celebrationSpec.headline;
-      goalBannerSub = celebrationSpec.subheadline;
-      setLedBanner(celebrationSpec.ledMessage, 240);
+      if (activeJackpotChallenge && activeJackpotChallenge.active) {
+        goalBannerTimer = 65;
+        const isHoldSpinGate = activeJackpotChallenge.challengeType === 'HOLD_AND_SPIN';
+        if (scoringTeam === 'YOU') {
+          goalBannerText = isHoldSpinGate
+            ? 'SPIN TO WIN UNLOCKED!'
+            : `JACKPOT WON! +$${activeJackpotChallenge.jackpotPrize.toLocaleString()}`;
+          goalBannerSub = isHoldSpinGate
+            ? `${activeJackpotChallenge.stadiumName.toUpperCase()} • ENTERING HOLD & SPIN!`
+            : `${activeJackpotChallenge.stadiumName.toUpperCase()} GOAL CHALLENGE COMPLETE!`;
+          activeGoalCelebration.kickerBadge = isHoldSpinGate
+            ? '👑 HOLD & SPIN GOAL SCORED!'
+            : '🎰 JACKPOT GOAL SCORED!';
+          setLedBanner(
+            isHoldSpinGate
+              ? 'HOLD & SPIN UNLOCKED! ENTERING SPIN TO WIN BONUS SCREEN!'
+              : `JACKPOT WON! YOU SCORED & CLAIMED $${activeJackpotChallenge.jackpotPrize.toLocaleString()}!`,
+            240
+          );
+        } else {
+          goalBannerText = isHoldSpinGate ? 'HOLD & SPIN LOST!' : 'JACKPOT LOST!';
+          goalBannerSub = 'CONCEDED IN SUDDEN DEATH!';
+          activeGoalCelebration.kickerBadge = '💔 BONUS CHALLENGE FAILED';
+          setLedBanner(`BONUS LOST! CONCEDED AGAINST ${currentOpponent.tag.toUpperCase()}!`, 240);
+        }
+      } else {
+        goalBannerText = celebrationSpec.headline;
+        goalBannerSub = celebrationSpec.subheadline;
+        setLedBanner(celebrationSpec.ledMessage, 240);
+      }
 
       // Spawn expressive unboxed 3D arcade callouts directly over the pitch
       const calloutBaseX = scoringTeam === 'YOU' ? Math.min(PITCH.width - 140, ball.x - 70) : Math.max(140, ball.x + 70);
@@ -5237,6 +5563,12 @@ export default function App() {
         spawnFloatingText(ball.lastTouchPlayer.x, ball.lastTouchPlayer.y - 30, `${currentOpponent.tag}: "${chat}"`, '#fef08a');
       }
       sound.playGoal();
+      if (forceReTrigger && activeJackpotChallenge && activeJackpotChallenge.active) {
+        const jpOut = evaluateJackpotChallengeOutcome(activeJackpotChallenge, scoreYou, scoreAi, matchTime);
+        if (jpOut.ended) {
+          endMatch(jpOut.headline);
+        }
+      }
     }
 
     function updateBall() {
@@ -5909,7 +6241,7 @@ export default function App() {
         ctx.fillRect(lx, boardY + boardH - 8, 4, 4);
       }
 
-      ctx.font = '800 13px "JetBrains Mono", monospace';
+      ctx.font = '800 13px "IBM Plex Mono", monospace';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       const displayMsg =
@@ -5919,7 +6251,7 @@ export default function App() {
             ? `SUPER FLOW x${flowCombo} ACTIVE • FIRE CURVED STAR STRIKES`
             : currentGameMode === 'TOURNAMENT'
               ? `KNOCKOUT CUP • ${TOURNAMENT_ROUNDS[tournamentRound].toUpperCase()} VS ${currentOpponent.tag.toUpperCase()}`
-              : `REMATCH 0.2 • ${userProfile.name.toUpperCase()} VS ${currentOpponent.tag.toUpperCase()}`;
+              : `${GAME_TITLE} • ${userProfile.name.toUpperCase()} VS ${currentOpponent.tag.toUpperCase()}`;
       ctx.fillText(displayMsg, w * 0.5, boardY + boardH * 0.5 + 1);
       ctx.restore();
 
@@ -6456,24 +6788,45 @@ export default function App() {
         targetCamY = PITCH.height * 0.5 + Math.cos(matchTick * 0.006) * 45;
         targetZoom = 1.0;
       } else {
-        const focusX = ball.x * 0.62 + (controlledPlayer ? controlledPlayer.x * 0.38 : PITCH.width * 0.19);
+        const rawFocusX = ball.x * 0.62 + (controlledPlayer ? controlledPlayer.x * 0.38 : PITCH.width * 0.19);
         const focusY = ball.y * 0.62 + (controlledPlayer ? controlledPlayer.y * 0.38 : PITCH.height * 0.19);
         const isPortrait = canvas ? canvas.width < canvas.height : false;
         const isMobOrTab = isMobileOrTabletViewport();
         const isCompactPhoneLandscape = Boolean(canvas && canvas.height <= 550 && canvas.width > canvas.height);
 
-        // Enhanced camera tracking & slight zoom on phone portrait & landscape so gameplay feels close, smooth, and responsive
-        const panFactorX = isPortrait ? 0.56 : isCompactPhoneLandscape ? 0.38 : isMobOrTab ? 0.22 : 0.14;
+        // In mobile portrait mode, bias camera lookahead toward the near goal whenever in the attacking/defending half so the goal & net are ALWAYS in full view
+        let focusX = rawFocusX;
+        if (isPortrait) {
+          if (rawFocusX > PITCH.width * 0.52) {
+            focusX = Math.min(PITCH.width + PITCH.goalDepth, rawFocusX + 210);
+          } else if (rawFocusX < PITCH.width * 0.48) {
+            focusX = Math.max(-PITCH.goalDepth, rawFocusX - 210);
+          }
+        }
+
+        const baseGameplayZoom = isPortrait ? 0.94 : isCompactPhoneLandscape ? 1.04 : 1.0;
+        const panFactorX = isPortrait ? 0.95 : isCompactPhoneLandscape ? 0.42 : isMobOrTab ? 0.24 : 0.14;
         const panFactorY = isPortrait ? 0.34 : isCompactPhoneLandscape ? 0.36 : isMobOrTab ? 0.20 : 0.12;
         const rawCamX = PITCH.width * 0.5 + (focusX - PITCH.width * 0.5) * panFactorX;
         const rawCamY = PITCH.height * 0.5 + (focusY - PITCH.height * 0.5) * panFactorY;
-        const clampMarginX = isPortrait ? 0.18 : isCompactPhoneLandscape ? 0.26 : isMobOrTab ? 0.34 : 0.22;
-        const clampMarginY = isPortrait ? 0.24 : isCompactPhoneLandscape ? 0.28 : isMobOrTab ? 0.34 : 0.28;
-        targetCamX = Math.max(PITCH.width * clampMarginX, Math.min(PITCH.width * (1 - clampMarginX), rawCamX));
-        targetCamY = Math.max(PITCH.height * clampMarginY, Math.min(PITCH.height * (1 - clampMarginY), rawCamY));
-        const baseGameplayZoom = isPortrait ? 1.04 : isCompactPhoneLandscape ? 1.06 : 1.0;
+
+        if (isPortrait && canvas) {
+          const halfVisW = (canvas.width * 0.5) / Math.max(0.15, viewScale * baseGameplayZoom);
+          const worldLeftEdge = -PITCH.goalDepth - 56;
+          const worldRightEdge = PITCH.width + PITCH.goalDepth + 56;
+          const minCamX = Math.min(PITCH.width * 0.5, worldLeftEdge + halfVisW);
+          const maxCamX = Math.max(PITCH.width * 0.5, worldRightEdge - halfVisW);
+          targetCamX = Math.max(minCamX, Math.min(maxCamX, rawCamX));
+          targetCamY = Math.max(PITCH.height * 0.22, Math.min(PITCH.height * 0.78, rawCamY));
+        } else {
+          const clampMarginX = isCompactPhoneLandscape ? 0.24 : isMobOrTab ? 0.32 : 0.22;
+          const clampMarginY = isCompactPhoneLandscape ? 0.28 : isMobOrTab ? 0.34 : 0.28;
+          targetCamX = Math.max(PITCH.width * clampMarginX, Math.min(PITCH.width * (1 - clampMarginX), rawCamX));
+          targetCamY = Math.max(PITCH.height * clampMarginY, Math.min(PITCH.height * (1 - clampMarginY), rawCamY));
+        }
+
         if (gameState === 'GOAL_CELEBRATION') {
-          targetZoom = baseGameplayZoom + 0.06;
+          targetZoom = baseGameplayZoom + 0.04;
         } else if (kickChargeState.power > 0.25) {
           targetZoom = baseGameplayZoom + kickChargeState.power * 0.025;
         } else {
@@ -6603,11 +6956,12 @@ export default function App() {
         const postMatchRankCard = document.getElementById('postMatchRankCard');
         const playlistWrap = document.getElementById('playlistSelectorWrap');
         const kitWrap = document.getElementById('kitSelectorWrap');
+        const stadiumWrap = document.getElementById('stadiumSelectorWrap');
 
         if (titleEl) {
-          titleEl.innerHTML = `<span>REMATCH</span><span class="font-mono-num text-xl sm:text-3xl md:text-4xl font-black text-amber-400 drop-shadow-[0_2px_0_#0f172a]">0.2</span>`;
+          titleEl.innerHTML = `<span class="font-display tracking-wide">TIKI TAKA</span><span class="font-mono-num text-xl sm:text-3xl md:text-4xl font-black text-amber-400 drop-shadow-[0_2px_0_#0f172a]">0.2</span>`;
         }
-        if (srTitleEl) srTitleEl.innerText = 'REMATCH 0.2';
+        if (srTitleEl) srTitleEl.innerText = GAME_TITLE;
         if (subEl) {
           subEl.innerText = '';
           subEl.classList.add('hidden');
@@ -6621,6 +6975,7 @@ export default function App() {
         }
         if (playlistWrap) playlistWrap.classList.remove('hidden');
         if (kitWrap) kitWrap.classList.remove('hidden');
+        if (stadiumWrap) stadiumWrap.classList.remove('hidden');
         if (resumeBtn) resumeBtn.classList.add('hidden');
         if (forfeitBtn) forfeitBtn.classList.add('hidden');
         if (rematchSameBtn) rematchSameBtn.classList.add('hidden');
@@ -6704,11 +7059,19 @@ export default function App() {
       let isTournamentChampion = false;
       const matchRoundBeforeUpdate = tournamentRound;
 
+      const isJackpotMatch = Boolean(activeJackpotChallenge && activeJackpotChallenge.active);
+      const jackpotChallengeSnapshot = activeJackpotChallenge;
+      if (activeJackpotChallenge) {
+        activeJackpotChallenge.active = false;
+        activeJackpotChallenge = null;
+      }
+
       // Ranked & Tournament win progression: start at Bronze I and rank up by winning games, with Post-Match Rank Progress Bar UI!
       let rankUpAnnouncement = '';
       const postMatchRankCard = document.getElementById('postMatchRankCard');
-      if (currentGameMode === 'RANKED' || currentGameMode === 'TOURNAMENT') {
+      if (!isJackpotMatch && (currentGameMode === 'RANKED' || currentGameMode === 'TOURNAMENT')) {
         const prevWins = userProfile.rankedWins;
+        const prevMatches = userProfile.rankedMatches;
         userProfile.rankedMatches += 1;
         if (youWon) {
           userProfile.rankedWins += 1;
@@ -6716,7 +7079,12 @@ export default function App() {
         saveUserProfileToStorage();
         syncProfileUI();
 
-        const summary = computeRankProgressSummary(userProfile.rankedWins, prevWins);
+        const summary = computeRankProgressSummary(
+          userProfile.rankedWins,
+          prevWins,
+          userProfile.rankedMatches,
+          prevMatches
+        );
         if (youWon && summary.rankedUp) {
           sound.playComboBonus();
           rankUpAnnouncement = `RANK UP! Promoted to ${summary.currentRank.name}!`;
@@ -6737,7 +7105,7 @@ export default function App() {
           const subtextEl = document.getElementById('postMatchRankSubtext');
 
           if (badgeEl) {
-            badgeEl.innerText = summary.currentRank.name;
+            badgeEl.innerHTML = `${getRankCrestSvgHtml(summary.currentRank, 'w-3.5 h-3.5')}<span>${summary.currentRank.name}</span>`;
             badgeEl.style.backgroundColor = summary.currentRank.badgeBgHex;
             badgeEl.style.color = summary.currentRank.badgeTextHex;
             badgeEl.style.borderColor = summary.currentRank.borderHex;
@@ -6749,8 +7117,8 @@ export default function App() {
           }
           if (winsPillEl) {
             winsPillEl.innerText = youWon
-              ? `+1 WIN (${userProfile.rankedWins} TOTAL)`
-              : `${userProfile.rankedWins} ${userProfile.rankedWins === 1 ? 'WIN' : 'WINS'}`;
+              ? `+1 WIN • LVL ${summary.clubLevel} (${summary.rankPoints} RP)`
+              : `LVL ${summary.clubLevel} • ${userProfile.rankedWins} ${userProfile.rankedWins === 1 ? 'WIN' : 'WINS'}`;
           }
           if (barEl) {
             barEl.style.width = `${youWon ? summary.prevProgressPct : summary.progressPct}%`;
@@ -6780,7 +7148,62 @@ export default function App() {
 
       if (subEl) subEl.classList.remove('hidden');
 
-      if (currentGameMode === 'TOURNAMENT') {
+      let totalCashAwarded = 0;
+
+      let shouldOpenHoldAndSpinAfterMatch = false;
+
+      if (isJackpotMatch && jackpotChallengeSnapshot) {
+        showRematchBtn = false;
+        const jpOutcome = evaluateJackpotChallengeOutcome(
+          { ...jackpotChallengeSnapshot, active: true },
+          scoreYou,
+          scoreAi,
+          scoreYou === 0 && scoreAi === 0 ? 0 : matchTime
+        );
+        if (jpOutcome.unlocksHoldAndSpin) {
+          shouldOpenHoldAndSpinAfterMatch = true;
+          totalCashAwarded = 0;
+          selectedPokieMachine = jackpotChallengeSnapshot.machineId;
+          selectedPokieBet = jackpotChallengeSnapshot.betAmount;
+          saveUserProfileToStorage();
+          syncUserProfileUI();
+          sound.playTournamentWin();
+          if (titleEl) {
+            titleEl.innerHTML = `HOLD &amp; SPIN UNLOCKED! <span class="font-light text-amber-500">·</span> 3 RESPINS`;
+          }
+          if (srTitleEl) srTitleEl.innerText = 'HOLD & SPIN UNLOCKED';
+          if (subEl) subEl.innerText = jpOutcome.subtext;
+        } else if (jpOutcome.didWinJackpot) {
+          totalCashAwarded = jpOutcome.payout;
+          userProfile.balance =
+            (Number.isFinite(userProfile.balance) ? userProfile.balance : INITIAL_PLAYER_BALANCE) +
+            totalCashAwarded;
+          userProfile.machineJackpots[jackpotChallengeSnapshot.machineId] =
+            POKIE_MACHINES[jackpotChallengeSnapshot.machineId].baseJackpot10;
+          saveUserProfileToStorage();
+          syncUserProfileUI();
+          sound.playTournamentWin();
+          if (titleEl) {
+            titleEl.innerHTML = `JACKPOT WON! <span class="font-light text-amber-500">·</span> +$${totalCashAwarded.toLocaleString()}`;
+          }
+          if (srTitleEl) srTitleEl.innerText = `JACKPOT WON +$${totalCashAwarded.toLocaleString()}`;
+          if (subEl) subEl.innerText = jpOutcome.subtext;
+        } else {
+          totalCashAwarded = 0;
+          saveUserProfileToStorage();
+          syncUserProfileUI();
+          const lostTitle =
+            jackpotChallengeSnapshot.challengeType === 'HOLD_AND_SPIN'
+              ? 'HOLD &amp; SPIN LOST'
+              : 'JACKPOT LOST';
+          if (titleEl) {
+            titleEl.innerHTML = `${lostTitle} <span class="font-light text-rose-500">·</span> $0`;
+          }
+          if (srTitleEl) srTitleEl.innerText = `${lostTitle.replace('&amp;', '&')} $0`;
+          if (subEl) subEl.innerText = jpOutcome.subtext;
+        }
+        nextBtnLabel = 'FIND NEW MATCH';
+      } else if (currentGameMode === 'TOURNAMENT') {
         showRematchBtn = false;
         const scoreStr = `${scoreYou}-${scoreAi}`;
         tournamentBracket.totalGoalsYou += scoreYou;
@@ -6812,7 +7235,8 @@ export default function App() {
             }
             tournamentRound = 0;
             tournamentBracket.initialized = false;
-            nextBtnLabel = 'ENTER NEW TOURNAMENT';
+            const tCfg = TOURNAMENT_TIERS[selectedTournamentTier] || TOURNAMENT_TIERS.CUP_100;
+            nextBtnLabel = `ENTER ${tCfg.shortName.toUpperCase()} ($${tCfg.entryFee.toLocaleString()})`;
           }
         } else {
           const knockedOutRound = TOURNAMENT_ROUNDS[tournamentRound];
@@ -6821,7 +7245,8 @@ export default function App() {
           if (subEl) subEl.innerText = `Knocked out in the ${knockedOutRound} by ${currentOpponent.tag}.`;
           tournamentRound = 0;
           tournamentBracket.initialized = false;
-          nextBtnLabel = 'ENTER NEW TOURNAMENT';
+          const tCfg = TOURNAMENT_TIERS[selectedTournamentTier] || TOURNAMENT_TIERS.CUP_100;
+          nextBtnLabel = `ENTER ${tCfg.shortName.toUpperCase()} ($${tCfg.entryFee.toLocaleString()})`;
         }
       } else {
         if (youWon) {
@@ -6843,21 +7268,25 @@ export default function App() {
         }
       }
 
-      // Calculate & Award Match Money Reward (depends on game outcome & game mode)
-      const moneyReward = calculateMatchMoneyReward({
-        gameMode: currentGameMode,
-        didWin: youWon,
-        isDraw: scoreYou === scoreAi,
-        goalsFor: scoreYou,
-        goalsAgainst: scoreAi,
-        isMercyRule: Math.abs(scoreYou - scoreAi) >= MERCY_RULE_LEAD,
-        tournamentRound: matchRoundBeforeUpdate,
-      });
-      userProfile.balance =
-        (Number.isFinite(userProfile.balance) ? userProfile.balance : INITIAL_PLAYER_BALANCE) +
-        moneyReward.totalReward;
-      saveUserProfileToStorage();
-      syncProfileUI();
+      if (!isJackpotMatch) {
+        // Calculate & Award Match Money Reward (depends on game outcome, game mode & tournament tier)
+        const moneyReward = calculateMatchMoneyReward({
+          gameMode: currentGameMode,
+          didWin: youWon,
+          isDraw: scoreYou === scoreAi,
+          goalsFor: scoreYou,
+          goalsAgainst: scoreAi,
+          isMercyRule: Math.abs(scoreYou - scoreAi) >= MERCY_RULE_LEAD,
+          tournamentRound: matchRoundBeforeUpdate,
+          tournamentTier: selectedTournamentTier,
+        });
+        totalCashAwarded = moneyReward.totalReward;
+        userProfile.balance =
+          (Number.isFinite(userProfile.balance) ? userProfile.balance : INITIAL_PLAYER_BALANCE) +
+          totalCashAwarded;
+        saveUserProfileToStorage();
+        syncUserProfileUI();
+      }
 
       const spEl = document.getElementById('statPasses');
       const scEl = document.getElementById('statCombo');
@@ -6871,12 +7300,18 @@ export default function App() {
       if (scEl) scEl.innerText = `x${maxFlowCombo}`;
       if (ssEl) ssEl.innerText = String(totalShotsYou);
       if (spoEl) spoEl.innerText = `${possPct}%`;
-      if (smeEl) smeEl.innerText = `+$${moneyReward.totalReward}`;
-      if (twMoneyEl) twMoneyEl.innerText = `+$${moneyReward.totalReward}`;
+      if (smeEl) smeEl.innerText = `+$${totalCashAwarded.toLocaleString()}`;
+      if (twMoneyEl) twMoneyEl.innerText = `+$${totalCashAwarded.toLocaleString()}`;
       if (statMoneyModeBadgeEl) {
-        statMoneyModeBadgeEl.innerText =
-          currentGameMode === 'TOURNAMENT'
-            ? '2X CUP'
+        const activeTier = TOURNAMENT_TIERS[selectedTournamentTier] || TOURNAMENT_TIERS.CUP_100;
+        statMoneyModeBadgeEl.innerText = isJackpotMatch
+          ? shouldOpenHoldAndSpinAfterMatch
+            ? 'BONUS!'
+            : totalCashAwarded > 0
+              ? 'JACKPOT!'
+              : 'LOST'
+          : currentGameMode === 'TOURNAMENT'
+            ? activeTier.shortName.toUpperCase()
             : currentGameMode === 'RANKED'
               ? '1.5X'
               : '1X';
@@ -6888,10 +7323,16 @@ export default function App() {
       }
       if (playlistWrap) playlistWrap.classList.add('hidden');
       if (kitWrap) kitWrap.classList.add('hidden');
+      const stadiumWrapEnd = document.getElementById('stadiumSelectorWrap');
+      if (stadiumWrapEnd) stadiumWrapEnd.classList.add('hidden');
 
       setMatchmakingIdleUI();
       if (startBtnText) startBtnText.innerText = nextBtnLabel;
       if (openSlotMachineBtn) openSlotMachineBtn.classList.add('hidden');
+      const openShopBtnEl = document.getElementById('openShopBtn');
+      const openLeaderboardBtnEl = document.getElementById('openLeaderboardBtn');
+      if (openShopBtnEl) openShopBtnEl.classList.add('hidden');
+      if (openLeaderboardBtnEl) openLeaderboardBtnEl.classList.add('hidden');
 
       if (rematchSameBtn && rematchSameText) {
         if (showRematchBtn) {
@@ -6909,6 +7350,20 @@ export default function App() {
       resetPositionsForKickoff('YOU');
 
       triggerScreenTransition(() => {
+        if (shouldOpenHoldAndSpinAfterMatch && jackpotChallengeSnapshot) {
+          // Player won the 30s stadium match for Hold & Spin! Transition straight into the Spin to Win screen!
+          gameState = 'MENU';
+          syncBodyStateAttr('MENU');
+          syncMenuLayoutForState('MENU');
+          if (menuOverlay) menuOverlay.classList.remove('hidden');
+          if (slotMachineModal) slotMachineModal.classList.remove('hidden');
+          showPokieCabinetScreen();
+          triggerHoldAndSpinBonus(jackpotChallengeSnapshot.triggerPositions);
+          if (holdSpinStatusBanner) {
+            holdSpinStatusBanner.innerText = `⚽ GOAL SCORED IN ${jackpotChallengeSnapshot.stadiumName.toUpperCase()}! SPIN TO WIN UNLOCKED — 3 RESPINS READY!`;
+          }
+          return;
+        }
         if (isTournamentChampion) {
           openTournamentWinCelebration(possPct);
         } else {
@@ -6916,23 +7371,118 @@ export default function App() {
           syncMenuFocusVisual(true);
         }
         // Trigger post-match cash reward count-up animation & coin clink SFX
-        triggerMatchCashRewardAnimation(moneyReward.totalReward);
+        if (totalCashAwarded > 0) {
+          triggerMatchCashRewardAnimation(totalCashAwarded);
+        }
       });
     }
 
     function pickRandomPitchArena() {
-      if (preferredArenaMode !== 'RANDOM') {
+      const unlockedSet = new Set<PitchThemeId>(
+        userProfile.unlockedStadiums && userProfile.unlockedStadiums.length > 0
+          ? userProfile.unlockedStadiums
+          : DEFAULT_UNLOCKED_STADIUMS
+      );
+      if (preferredArenaMode !== 'RANDOM' && unlockedSet.has(preferredArenaMode)) {
         selectedPitchTheme = preferredArenaMode;
       } else {
-        // Pick a random stadium theme different from the previous one so each match feels fresh
-        const candidates = PITCH_THEMES.filter((t) => t.id !== selectedPitchTheme);
-        const pool = candidates.length > 0 ? candidates : PITCH_THEMES;
-        const randomTheme = pool[Math.floor(Math.random() * pool.length)];
+        // Pick from the player's unlocked stadiums
+        const unlockedThemes = PITCH_THEMES.filter((t) => unlockedSet.has(t.id));
+        const safePool = unlockedThemes.length > 0 ? unlockedThemes : [PITCH_THEMES[0]];
+        const differentPool = safePool.filter((t) => t.id !== selectedPitchTheme);
+        const finalPool = differentPool.length > 0 ? differentPool : safePool;
+        const randomTheme = finalPool[Math.floor(Math.random() * finalPool.length)];
         selectedPitchTheme = randomTheme.id;
       }
       applyPitchTheme(selectedPitchTheme);
       sound.setPitchTheme(selectedPitchTheme);
       rebuildStaticPitchCache();
+      syncHomeArenaSelectorUI();
+    }
+
+    function syncHomeArenaSelectorUI() {
+      const unlockedList =
+        userProfile.unlockedStadiums && userProfile.unlockedStadiums.length > 0
+          ? userProfile.unlockedStadiums
+          : DEFAULT_UNLOCKED_STADIUMS;
+      if (!unlockedList.includes(selectedPitchTheme)) {
+        selectedPitchTheme = unlockedList[0];
+        applyPitchTheme(selectedPitchTheme);
+        sound.setPitchTheme(selectedPitchTheme);
+        rebuildStaticPitchCache();
+      }
+      const activeTheme =
+        PITCH_THEMES.find((t) => t.id === selectedPitchTheme) || PITCH_THEMES[0];
+      const activeShopItem =
+        SHOP_STADIUM_ITEMS.find((s) => s.id === selectedPitchTheme) || SHOP_STADIUM_ITEMS[0];
+      const nameEl = document.getElementById('activeStadiumNameText');
+      const modePillEl = document.getElementById('activeStadiumModePill');
+      const countEl = document.getElementById('stadiumUnlockedCountText');
+      const shuffleBtn = document.getElementById('stadiumShuffleBtn');
+      const swatchEl = document.getElementById('activeStadiumSwatch');
+
+      if (nameEl) {
+        nameEl.innerText = activeTheme.name;
+      }
+      if (modePillEl) {
+        modePillEl.innerText =
+          preferredArenaMode === 'RANDOM'
+            ? 'SHUFFLE UNLOCKED'
+            : `${activeShopItem.tierLabel} ARENA`;
+        modePillEl.style.backgroundColor =
+          preferredArenaMode === 'RANDOM' ? '#fde047' : activeShopItem.accentHex;
+        modePillEl.style.color = '#0f172a';
+      }
+      if (countEl) {
+        countEl.innerText = `${unlockedList.length}/${PITCH_THEMES.length} UNLOCKED`;
+      }
+      if (swatchEl) {
+        swatchEl.style.background = `linear-gradient(135deg, ${activeTheme.turf.stripeLight} 0%, ${activeTheme.turf.stripeDark} 100%)`;
+        swatchEl.style.borderColor = '#0f172a';
+      }
+      if (shuffleBtn) {
+        const isRandom = preferredArenaMode === 'RANDOM';
+        shuffleBtn.innerText = isRandom ? '🎲 Shuffle: ON' : '🎲 Shuffle';
+        shuffleBtn.className = isRandom
+          ? 'btn-clean py-1.5 px-2.5 rounded-xl bg-amber-300 border-2 border-slate-900 text-slate-950 font-black text-[10px] uppercase tracking-wider shadow-[0_2px_0_#0f172a] cursor-pointer shrink-0'
+          : 'btn-clean py-1.5 px-2.5 rounded-xl bg-white hover:bg-slate-100 border-2 border-slate-900 text-slate-700 font-black text-[10px] uppercase tracking-wider shadow-[0_2px_0_#0f172a] cursor-pointer shrink-0';
+      }
+    }
+
+    function cycleUnlockedStadium(step: number) {
+      sound.init();
+      sound.playUiSelect();
+      const unlockedSet = new Set<PitchThemeId>(
+        userProfile.unlockedStadiums && userProfile.unlockedStadiums.length > 0
+          ? userProfile.unlockedStadiums
+          : DEFAULT_UNLOCKED_STADIUMS
+      );
+      const unlockedThemes = PITCH_THEMES.filter((t) => unlockedSet.has(t.id));
+      const pool = unlockedThemes.length > 0 ? unlockedThemes : [PITCH_THEMES[0]];
+      const currentIdx = Math.max(
+        0,
+        pool.findIndex((t) => t.id === selectedPitchTheme)
+      );
+      const nextIdx = (currentIdx + step + pool.length) % pool.length;
+      const chosen = pool[nextIdx];
+      preferredArenaMode = chosen.id;
+      selectedPitchTheme = chosen.id;
+      applyPitchTheme(chosen.id);
+      sound.setPitchTheme(chosen.id);
+      rebuildStaticPitchCache();
+      syncHomeArenaSelectorUI();
+    }
+
+    function toggleShuffleArenaMode() {
+      sound.init();
+      sound.playUiSelect();
+      if (preferredArenaMode === 'RANDOM') {
+        preferredArenaMode = selectedPitchTheme;
+        syncHomeArenaSelectorUI();
+      } else {
+        preferredArenaMode = 'RANDOM';
+        pickRandomPitchArena();
+      }
     }
 
     function populateTournamentBracketVisual() {
@@ -7248,11 +7798,54 @@ export default function App() {
       }
     }
 
+    function selectTournamentTier(tierId: TournamentTierId) {
+      if (isSearchingMatch || matchLaunchTimeout) return;
+      if (!TOURNAMENT_TIERS[tierId]) return;
+      sound.init();
+      sound.playUiSelect();
+      selectedTournamentTier = tierId;
+      tournamentRound = 0;
+      const entryBanner = document.getElementById('tourneyEntryStatusBanner');
+      if (entryBanner) entryBanner.classList.add('hidden');
+      syncTournamentTierSelectorUI();
+      if (gameState !== 'PAUSED') {
+        setMatchmakingIdleUI();
+      } else {
+        syncKitAndModeUI();
+      }
+    }
+
     function startMatch() {
       sound.unlock();
       if (isSearchingMatch || matchLaunchTimeout) {
         return;
       }
+
+      // Enforce Tournament Entry Fee at Round 0 (Quarter-Final Entry)
+      if (currentGameMode === 'TOURNAMENT' && tournamentRound === 0) {
+        const tierCfg = TOURNAMENT_TIERS[selectedTournamentTier] || TOURNAMENT_TIERS.CUP_100;
+        const entryBanner = document.getElementById('tourneyEntryStatusBanner');
+        if (userProfile.balance < tierCfg.entryFee) {
+          sound.playUiBack();
+          if (entryBanner) {
+            entryBanner.innerText = `⚠️ INSUFFICIENT FUNDS! NEED $${tierCfg.entryFee.toLocaleString()} TO ENTER ${tierCfg.name.toUpperCase()} (YOU HAVE $${userProfile.balance.toLocaleString()})`;
+            entryBanner.className =
+              'mt-2 p-2 rounded-xl bg-rose-200 border-2 border-slate-900 text-rose-950 font-black text-[10px] uppercase tracking-wide text-center shadow-[0_2px_0_#0f172a]';
+            entryBanner.classList.remove('hidden');
+          }
+          return;
+        }
+        userProfile.balance = Math.max(0, userProfile.balance - tierCfg.entryFee);
+        saveUserProfileToStorage();
+        syncProfileUI();
+        if (entryBanner) {
+          entryBanner.innerText = `🏆 -$${tierCfg.entryFee.toLocaleString()} ENTRY FEE PAID • ${tierCfg.name.toUpperCase()} LOCKED IN!`;
+          entryBanner.className =
+            'mt-2 p-2 rounded-xl bg-emerald-200 border-2 border-slate-900 text-emerald-950 font-black text-[10px] uppercase tracking-wide text-center shadow-[0_2px_0_#0f172a]';
+          entryBanner.classList.remove('hidden');
+        }
+      }
+
       sound.playUiClick();
 
       const winOverlay = document.getElementById('tournamentWinOverlay');
@@ -7277,6 +7870,10 @@ export default function App() {
       if (rematchSameBtn) rematchSameBtn.classList.add('hidden');
       if (mainMenuBtn) mainMenuBtn.classList.add('hidden');
       if (openSlotMachineBtn) openSlotMachineBtn.classList.add('hidden');
+      const openShopBtnStart = document.getElementById('openShopBtn');
+      const openLeaderboardBtnStart = document.getElementById('openLeaderboardBtn');
+      if (openShopBtnStart) openShopBtnStart.classList.add('hidden');
+      if (openLeaderboardBtnStart) openLeaderboardBtnStart.classList.add('hidden');
 
       sound.playMatchmakingTick(0);
       applySearchingVisualState(0, '0.4', 18);
@@ -7370,10 +7967,16 @@ export default function App() {
         // In Pause Menu: hide lobby mode/kit selectors and show Resume Match + Forfeit Match
         const playlistWrap = document.getElementById('playlistSelectorWrap');
         const kitWrap = document.getElementById('kitSelectorWrap');
+        const stadiumWrapPause = document.getElementById('stadiumSelectorWrap');
         if (playlistWrap) playlistWrap.classList.add('hidden');
         if (kitWrap) kitWrap.classList.add('hidden');
+        if (stadiumWrapPause) stadiumWrapPause.classList.add('hidden');
         if (startBtn) startBtn.classList.add('hidden');
         if (openSlotMachineBtn) openSlotMachineBtn.classList.add('hidden');
+        const openShopBtnPause = document.getElementById('openShopBtn');
+        const openLeaderboardBtnPause = document.getElementById('openLeaderboardBtn');
+        if (openShopBtnPause) openShopBtnPause.classList.add('hidden');
+        if (openLeaderboardBtnPause) openLeaderboardBtnPause.classList.add('hidden');
         if (rematchSameBtn) rematchSameBtn.classList.add('hidden');
         if (mainMenuBtn) mainMenuBtn.classList.add('hidden');
         if (resumeBtn) resumeBtn.classList.remove('hidden');
@@ -8000,22 +8603,53 @@ export default function App() {
       const cabinetTagline = document.getElementById('slotCabinetTagline');
       const cabinetTitle = document.getElementById('slotCabinetTitle');
       const reelHousing = document.getElementById('slotReelHousing');
+      const backToLobbyBtn = document.getElementById('backToPokieLobbyBtn');
+      const lobbyBalEl = document.getElementById('pokieLobbyBalanceText');
 
-      if (cabinetCard) {
-        cabinetCard.style.background = machine.cabinetBg;
-        cabinetCard.style.borderColor = '#0f172a';
+      if (lobbyBalEl) {
+        lobbyBalEl.innerText = `$${userProfile.balance.toLocaleString()}`;
       }
-      if (cabinetHeader) {
-        cabinetHeader.style.background = machine.headerGradient;
-        cabinetHeader.style.borderColor = machine.cabinetBorderHex;
+
+      if (pokieModalScreen === 'LOBBY') {
+        if (cabinetCard) {
+          cabinetCard.style.background = 'linear-gradient(180deg, #f8fafc 0%, #eff6ff 55%, #fef3c7 100%)';
+          cabinetCard.style.borderColor = '#0f172a';
+        }
+        if (cabinetHeader) {
+          cabinetHeader.style.background = 'linear-gradient(90deg, #0f172a 0%, #1e293b 50%, #0f172a 100%)';
+          cabinetHeader.style.borderColor = '#fbbf24';
+        }
+        if (cabinetTagline) {
+          cabinetTagline.innerText = `${GAME_TITLE} POKIES LOUNGE • 4 STADIUM & VIP MACHINES`;
+          cabinetTagline.style.color = '#fde047';
+        }
+        if (cabinetTitle) {
+          cabinetTitle.innerText = 'SELECT A POKIE MACHINE';
+        }
+        if (backToLobbyBtn) {
+          backToLobbyBtn.classList.add('hidden');
+        }
+      } else {
+        if (cabinetCard) {
+          cabinetCard.style.background = machine.cabinetBg;
+          cabinetCard.style.borderColor = '#0f172a';
+        }
+        if (cabinetHeader) {
+          cabinetHeader.style.background = machine.headerGradient;
+          cabinetHeader.style.borderColor = machine.cabinetBorderHex;
+        }
+        if (cabinetTagline) {
+          cabinetTagline.innerText = `${machine.stadiumName.toUpperCase()} • ${machine.tagline}`;
+          cabinetTagline.style.color = machine.accentHex;
+        }
+        if (cabinetTitle) {
+          cabinetTitle.innerText = `${machine.shortName.toUpperCase()} POKIES`;
+        }
+        if (backToLobbyBtn) {
+          backToLobbyBtn.classList.remove('hidden');
+        }
       }
-      if (cabinetTagline) {
-        cabinetTagline.innerText = `${machine.stadiumName.toUpperCase()} • ${machine.tagline}`;
-        cabinetTagline.style.color = machine.accentHex;
-      }
-      if (cabinetTitle) {
-        cabinetTitle.innerText = `${machine.shortName.toUpperCase()} POKIES`;
-      }
+
       if (reelHousing) {
         reelHousing.style.backgroundColor = machine.reelHousingBg;
         reelHousing.style.borderColor = machine.reelBorderHex;
@@ -8027,24 +8661,65 @@ export default function App() {
         b.style.backgroundColor = machine.bulbColors[idx % machine.bulbColors.length];
       });
 
-      // Highlight active machine card in the 3-machine selector bar
+      // Style the 4 machine selection buttons in the Pokie Lobby screen (greyed out + LOCKED overlay until bought in Shop)
+      const unlockedPokieSet = new Set<PokieMachineId>(
+        userProfile.unlockedPokies && userProfile.unlockedPokies.length > 0
+          ? userProfile.unlockedPokies
+          : DEFAULT_UNLOCKED_POKIES
+      );
       for (const m of POKIE_MACHINE_LIST) {
-        const btn = document.getElementById(`slotMachineBtn_${m.id}`);
+        const btn = document.getElementById(`slotMachineBtn_${m.id}`) as HTMLButtonElement | null;
         if (!btn) continue;
-        const isSelected = m.id === selectedPokieMachine;
-        btn.className = isSelected
-          ? 'slot-machine-select-btn p-2 rounded-2xl border-[2.5px] border-slate-900 shadow-[0_3px_0_#0f172a] text-left transition-all cursor-pointer relative overflow-hidden scale-[1.02]'
-          : 'slot-machine-select-btn p-2 rounded-2xl border-2 border-slate-300 bg-white/85 hover:bg-white text-left transition-all cursor-pointer opacity-80 hover:opacity-100';
-        btn.style.background = isSelected ? m.headerGradient : '#ffffff';
-        const nameEl = document.getElementById(`slotMachineName_${m.id}`);
-        const subEl = document.getElementById(`slotMachineSub_${m.id}`);
-        const jpEl = document.getElementById(`slotMachineJackpot_${m.id}`);
-        if (nameEl) nameEl.style.color = isSelected ? '#ffffff' : '#0f172a';
-        if (subEl) subEl.style.color = isSelected ? m.accentHex : '#64748b';
-        if (jpEl) {
-          jpEl.style.backgroundColor = isSelected ? m.accentHex : '#f1f5f9';
-          jpEl.style.color = '#0f172a';
+        const isUnlocked = unlockedPokieSet.has(m.id);
+        const isSelected = m.id === selectedPokieMachine && isUnlocked;
+        btn.style.background = m.headerGradient;
+        btn.style.borderColor = isSelected ? m.accentHex : '#0f172a';
+        btn.setAttribute('data-unlocked', isUnlocked ? 'true' : 'false');
+        btn.className = isUnlocked
+          ? 'slot-machine-select-btn relative p-3.5 rounded-2xl border-3 border-slate-900 shadow-[0_4px_0_#0f172a] hover:translate-y-[-1px] text-left transition-all cursor-pointer flex flex-col justify-between min-h-[116px] overflow-hidden'
+          : 'slot-machine-select-btn relative p-3.5 rounded-2xl border-3 border-slate-900 shadow-[0_4px_0_#0f172a] text-left transition-all cursor-not-allowed flex flex-col justify-between min-h-[116px] grayscale opacity-75 overflow-hidden';
+
+        const lockOverlay = document.getElementById(`slotMachineLockOverlay_${m.id}`);
+        if (lockOverlay) {
+          lockOverlay.classList.toggle('hidden', isUnlocked);
         }
+        const ctaPill = document.getElementById(`slotMachineCtaPill_${m.id}`);
+        if (ctaPill) {
+          ctaPill.innerText = isUnlocked
+            ? 'PLAY MACHINE →'
+            : `🔒 $${m.unlockPrice.toLocaleString()} IN SHOP`;
+        }
+
+        const jpEl = document.getElementById(`slotMachineJackpot_${m.id}`);
+        if (jpEl) {
+          const previewBet = m.defaultBet;
+          const effJp = getMachineEffectiveJackpot(
+            m.id,
+            previewBet,
+            userProfile.machineJackpots[m.id]
+          );
+          jpEl.innerText = `$${effJp.toLocaleString()}`;
+        }
+      }
+
+      // Toggle between $10/$100 selector vs locked $1,000 High Roller VIP stake
+      const standardBetWrap = document.getElementById('slotStandardBetBtnsWrap');
+      const highRollerBadge = document.getElementById('slotHighRollerStakeBadge');
+      const stakesTitle = document.getElementById('slotStakesTitle');
+      const stakesSubtitle = document.getElementById('slotStakesSubtitle');
+      const isHighRollerMachine =
+        machine.allowedBets.length === 1 && machine.allowedBets[0] === 1000;
+
+      if (isHighRollerMachine) {
+        if (standardBetWrap) standardBetWrap.classList.add('hidden');
+        if (highRollerBadge) highRollerBadge.classList.remove('hidden');
+        if (stakesTitle) stakesTitle.innerText = 'VIP HIGH ROLLER STAKES';
+        if (stakesSubtitle) stakesSubtitle.innerText = '$1,000 Spin • 100x Line Payouts & $100,000+ Jackpot!';
+      } else {
+        if (standardBetWrap) standardBetWrap.classList.remove('hidden');
+        if (highRollerBadge) highRollerBadge.classList.add('hidden');
+        if (stakesTitle) stakesTitle.innerText = 'SPIN STAKES';
+        if (stakesSubtitle) stakesSubtitle.innerText = '$100 Bet = 10x Line Wins & 10x Jackpot';
       }
 
       // Highlight active bet button ($10 vs $100)
@@ -8061,10 +8736,10 @@ export default function App() {
       }
 
       if (slotSpinBtnLabel && !isSlotSpinning) {
-        slotSpinBtnLabel.innerText = `SPIN REELS • $${selectedPokieBet}`;
+        slotSpinBtnLabel.innerText = `SPIN REELS • $${selectedPokieBet.toLocaleString()}`;
       }
 
-      // Dynamically update bottom paytable & Hold & Spin guide values for $10 vs $100
+      // Dynamically update compact bottom paytable & Hold & Spin values for $10, $100, or $1,000
       const activeJp = getMachineEffectiveJackpot(
         selectedPokieMachine,
         selectedPokieBet,
@@ -8076,26 +8751,66 @@ export default function App() {
       const ptWildVal = document.getElementById('slotPtWildVal');
       const ptLineVal = document.getElementById('slotPtLineVal');
 
-      if (ptBetBadge) ptBetBadge.innerText = `$${selectedPokieBet} BET`;
+      if (ptBetBadge) ptBetBadge.innerText = `$${selectedPokieBet.toLocaleString()} BET`;
       if (ptJackpotVal) ptJackpotVal.innerText = `$${activeJp.toLocaleString()}`;
-      if (ptHoldVal) ptHoldVal.innerText = `+$${(selectedPokieBet * 15).toLocaleString()} + 3 RESPINS`;
-      if (ptWildVal) ptWildVal.innerText = `2X LINE (3x = $${(selectedPokieBet * 40).toLocaleString()})`;
-      if (ptLineVal) ptLineVal.innerText = `$${selectedPokieBet} – $${(selectedPokieBet * 20).toLocaleString()}`;
+      if (ptHoldVal) ptHoldVal.innerText = `+$${(selectedPokieBet * 15).toLocaleString()} + BONUS`;
+      if (ptWildVal) ptWildVal.innerText = `2X ($${(selectedPokieBet * 40).toLocaleString()})`;
+      if (ptLineVal) ptLineVal.innerText = `2X • $${selectedPokieBet.toLocaleString()}–$${(selectedPokieBet * 20).toLocaleString()}`;
 
       syncProfileUI();
+    }
+
+    function showPokieLobbyScreen() {
+      if (isSlotSpinning || isHoldSpinStepAnimating || activeHoldAndSpinSession) return;
+      pokieModalScreen = 'LOBBY';
+      const lobbyScreen = document.getElementById('pokieLobbyScreen');
+      const cabinetScreen = document.getElementById('pokieCabinetScreen');
+      const lockBanner = document.getElementById('pokieLobbyLockBanner');
+      if (lockBanner) lockBanner.classList.add('hidden');
+      if (lobbyScreen) lobbyScreen.classList.remove('hidden');
+      if (cabinetScreen) cabinetScreen.classList.add('hidden');
+      setPokieMarqueeFast(false);
+      syncPokieMachineThemeAndBetUI();
+    }
+
+    function showPokieCabinetScreen() {
+      pokieModalScreen = 'CABINET';
+      const lobbyScreen = document.getElementById('pokieLobbyScreen');
+      const cabinetScreen = document.getElementById('pokieCabinetScreen');
+      if (lobbyScreen) lobbyScreen.classList.add('hidden');
+      if (cabinetScreen) cabinetScreen.classList.remove('hidden');
+      if (slotHoldAndSpinScreen) slotHoldAndSpinScreen.classList.add('hidden');
+      if (slotMainGameScreen) slotMainGameScreen.classList.remove('hidden');
+      syncPokieMachineThemeAndBetUI();
     }
 
     function selectPokieMachine(machineId: PokieMachineId) {
       if (isSlotSpinning || isHoldSpinStepAnimating || activeHoldAndSpinSession) return;
       if (!POKIE_MACHINES[machineId]) return;
+      const machine = POKIE_MACHINES[machineId];
+      const isUnlocked =
+        userProfile.unlockedPokies && userProfile.unlockedPokies.includes(machineId);
+      const lockBanner = document.getElementById('pokieLobbyLockBanner');
+      if (!isUnlocked) {
+        sound.init();
+        sound.playUiBack();
+        if (lockBanner) {
+          lockBanner.innerText = `🔒 ${machine.name.toUpperCase()} IS LOCKED! UNLOCK IT IN THE CLUB SHOP FOR $${machine.unlockPrice.toLocaleString()}!`;
+          lockBanner.classList.remove('hidden');
+        }
+        return;
+      }
+      if (lockBanner) lockBanner.classList.add('hidden');
       sound.init();
       sound.playUiSelect();
       selectedPokieMachine = machineId;
-      syncPokieMachineThemeAndBetUI();
+      if (!machine.allowedBets.includes(selectedPokieBet)) {
+        selectedPokieBet = machine.defaultBet;
+      }
+      showPokieCabinetScreen();
       renderPokieGridDOM(currentPokieGrid);
-      const machine = POKIE_MACHINES[machineId];
       if (slotStatusBanner) {
-        slotStatusBanner.innerText = `${machine.name.toUpperCase()} READY • SPIN FOR $${selectedPokieBet} OR LAND 3+ ORBS FOR HOLD & SPIN!`;
+        slotStatusBanner.innerText = `${machine.name.toUpperCase()} • SPIN FOR $${selectedPokieBet.toLocaleString()} OR LAND 3+ ORBS FOR HOLD & SPIN MATCH!`;
         slotStatusBanner.className =
           'p-2 rounded-2xl bg-slate-100 border-2 border-slate-900 text-slate-800 font-black text-[11px] uppercase tracking-wide text-center mb-2 shadow-[0_2px_0_#0f172a]';
       }
@@ -8103,7 +8818,8 @@ export default function App() {
 
     function selectPokieBet(betAmount: PokieBetAmount) {
       if (isSlotSpinning || isHoldSpinStepAnimating || activeHoldAndSpinSession) return;
-      if (betAmount !== 10 && betAmount !== 100) return;
+      const machine = POKIE_MACHINES[selectedPokieMachine] || POKIE_MACHINES.CHAMPIONS_GOLD;
+      if (!machine.allowedBets.includes(betAmount)) return;
       sound.init();
       sound.playUiSelect();
       selectedPokieBet = betAmount;
@@ -8111,11 +8827,13 @@ export default function App() {
       renderPokieGridDOM(currentPokieGrid);
       if (slotStatusBanner) {
         slotStatusBanner.innerText =
-          betAmount === 100
-            ? '🔥 $100 HIGH-ROLLER STAKES ACTIVE! 10X PAYOUTS & 10X GRAND JACKPOT! 🔥'
-            : '⚡ $10 STANDARD SPIN ACTIVE • LAND 3+ CROWN ORBS FOR HOLD & SPIN! ⚡';
+          betAmount === 1000
+            ? '👑 $1,000 HIGH ROLLER VIP STAKES ACTIVE! 100X PAYOUTS & $100,000+ GRAND JACKPOT! 👑'
+            : betAmount === 100
+              ? '🔥 $100 HIGH-ROLLER STAKES ACTIVE! 10X PAYOUTS & 10X GRAND JACKPOT! 🔥'
+              : '⚡ $10 STANDARD SPIN ACTIVE • LAND 3+ CROWN ORBS FOR HOLD & SPIN! ⚡';
         slotStatusBanner.className =
-          betAmount === 100
+          betAmount >= 100
             ? 'p-2 rounded-2xl bg-amber-200 border-2 border-slate-900 text-slate-950 font-black text-[11px] uppercase tracking-wide text-center mb-2 shadow-[0_2px_0_#0f172a]'
             : 'p-2 rounded-2xl bg-slate-100 border-2 border-slate-900 text-slate-800 font-black text-[11px] uppercase tracking-wide text-center mb-2 shadow-[0_2px_0_#0f172a]';
       }
@@ -8250,17 +8968,138 @@ export default function App() {
       return activeHoldAndSpinSession;
     }
 
+    function showJackpotGoalChallengePrompt(
+      machineId: PokieMachineId,
+      betAmount: PokieBetAmount,
+      jackpotAmount: number,
+      challengeType: JackpotChallengeType = 'GRAND_JACKPOT',
+      triggerPositions?: { reel: number; row: number }[]
+    ) {
+      sound.init();
+      sound.playSlotWin('JACKPOT');
+      setPokieMarqueeFast(true);
+      pendingJackpotChallenge = createJackpotChallengeState(
+        machineId,
+        betAmount,
+        jackpotAmount,
+        challengeType,
+        triggerPositions
+      );
+
+      const promptWrap = document.getElementById('jackpotChallengePromptWrap');
+      const bubbleTitle = document.getElementById('jackpotBubbleTitle');
+      const bubbleText = document.getElementById('jackpotBubbleText');
+      const bubbleStadiumPill = document.getElementById('jackpotBubbleStadiumPill');
+      const launchBtnLabel = document.getElementById('launchJackpotMatchBtnLabel');
+
+      const isHoldSpinGate = challengeType === 'HOLD_AND_SPIN';
+
+      if (bubbleTitle) {
+        bubbleTitle.innerText = isHoldSpinGate
+          ? `👑 HOLD & SPIN ("SPIN TO WIN") HIT!`
+          : `🎰 YOU HIT THE $${jackpotAmount.toLocaleString()} JACKPOT!`;
+      }
+      if (bubbleText) {
+        bubbleText.innerText = isHoldSpinGate
+          ? `"You hit the Hold & Spin Jackpot Screen! Score 1 GOAL in 30 seconds at ${pendingJackpotChallenge.stadiumName} to enter the Spin to Win screen! If you concede or run out of time, you lose the Bonus!"`
+          : `"You won the Jackpot! Score 1 GOAL in 30 seconds at ${pendingJackpotChallenge.stadiumName} to claim $${jackpotAmount.toLocaleString()}! Concede a goal or run out of time and you lose the Jackpot!"`;
+      }
+      if (bubbleStadiumPill) {
+        bubbleStadiumPill.innerText = `🏟️ ${pendingJackpotChallenge.stadiumName.toUpperCase()} • 30s SUDDEN DEATH`;
+      }
+      if (launchBtnLabel) {
+        launchBtnLabel.innerText = isHoldSpinGate
+          ? `⚽ PLAY 30s MATCH TO ENTER SPIN TO WIN`
+          : `⚽ PLAY 30s JACKPOT MATCH ($${jackpotAmount.toLocaleString()})`;
+      }
+      if (promptWrap) {
+        promptWrap.classList.remove('hidden');
+      }
+      if (slotStatusBanner) {
+        slotStatusBanner.innerText = isHoldSpinGate
+          ? `💬 BONUS SCREEN HIT! SCORE A GOAL IN 30s AT ${pendingJackpotChallenge.stadiumName.toUpperCase()} TO ENTER SPIN TO WIN!`
+          : `💬 JACKPOT HIT! SCORE A GOAL IN 30s AT ${pendingJackpotChallenge.stadiumName.toUpperCase()} TO WIN $${jackpotAmount.toLocaleString()}!`;
+        slotStatusBanner.className =
+          'p-2 rounded-2xl bg-gradient-to-r from-amber-300 via-yellow-200 to-emerald-300 border-2 border-slate-900 text-slate-950 font-black text-[10px] sm:text-[11px] uppercase tracking-wide text-center mb-2 shadow-[0_3px_0_#0f172a]';
+      }
+      return pendingJackpotChallenge;
+    }
+
+    function launchJackpotChallengeMatch() {
+      sound.unlock();
+      sound.playUiClick();
+      const challenge =
+        pendingJackpotChallenge ||
+        createJackpotChallengeState(
+          selectedPokieMachine,
+          selectedPokieBet,
+          getMachineEffectiveJackpot(
+            selectedPokieMachine,
+            selectedPokieBet,
+            userProfile.machineJackpots[selectedPokieMachine]
+          )
+        );
+      pendingJackpotChallenge = null;
+      activeJackpotChallenge = { ...challenge, active: true };
+
+      const promptWrap = document.getElementById('jackpotChallengePromptWrap');
+      if (promptWrap) promptWrap.classList.add('hidden');
+      closeSlotMachineModal();
+
+      currentGameMode = 'CASUAL';
+      preferredArenaMode = activeJackpotChallenge.pitchThemeId as PitchThemeId;
+      selectedPitchTheme = activeJackpotChallenge.pitchThemeId as PitchThemeId;
+      pickRandomOpponent(false);
+
+      launchMatchNow();
+
+      // Configure 30-second sudden-death Jackpot / Hold & Spin Goal Challenge timer & HUD
+      matchTime = JACKPOT_CHALLENGE_DURATION_SECONDS;
+      isGoldenGoal = false;
+      const tmEl = document.getElementById('timerText');
+      if (tmEl) tmEl.innerText = formatMatchTimer(matchTime);
+
+      const isHoldSpinGate = activeJackpotChallenge.challengeType === 'HOLD_AND_SPIN';
+      const hudTourneyBadge = document.getElementById('hudTourneyBadge');
+      if (hudTourneyBadge) {
+        hudTourneyBadge.classList.remove('hidden');
+        hudTourneyBadge.classList.add('inline-flex');
+        hudTourneyBadge.innerText = isHoldSpinGate
+          ? `👑 SPIN TO WIN QUALIFIER • 30s GOAL CHALLENGE`
+          : `🎰 $${activeJackpotChallenge.jackpotPrize.toLocaleString()} JACKPOT • 30s GOAL CHALLENGE`;
+      }
+
+      setLedBanner(
+        isHoldSpinGate
+          ? `👑 SPIN TO WIN CHALLENGE • SCORE IN 30s TO ENTER HOLD & SPIN! CONCEDE = LOSE!`
+          : `🎰 $${activeJackpotChallenge.jackpotPrize.toLocaleString()} JACKPOT CHALLENGE • SCORE IN 30s TO WIN! CONCEDE = LOSE!`,
+        300
+      );
+      if (controlledPlayer) {
+        spawnFloatingText(
+          controlledPlayer.x,
+          controlledPlayer.y - 36,
+          isHoldSpinGate
+            ? `SCORE IN 30s TO ENTER SPIN TO WIN!`
+            : `SCORE IN 30s FOR $${activeJackpotChallenge.jackpotPrize.toLocaleString()}!`,
+          '#fde047'
+        );
+      }
+      return activeJackpotChallenge;
+    }
+
     function finishAndCollectHoldAndSpin() {
       if (!activeHoldAndSpinSession) return;
       sound.init();
       const bonusWin = activeHoldAndSpinSession.totalBonusWin;
       const wonGrand = activeHoldAndSpinSession.grandJackpotWon;
+      const finishedMachineId = activeHoldAndSpinSession.machineId;
       const startBal = userProfile.balance;
       const endBal = startBal + bonusWin;
       userProfile.balance = endBal;
       if (wonGrand) {
-        userProfile.machineJackpots[selectedPokieMachine] =
-          POKIE_MACHINES[selectedPokieMachine].baseJackpot10;
+        userProfile.machineJackpots[finishedMachineId] =
+          POKIE_MACHINES[finishedMachineId].baseJackpot10;
       }
       saveUserProfileToStorage();
       syncPokieMachineThemeAndBetUI();
@@ -8283,10 +9122,10 @@ export default function App() {
       }
       if (slotStatusBanner) {
         slotStatusBanner.innerText = wonGrand
-          ? `🏆 9/9 FULL GRID GRAND JACKPOT! +$${bonusWin.toLocaleString()} COLLECTED! 🏆`
+          ? `🏆 9/9 GRAND JACKPOT + HOLD & SPIN COMPLETE! +$${bonusWin.toLocaleString()} ADDED TO BANKROLL! 🏆`
           : `👑 HOLD & SPIN COMPLETE! +$${bonusWin.toLocaleString()} ADDED TO BANKROLL! 👑`;
         slotStatusBanner.className =
-          'p-2 rounded-2xl bg-gradient-to-r from-amber-300 via-yellow-200 to-emerald-300 border-2 border-slate-900 text-slate-950 font-black text-[11px] uppercase tracking-wide text-center mb-2 shadow-[0_3px_0_#0f172a]';
+          'p-2 rounded-2xl bg-gradient-to-r from-amber-300 via-yellow-200 to-emerald-300 border-2 border-slate-900 text-slate-950 font-black text-[10px] sm:text-[11px] uppercase tracking-wide text-center mb-2 shadow-[0_3px_0_#0f172a]';
       }
 
       const slotBalEl = document.getElementById('slotBalanceDisplay');
@@ -8390,12 +9229,23 @@ export default function App() {
       if (editProfileModal && !editProfileModal.classList.contains('hidden')) {
         closeEditProfileModal();
       }
+      const shopModal = document.getElementById('clubShopModal');
+      if (shopModal && !shopModal.classList.contains('hidden')) {
+        shopModal.classList.add('hidden');
+      }
+      const lbModal = document.getElementById('onlineLeaderboardModal');
+      if (lbModal && !lbModal.classList.contains('hidden')) {
+        lbModal.classList.add('hidden');
+      }
       activeHoldAndSpinSession = null;
+      pendingJackpotChallenge = null;
       isHoldSpinStepAnimating = false;
+      const promptWrap = document.getElementById('jackpotChallengePromptWrap');
+      if (promptWrap) promptWrap.classList.add('hidden');
       if (slotHoldAndSpinScreen) slotHoldAndSpinScreen.classList.add('hidden');
       if (slotMainGameScreen) slotMainGameScreen.classList.remove('hidden');
 
-      syncPokieMachineThemeAndBetUI();
+      showPokieLobbyScreen();
       highlightActivePaylineBadges([]);
       setPokieMarqueeFast(false);
       renderPokieGridDOM(currentPokieGrid);
@@ -8411,6 +9261,8 @@ export default function App() {
         saveUserProfileToStorage();
       }
       activeHoldAndSpinSession = null;
+      const promptWrap = document.getElementById('jackpotChallengePromptWrap');
+      if (promptWrap) promptWrap.classList.add('hidden');
       clearSlotTimers();
       setPokieMarqueeFast(false);
       if (slotHoldAndSpinScreen) slotHoldAndSpinScreen.classList.add('hidden');
@@ -8501,9 +9353,13 @@ export default function App() {
       const isTeaser = finalResult.isTeaserTwoReels;
 
       const spinStart = performance.now();
-      const stopReel0Ms = 400;
-      const stopReel1Ms = 750;
-      const stopReel2Ms = isTeaser ? 1240 : 1020;
+      const stopReel0Ms = 340;
+      const stopReel1Ms = 620;
+      const stopReel2Ms = isTeaser ? 1040 : 860;
+
+      const promptWrap = document.getElementById('jackpotChallengePromptWrap');
+      if (promptWrap) promptWrap.classList.add('hidden');
+      pendingJackpotChallenge = null;
 
       const tickInterval = setInterval(() => {
         const elapsed = performance.now() - spinStart;
@@ -8543,7 +9399,7 @@ export default function App() {
           if (isTeaser && slotStatusBanner) {
             slotStatusBanner.innerText = '🔥 2-REEL TEASER! REEL 3 WINDING UP FOR JACKPOT / HOLD & SPIN... 🔥';
             slotStatusBanner.className =
-              'p-2 rounded-2xl bg-amber-300 border-2 border-slate-900 text-slate-950 font-black text-[11px] uppercase tracking-wide text-center mb-2 shadow-[0_2px_0_#0f172a] animate-pulse';
+              'p-2 rounded-2xl bg-amber-300 border-2 border-slate-900 text-slate-950 font-black text-[10px] sm:text-[11px] uppercase tracking-wide text-center mb-2 shadow-[0_2px_0_#0f172a] animate-pulse';
           }
         }, stopReel1Ms)
       );
@@ -8553,11 +9409,13 @@ export default function App() {
           clearInterval(tickInterval);
           sound.playSlotReelStop(2, false);
           currentPokieGrid = finalResult.grid;
-          userProfile.balance = Math.max(0, balanceBeforeSpin - spinCost + finalResult.totalPayout);
-          if (finalResult.isJackpot) {
-            userProfile.machineJackpots[selectedPokieMachine] =
-              POKIE_MACHINES[selectedPokieMachine].baseJackpot10;
-          }
+
+          // If Jackpot is hit, require the player to score a goal in the 30s Stadium Challenge to win the Jackpot!
+          const immediatePayout = finalResult.isJackpot
+            ? Math.max(0, finalResult.totalPayout - effectivePoolBefore)
+            : finalResult.totalPayout;
+
+          userProfile.balance = Math.max(0, balanceBeforeSpin - spinCost + immediatePayout);
           saveUserProfileToStorage();
           syncPokieMachineThemeAndBetUI();
 
@@ -8577,6 +9435,26 @@ export default function App() {
 
           highlightActivePaylineBadges(hitLineIds);
           renderPokieGridDOM(finalResult.grid, winCells, [false, false, false], false, [true, true, true]);
+
+          if (finalResult.isJackpot) {
+            isSlotSpinning = false;
+            if (slotSpinBtn) slotSpinBtn.disabled = false;
+            if (slotSpinBtnLabel) {
+              slotSpinBtnLabel.innerText = `SPIN REELS • $${selectedPokieBet.toLocaleString()}`;
+            }
+            if (slotWinAmountBadge) {
+              slotWinAmountBadge.innerText = `🎰 $${effectivePoolBefore.toLocaleString()}`;
+              slotWinAmountBadge.className =
+                'font-mono-num text-xs sm:text-base font-black text-amber-600 animate-bounce mt-0.5';
+            }
+            showJackpotGoalChallengePrompt(
+              selectedPokieMachine,
+              spinCost,
+              effectivePoolBefore,
+              'GRAND_JACKPOT'
+            );
+            return;
+          }
 
           if (finalResult.totalPayout > 0) {
             sound.playSlotWin(finalResult.winTier === 'NONE' ? 'SMALL' : finalResult.winTier);
@@ -8648,15 +9526,18 @@ export default function App() {
             slotSpinBtn.disabled = false;
           }
           if (slotSpinBtnLabel) {
-            slotSpinBtnLabel.innerText = `SPIN REELS • $${selectedPokieBet}`;
+            slotSpinBtnLabel.innerText = `SPIN REELS • $${selectedPokieBet.toLocaleString()}`;
           }
 
-          // Transition into the separate HOLD & SPIN screen if 3+ Bonus Orbs landed!
+          // Require a 30-second Stadium Goal Challenge BEFORE entering the Hold & Spin ("Spin to Win") screen!
           if (finalResult.triggersHoldAndSpin) {
-            const enterBonusTimer = setTimeout(() => {
-              triggerHoldAndSpinBonus(finalResult.scatterPositions);
-            }, 620);
-            slotSpinTimeouts.push(enterBonusTimer);
+            showJackpotGoalChallengePrompt(
+              selectedPokieMachine,
+              spinCost,
+              effectivePoolBefore,
+              'HOLD_AND_SPIN',
+              finalResult.scatterPositions
+            );
           }
         }, stopReel2Ms)
       );
@@ -8664,11 +9545,503 @@ export default function App() {
       return finalResult;
     }
 
+    // =========================================================================
+    // CLUB SHOP MODAL (UNLOCK STADIUMS $0–$100k & POKIE MACHINES $0–$80k)
+    // =========================================================================
+    let activeShopTab: 'POKIES' | 'STADIUMS' = 'POKIES';
+
+    function syncClubShopUI() {
+      const balEl = document.getElementById('clubShopBalanceText');
+      if (balEl) balEl.innerText = `$${userProfile.balance.toLocaleString()}`;
+
+      const tabPokiesBtn = document.getElementById('shopTabPokiesBtn');
+      const tabStadiumsBtn = document.getElementById('shopTabStadiumsBtn');
+      const pokiesGrid = document.getElementById('shopPokiesSection');
+      const stadiumsGrid = document.getElementById('shopStadiumsSection');
+
+      if (tabPokiesBtn && tabStadiumsBtn) {
+        const isPokies = activeShopTab === 'POKIES';
+        tabPokiesBtn.className = isPokies
+          ? 'py-2 px-4 rounded-xl text-xs font-black bg-amber-300 text-slate-950 border-2 border-slate-900 shadow-[0_2px_0_#0f172a] cursor-pointer flex items-center justify-center gap-1.5'
+          : 'py-2 px-4 rounded-xl text-xs font-extrabold bg-white text-slate-600 hover:text-slate-900 border border-slate-300 cursor-pointer flex items-center justify-center gap-1.5';
+        tabStadiumsBtn.className = !isPokies
+          ? 'py-2 px-4 rounded-xl text-xs font-black bg-emerald-300 text-slate-950 border-2 border-slate-900 shadow-[0_2px_0_#0f172a] cursor-pointer flex items-center justify-center gap-1.5'
+          : 'py-2 px-4 rounded-xl text-xs font-extrabold bg-white text-slate-600 hover:text-slate-900 border border-slate-300 cursor-pointer flex items-center justify-center gap-1.5';
+      }
+      if (pokiesGrid) pokiesGrid.classList.toggle('hidden', activeShopTab !== 'POKIES');
+      if (stadiumsGrid) stadiumsGrid.classList.toggle('hidden', activeShopTab !== 'STADIUMS');
+
+      const unlockedPokiesSet = new Set<PokieMachineId>(userProfile.unlockedPokies);
+      for (const item of SHOP_POKIE_ITEMS) {
+        const btn = document.getElementById(`buyPokieBtn_${item.id}`) as HTMLButtonElement | null;
+        const statusBadge = document.getElementById(`shopPokieStatus_${item.id}`);
+        if (!btn) continue;
+        const owned = unlockedPokiesSet.has(item.id);
+        const canAfford = userProfile.balance >= item.price;
+        if (owned) {
+          btn.disabled = false;
+          btn.innerText = 'PLAY IN POKIES →';
+          btn.className =
+            'btn-clean py-2 px-3.5 rounded-xl bg-emerald-400 hover:bg-emerald-300 border-2 border-slate-900 text-slate-950 font-black text-[11px] uppercase tracking-wider shadow-[0_2px_0_#0f172a] cursor-pointer';
+          if (statusBadge) {
+            statusBadge.innerText = 'UNLOCKED';
+            statusBadge.className =
+              'px-2 py-0.5 rounded-full bg-emerald-200 border border-slate-900 text-emerald-950 text-[8.5px] font-black uppercase tracking-wider';
+          }
+        } else {
+          btn.disabled = false;
+          btn.innerText = `BUY • $${item.price.toLocaleString()}`;
+          btn.className = canAfford
+            ? 'btn-clean py-2 px-3.5 rounded-xl bg-amber-300 hover:bg-amber-200 border-2 border-slate-900 text-slate-950 font-black text-[11px] uppercase tracking-wider shadow-[0_2px_0_#0f172a] cursor-pointer'
+            : 'btn-clean py-2 px-3.5 rounded-xl bg-slate-200 border-2 border-slate-400 text-slate-600 font-black text-[11px] uppercase tracking-wider cursor-pointer';
+          if (statusBadge) {
+            statusBadge.innerText = `🔒 $${item.price.toLocaleString()}`;
+            statusBadge.className =
+              'px-2 py-0.5 rounded-full bg-slate-200 border border-slate-400 text-slate-700 text-[8.5px] font-black uppercase tracking-wider';
+          }
+        }
+      }
+
+      const unlockedStadiumsSet = new Set<PitchThemeId>(userProfile.unlockedStadiums);
+      for (const item of SHOP_STADIUM_ITEMS) {
+        const btn = document.getElementById(`buyStadiumBtn_${item.id}`) as HTMLButtonElement | null;
+        const statusBadge = document.getElementById(`shopStadiumStatus_${item.id}`);
+        if (!btn) continue;
+        const owned = unlockedStadiumsSet.has(item.id);
+        const canAfford = userProfile.balance >= item.price;
+        if (owned) {
+          btn.disabled = true;
+          btn.innerText = 'OWNED';
+          btn.className =
+            'py-1.5 px-3 rounded-xl bg-emerald-200 border-2 border-slate-900 text-emerald-950 font-black text-[10.5px] uppercase tracking-wider cursor-default select-none';
+          if (statusBadge) {
+            statusBadge.innerText = 'UNLOCKED';
+            statusBadge.className =
+              'px-2 py-0.5 rounded-full bg-emerald-200 border border-slate-900 text-emerald-950 text-[8px] font-black uppercase tracking-wider';
+          }
+        } else {
+          btn.disabled = false;
+          btn.innerText = `BUY • $${item.price.toLocaleString()}`;
+          btn.className = canAfford
+            ? 'btn-clean py-1.5 px-3 rounded-xl bg-amber-300 hover:bg-amber-200 border-2 border-slate-900 text-slate-950 font-black text-[10.5px] uppercase tracking-wider shadow-[0_2px_0_#0f172a] cursor-pointer'
+            : 'btn-clean py-1.5 px-3 rounded-xl bg-slate-200 border-2 border-slate-400 text-slate-600 font-black text-[10.5px] uppercase tracking-wider cursor-pointer';
+          if (statusBadge) {
+            statusBadge.innerText = `🔒 $${item.price.toLocaleString()}`;
+            statusBadge.className =
+              'px-2 py-0.5 rounded-full bg-slate-200 border border-slate-400 text-slate-700 text-[8px] font-black uppercase tracking-wider';
+          }
+        }
+      }
+    }
+
+    function openClubShopModal(initialTab?: 'POKIES' | 'STADIUMS') {
+      sound.init();
+      sound.playUiClick();
+      if (initialTab) activeShopTab = initialTab;
+      if (editProfileModal && !editProfileModal.classList.contains('hidden')) {
+        closeEditProfileModal();
+      }
+      if (slotMachineModal && !slotMachineModal.classList.contains('hidden')) {
+        closeSlotMachineModal();
+      }
+      const lbModal = document.getElementById('onlineLeaderboardModal');
+      if (lbModal && !lbModal.classList.contains('hidden')) {
+        lbModal.classList.add('hidden');
+      }
+      const banner = document.getElementById('clubShopFeedbackBanner');
+      if (banner) banner.classList.add('hidden');
+      syncClubShopUI();
+      const modal = document.getElementById('clubShopModal');
+      if (modal) modal.classList.remove('hidden');
+    }
+
+    function closeClubShopModal() {
+      sound.init();
+      sound.playUiBack();
+      const modal = document.getElementById('clubShopModal');
+      if (modal) modal.classList.add('hidden');
+      syncPokieMachineThemeAndBetUI();
+      syncUserProfileUI();
+    }
+
+    function handleBuyShopPokie(machineId: PokieMachineId) {
+      sound.init();
+      const banner = document.getElementById('clubShopFeedbackBanner');
+      if (userProfile.unlockedPokies.includes(machineId)) {
+        closeClubShopModal();
+        openSlotMachineModal();
+        selectPokieMachine(machineId);
+        return { success: true, alreadyUnlocked: true };
+      }
+      const res = purchaseShopPokieMachine(
+        machineId,
+        userProfile.balance,
+        userProfile.unlockedPokies
+      );
+      if (res.success) {
+        sound.playSlotWin('BIG');
+        userProfile.balance = res.newBalance;
+        userProfile.unlockedPokies = res.unlockedItems;
+        saveUserProfileToStorage();
+        syncUserProfileUI();
+        syncClubShopUI();
+        syncPokieMachineThemeAndBetUI();
+      } else {
+        sound.playUiBack();
+      }
+      if (banner) {
+        banner.innerText = res.message;
+        banner.className = res.success
+          ? 'p-2.5 rounded-2xl bg-emerald-200 border-2 border-slate-900 text-emerald-950 font-black text-[11px] uppercase tracking-wide text-center mb-2.5 shadow-[0_2px_0_#0f172a]'
+          : 'p-2.5 rounded-2xl bg-rose-200 border-2 border-slate-900 text-rose-950 font-black text-[11px] uppercase tracking-wide text-center mb-2.5 shadow-[0_2px_0_#0f172a]';
+        banner.classList.remove('hidden');
+      }
+      return res;
+    }
+
+    function handleBuyShopStadium(stadiumId: PitchThemeId) {
+      sound.init();
+      const banner = document.getElementById('clubShopFeedbackBanner');
+      if (userProfile.unlockedStadiums.includes(stadiumId)) {
+        return { success: false, alreadyUnlocked: true };
+      }
+      const res = purchaseShopStadium(
+        stadiumId,
+        userProfile.balance,
+        userProfile.unlockedStadiums
+      );
+      if (res.success) {
+        sound.playSlotWin('BIG');
+        userProfile.balance = res.newBalance;
+        userProfile.unlockedStadiums = res.unlockedItems;
+        preferredArenaMode = stadiumId;
+        selectedPitchTheme = stadiumId;
+        applyPitchTheme(stadiumId);
+        sound.setPitchTheme(stadiumId);
+        rebuildStaticPitchCache();
+        saveUserProfileToStorage();
+        syncUserProfileUI();
+        syncClubShopUI();
+        syncHomeArenaSelectorUI();
+      } else {
+        sound.playUiBack();
+      }
+      if (banner) {
+        banner.innerText = res.success
+          ? `${res.message} — USE THE HOME MENU STADIUM BAR TO SELECT OR SHUFFLE!`
+          : res.message;
+        banner.className = res.success
+          ? 'p-2.5 rounded-2xl bg-emerald-200 border-2 border-slate-900 text-emerald-950 font-black text-[11px] uppercase tracking-wide text-center mb-2.5 shadow-[0_2px_0_#0f172a]'
+          : 'p-2.5 rounded-2xl bg-rose-200 border-2 border-slate-900 text-rose-950 font-black text-[11px] uppercase tracking-wide text-center mb-2.5 shadow-[0_2px_0_#0f172a]';
+        banner.classList.remove('hidden');
+      }
+      return res;
+    }
+
+    // =========================================================================
+    // ONLINE LEADERBOARD MODAL (REAL PLAYER PROFILES • SORT BY RANK OR MONEY)
+    // =========================================================================
+    let currentLeaderboardSort: LeaderboardSortMode = 'RANK';
+    let onlineLeaderboardEntries: LeaderboardEntry[] = [];
+
+    function getMergedLeaderboardEntries(): LeaderboardEntry[] {
+      const rankInfo = getUserRankInfo(userProfile.rankedWins);
+      const localEntry: LeaderboardEntry = {
+        uid: auth.currentUser?.uid || 'local-you',
+        name: userProfile.name,
+        iconType: userProfile.iconType,
+        presetIcon: userProfile.presetIcon,
+        photoDataUrl: userProfile.photoDataUrl,
+        rankedWins: userProfile.rankedWins,
+        rankedMatches: userProfile.rankedMatches,
+        balance: userProfile.balance,
+        rankName: rankInfo.name,
+        rankTierIndex: rankInfo.index,
+        updatedAt: Date.now(),
+      };
+      const map = new Map<string, LeaderboardEntry>();
+      for (const e of onlineLeaderboardEntries) {
+        map.set(e.uid, e);
+      }
+      // Always ensure the current player's live profile is visible on the leaderboard
+      map.set(localEntry.uid, localEntry);
+      return sortLeaderboardEntries(Array.from(map.values()), currentLeaderboardSort);
+    }
+
+    function renderLeaderboardRows() {
+      const container = document.getElementById('leaderboardRowsContainer');
+      const sortRankBtn = document.getElementById('lbSortRankBtn');
+      const sortMoneyBtn = document.getElementById('lbSortMoneyBtn');
+      const authStatusEl = document.getElementById('lbAuthStatusText');
+      const signInBtn = document.getElementById('lbGoogleSignInBtn');
+
+      if (sortRankBtn && sortMoneyBtn) {
+        const isRank = currentLeaderboardSort === 'RANK';
+        sortRankBtn.className = isRank
+          ? 'py-2 px-4 rounded-xl text-xs font-black bg-amber-300 text-slate-950 border-2 border-slate-900 shadow-[0_2px_0_#0f172a] cursor-pointer flex items-center justify-center gap-1.5'
+          : 'py-2 px-4 rounded-xl text-xs font-extrabold bg-white text-slate-600 hover:text-slate-900 border border-slate-300 cursor-pointer flex items-center justify-center gap-1.5';
+        sortMoneyBtn.className = !isRank
+          ? 'py-2 px-4 rounded-xl text-xs font-black bg-emerald-300 text-slate-950 border-2 border-slate-900 shadow-[0_2px_0_#0f172a] cursor-pointer flex items-center justify-center gap-1.5'
+          : 'py-2 px-4 rounded-xl text-xs font-extrabold bg-white text-slate-600 hover:text-slate-900 border border-slate-300 cursor-pointer flex items-center justify-center gap-1.5';
+      }
+
+      if (authStatusEl && signInBtn) {
+        if (auth.currentUser) {
+          authStatusEl.innerText = `✅ Cloud Profile Synced (${userProfile.name})`;
+          signInBtn.innerText = 'SYNC PROFILE NOW';
+        } else {
+          authStatusEl.innerText = 'Sign in with Google to publish your live profile globally';
+          signInBtn.innerText = 'SIGN IN & PUBLISH PROFILE';
+        }
+      }
+
+      if (!container) return;
+      const sorted = getMergedLeaderboardEntries();
+      if (sorted.length === 0) {
+        container.innerHTML = `
+          <div class="p-6 text-center text-xs font-bold text-slate-500">
+            No leaderboard profiles logged yet.
+          </div>
+        `;
+        return;
+      }
+
+      container.innerHTML = sorted
+        .map((entry, idx) => {
+          const rankTier = getUserRankInfo(entry.rankedWins);
+          const lvlSummary = computeRankProgressSummary(
+            entry.rankedWins,
+            entry.rankedWins,
+            entry.rankedMatches,
+            entry.rankedMatches
+          );
+          const isYou =
+            entry.uid === 'local-you' ||
+            (auth.currentUser && entry.uid === auth.currentUser.uid);
+          const pos = idx + 1;
+          const medal = pos === 1 ? '🥇' : pos === 2 ? '🥈' : pos === 3 ? '🥉' : `#${pos}`;
+          const initials = (entry.name || 'PL').trim().slice(0, 2).toUpperCase() || 'PL';
+          const avatarHtml =
+            entry.iconType === 'photo' && entry.photoDataUrl
+              ? `<img src="${entry.photoDataUrl}" alt="${entry.name}" class="w-full h-full object-cover" />`
+              : `<span class="text-xs font-black text-slate-900">${initials}</span>`;
+
+          return `
+            <div class="p-2.5 sm:p-3 rounded-2xl border-2 border-slate-900 ${
+              isYou ? 'bg-amber-50 shadow-[0_3px_0_#0f172a]' : 'bg-white shadow-[0_2px_0_#0f172a]'
+            } flex items-center justify-between gap-2.5">
+              <div class="flex items-center gap-2.5 min-w-0">
+                <div class="w-8 h-8 rounded-xl ${
+                  pos <= 3 ? 'bg-amber-300' : 'bg-slate-100'
+                } border-2 border-slate-900 font-mono-num text-xs font-black text-slate-900 flex items-center justify-center shrink-0">
+                  ${medal}
+                </div>
+                <div class="w-10 h-10 rounded-2xl bg-sky-400 border-2 border-slate-900 overflow-hidden flex items-center justify-center shrink-0" style="border-color:${rankTier.borderHex}">
+                  ${avatarHtml}
+                </div>
+                <div class="min-w-0">
+                  <div class="flex items-center gap-1.5">
+                    <span class="text-xs sm:text-sm font-black text-slate-900 truncate">${entry.name}</span>
+                    ${
+                      isYou
+                        ? '<span class="px-1.5 py-0.2 rounded bg-sky-500 text-white text-[8px] font-black uppercase">YOU</span>'
+                        : ''
+                    }
+                    <span class="px-1.5 py-0.2 rounded bg-slate-900 text-amber-300 font-mono-num text-[8px] font-black uppercase">LVL ${lvlSummary.clubLevel}</span>
+                  </div>
+                  <div class="flex items-center gap-1.5 mt-0.5">
+                    <span class="inline-flex items-center gap-1 px-2 py-0.2 rounded-full border text-[9px] font-black" style="background:${rankTier.badgeBgHex};color:${rankTier.badgeTextHex};border-color:${rankTier.borderHex}">
+                      ${getRankCrestSvgHtml(rankTier, 'w-3 h-3')}
+                      <span>${rankTier.name}</span>
+                    </span>
+                    <span class="text-[9.5px] font-bold text-slate-500 font-mono-num">
+                      ${entry.rankedWins}W / ${entry.rankedMatches}M
+                    </span>
+                  </div>
+                </div>
+              </div>
+              <div class="text-right shrink-0">
+                <div class="font-mono-num text-xs sm:text-sm font-black ${
+                  currentLeaderboardSort === 'MONEY' ? 'text-emerald-700' : 'text-slate-900'
+                }">
+                  $${entry.balance.toLocaleString()}
+                </div>
+                <div class="text-[8.5px] font-extrabold uppercase tracking-wider text-slate-500">
+                  ${currentLeaderboardSort === 'RANK' ? `${lvlSummary.rankPoints} RP • ${entry.rankedWins} WINS` : 'BANKROLL'}
+                </div>
+              </div>
+            </div>
+          `;
+        })
+        .join('');
+    }
+
+    function openLeaderboardModal(sortMode?: LeaderboardSortMode) {
+      sound.init();
+      sound.playUiClick();
+      if (sortMode) currentLeaderboardSort = sortMode;
+      if (editProfileModal && !editProfileModal.classList.contains('hidden')) {
+        closeEditProfileModal();
+      }
+      if (slotMachineModal && !slotMachineModal.classList.contains('hidden')) {
+        closeSlotMachineModal();
+      }
+      const shopModal = document.getElementById('clubShopModal');
+      if (shopModal && !shopModal.classList.contains('hidden')) {
+        shopModal.classList.add('hidden');
+      }
+      renderLeaderboardRows();
+      const modal = document.getElementById('onlineLeaderboardModal');
+      if (modal) modal.classList.remove('hidden');
+    }
+
+    function closeLeaderboardModal() {
+      sound.init();
+      sound.playUiBack();
+      const modal = document.getElementById('onlineLeaderboardModal');
+      if (modal) modal.classList.add('hidden');
+    }
+
+    function setLeaderboardSort(mode: LeaderboardSortMode) {
+      sound.init();
+      sound.playUiSelect();
+      currentLeaderboardSort = mode;
+      renderLeaderboardRows();
+    }
+
+    async function handleGoogleLeaderboardSignIn() {
+      sound.init();
+      sound.playUiClick();
+      const statusEl = document.getElementById('lbAuthStatusText');
+      if (auth.currentUser) {
+        const rk = getUserRankInfo(userProfile.rankedWins);
+        await syncProfileToFirestoreLeaderboard({
+          name: userProfile.name,
+          iconType: userProfile.iconType,
+          presetIcon: userProfile.presetIcon,
+          photoDataUrl: userProfile.photoDataUrl,
+          rankedWins: userProfile.rankedWins,
+          rankedMatches: userProfile.rankedMatches,
+          balance: userProfile.balance,
+          rankName: rk.name,
+          rankTierIndex: rk.index,
+        });
+        renderLeaderboardRows();
+        return;
+      }
+      if (statusEl) statusEl.innerText = 'Opening Google Sign-In...';
+      const user = await signInWithGoogleForLeaderboard();
+      if (user) {
+        if (userProfile.name === 'Player' && user.displayName) {
+          userProfile.name = user.displayName.slice(0, 16);
+        }
+        saveUserProfileToStorage();
+        syncProfileUI();
+        renderLeaderboardRows();
+      } else if (statusEl) {
+        statusEl.innerText = 'Sign-in cancelled or popup blocked — local profile shown';
+      }
+    }
+
+    const unsubscribeLeaderboard = subscribeToOnlineLeaderboard((entries) => {
+      onlineLeaderboardEntries = entries;
+      const modal = document.getElementById('onlineLeaderboardModal');
+      if (modal && !modal.classList.contains('hidden')) {
+        renderLeaderboardRows();
+      }
+    });
+
+    const unsubscribeAuth = subscribeToAuthChanges((user) => {
+      if (user) {
+        const rk = getUserRankInfo(userProfile.rankedWins);
+        void syncProfileToFirestoreLeaderboard({
+          name: userProfile.name,
+          iconType: userProfile.iconType,
+          presetIcon: userProfile.presetIcon,
+          photoDataUrl: userProfile.photoDataUrl,
+          rankedWins: userProfile.rankedWins,
+          rankedMatches: userProfile.rankedMatches,
+          balance: userProfile.balance,
+          rankName: rk.name,
+          rankTierIndex: rk.index,
+        });
+      }
+      const modal = document.getElementById('onlineLeaderboardModal');
+      if (modal && !modal.classList.contains('hidden')) {
+        renderLeaderboardRows();
+      }
+    });
+
     for (const m of POKIE_MACHINE_LIST) {
       const mBtn = document.getElementById(`slotMachineBtn_${m.id}`);
       if (mBtn) {
         mBtn.addEventListener('click', () => selectPokieMachine(m.id));
       }
+      const buyPokieBtn = document.getElementById(`buyPokieBtn_${m.id}`);
+      if (buyPokieBtn) {
+        buyPokieBtn.addEventListener('click', () => handleBuyShopPokie(m.id));
+      }
+    }
+    for (const s of SHOP_STADIUM_ITEMS) {
+      const buyStBtn = document.getElementById(`buyStadiumBtn_${s.id}`);
+      if (buyStBtn) {
+        buyStBtn.addEventListener('click', () => handleBuyShopStadium(s.id));
+      }
+    }
+    const openShopBtn = document.getElementById('openShopBtn');
+    const closeShopModalBtn = document.getElementById('closeShopModalBtn');
+    const shopTabPokiesBtn = document.getElementById('shopTabPokiesBtn');
+    const shopTabStadiumsBtn = document.getElementById('shopTabStadiumsBtn');
+    if (openShopBtn) openShopBtn.addEventListener('click', () => openClubShopModal());
+    if (closeShopModalBtn) closeShopModalBtn.addEventListener('click', closeClubShopModal);
+    if (shopTabPokiesBtn) {
+      shopTabPokiesBtn.addEventListener('click', () => {
+        sound.init();
+        sound.playUiSelect();
+        activeShopTab = 'POKIES';
+        syncClubShopUI();
+      });
+    }
+    if (shopTabStadiumsBtn) {
+      shopTabStadiumsBtn.addEventListener('click', () => {
+        sound.init();
+        sound.playUiSelect();
+        activeShopTab = 'STADIUMS';
+        syncClubShopUI();
+      });
+    }
+
+    const openLeaderboardBtn = document.getElementById('openLeaderboardBtn');
+    const closeLeaderboardModalBtn = document.getElementById('closeLeaderboardModalBtn');
+    const lbSortRankBtn = document.getElementById('lbSortRankBtn');
+    const lbSortMoneyBtn = document.getElementById('lbSortMoneyBtn');
+    const lbGoogleSignInBtn = document.getElementById('lbGoogleSignInBtn');
+    if (openLeaderboardBtn) openLeaderboardBtn.addEventListener('click', () => openLeaderboardModal());
+    if (closeLeaderboardModalBtn) closeLeaderboardModalBtn.addEventListener('click', closeLeaderboardModal);
+    if (lbSortRankBtn) lbSortRankBtn.addEventListener('click', () => setLeaderboardSort('RANK'));
+    if (lbSortMoneyBtn) lbSortMoneyBtn.addEventListener('click', () => setLeaderboardSort('MONEY'));
+    if (lbGoogleSignInBtn) lbGoogleSignInBtn.addEventListener('click', handleGoogleLeaderboardSignIn);
+
+    const stadiumPrevBtn = document.getElementById('stadiumPrevBtn');
+    const stadiumNextBtn = document.getElementById('stadiumNextBtn');
+    const stadiumShuffleBtn = document.getElementById('stadiumShuffleBtn');
+    if (stadiumPrevBtn) stadiumPrevBtn.addEventListener('click', () => cycleUnlockedStadium(-1));
+    if (stadiumNextBtn) stadiumNextBtn.addEventListener('click', () => cycleUnlockedStadium(1));
+    if (stadiumShuffleBtn) stadiumShuffleBtn.addEventListener('click', toggleShuffleArenaMode);
+
+    for (const t of TOURNAMENT_TIER_LIST) {
+      const tBtn = document.getElementById(`tourneyTierBtn_${t.id}`);
+      if (tBtn) {
+        tBtn.addEventListener('click', () => selectTournamentTier(t.id));
+      }
+    }
+    const backToPokieLobbyBtn = document.getElementById('backToPokieLobbyBtn');
+    if (backToPokieLobbyBtn) {
+      backToPokieLobbyBtn.addEventListener('click', () => {
+        sound.init();
+        sound.playUiBack();
+        showPokieLobbyScreen();
+      });
     }
     const slotBet10Btn = document.getElementById('slotBet10Btn');
     const slotBet100Btn = document.getElementById('slotBet100Btn');
@@ -8697,6 +10070,12 @@ export default function App() {
     if (slotSpinBtn) {
       slotSpinBtn.addEventListener('click', () => {
         handleSpinSlotMachine();
+      });
+    }
+    const launchJackpotMatchBtn = document.getElementById('launchJackpotMatchBtn');
+    if (launchJackpotMatchBtn) {
+      launchJackpotMatchBtn.addEventListener('click', () => {
+        launchJackpotChallengeMatch();
       });
     }
 
@@ -9434,27 +10813,63 @@ export default function App() {
             if (tmEl) tmEl.innerText = formatted;
           }
 
-          const check = checkMatchEndCondition(scoreYou, scoreAi, matchTime, isGoldenGoal);
-          if (check.ended) {
-            endMatch(check.reason);
-          } else if (check.enterGoldenGoal) {
-            isGoldenGoal = true;
-            lastTimerDisplayed = 'GOLDEN';
-            const tmEl = document.getElementById('timerText');
-            if (tmEl) tmEl.innerText = 'GOLDEN';
-            setLedBanner('GOLDEN GOAL OVERTIME • NEXT GOAL WINS!', 260);
-            sound.playWhistle();
+          if (activeJackpotChallenge && activeJackpotChallenge.active) {
+            const jpCheck = evaluateJackpotChallengeOutcome(
+              activeJackpotChallenge,
+              scoreYou,
+              scoreAi,
+              matchTime
+            );
+            if (jpCheck.ended) {
+              endMatch(jpCheck.headline);
+            }
+          } else {
+            const check = checkMatchEndCondition(scoreYou, scoreAi, matchTime, isGoldenGoal);
+            if (check.ended) {
+              endMatch(check.reason);
+            } else if (check.enterGoldenGoal) {
+              isGoldenGoal = true;
+              lastTimerDisplayed = 'GOLDEN';
+              const tmEl = document.getElementById('timerText');
+              if (tmEl) tmEl.innerText = 'GOLDEN';
+              setLedBanner('GOLDEN GOAL OVERTIME • NEXT GOAL WINS!', 260);
+              sound.playWhistle();
+            }
           }
         } else {
-          const check = checkMatchEndCondition(scoreYou, scoreAi, matchTime, isGoldenGoal);
-          if (check.ended) {
-            endMatch(check.reason);
+          if (activeJackpotChallenge && activeJackpotChallenge.active) {
+            const jpCheck = evaluateJackpotChallengeOutcome(
+              activeJackpotChallenge,
+              scoreYou,
+              scoreAi,
+              matchTime
+            );
+            if (jpCheck.ended) {
+              endMatch(jpCheck.headline);
+            }
+          } else {
+            const check = checkMatchEndCondition(scoreYou, scoreAi, matchTime, isGoldenGoal);
+            if (check.ended) {
+              endMatch(check.reason);
+            }
           }
         }
       } else if (gameState === 'GOAL_CELEBRATION') {
         updateBall();
         goalBannerTimer -= rawDt;
         if (goalBannerTimer <= 0) {
+          if (activeJackpotChallenge && activeJackpotChallenge.active) {
+            const jpCheck = evaluateJackpotChallengeOutcome(
+              activeJackpotChallenge,
+              scoreYou,
+              scoreAi,
+              matchTime
+            );
+            if (jpCheck.ended) {
+              endMatch(jpCheck.headline);
+              return;
+            }
+          }
           const check = checkMatchEndCondition(scoreYou, scoreAi, matchTime, isGoldenGoal);
           if (check.ended) {
             endMatch(check.reason);
@@ -9554,7 +10969,7 @@ export default function App() {
 
         // 2. Top Kicker Ribbon Badge (Uses Bespoke Celebration Palette / Stadium Badge Colors)
         const kickerText = activeGoalCelebration.kickerBadge || (goalScorerTeam === 'YOU' ? '⚽ GOAL SCORED' : '⚠️ RIVAL GOAL');
-        ctx.font = isCompact ? '900 10.5px "Plus Jakarta Sans", sans-serif' : '900 12.5px "Plus Jakarta Sans", sans-serif';
+        ctx.font = isCompact ? '900 10.5px "Bricolage Grotesque", sans-serif' : '900 12.5px "Bricolage Grotesque", sans-serif';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         const kw = ctx.measureText(kickerText).width + 26;
@@ -9581,11 +10996,11 @@ export default function App() {
           ? 30
           : Math.min(52, Math.max(24, Math.floor(canvas.width * 0.052)));
         let headlineFontPx = Math.max(18, Math.round(baseHeadlinePx * charScale));
-        ctx.font = `900 ${headlineFontPx}px "Plus Jakarta Sans", sans-serif`;
+        ctx.font = `900 ${headlineFontPx}px "Bricolage Grotesque", sans-serif`;
         const measuredHeadW = ctx.measureText(goalBannerText).width;
         if (measuredHeadW > maxBannerW && measuredHeadW > 0) {
           headlineFontPx = Math.max(16, Math.floor(headlineFontPx * (maxBannerW / measuredHeadW)));
-          ctx.font = `900 ${headlineFontPx}px "Plus Jakarta Sans", sans-serif`;
+          ctx.font = `900 ${headlineFontPx}px "Bricolage Grotesque", sans-serif`;
         }
         ctx.lineJoin = 'round';
         ctx.miterLimit = 2;
@@ -9621,6 +11036,7 @@ export default function App() {
     resetPositionsForKickoff('YOU');
     resizeCanvas();
     syncUserProfileUI();
+    syncHomeArenaSelectorUI();
     syncMenuLayoutForState(gameState);
     syncMenuFocusVisual(true);
 
@@ -9723,11 +11139,17 @@ export default function App() {
         if (splashEl) splashEl.classList.add('hidden');
         openSlotMachineModal();
       },
+      showPokieLobby() {
+        showPokieLobbyScreen();
+      },
       selectPokieMachine(machineId: PokieMachineId) {
         selectPokieMachine(machineId);
       },
       selectPokieBet(betAmount: PokieBetAmount) {
         selectPokieBet(betAmount);
+      },
+      selectTournamentTier(tierId: TournamentTierId) {
+        selectTournamentTier(tierId);
       },
       spinSlotMachine(forcedStops?: [number, number, number]) {
         return handleSpinSlotMachine(forcedStops);
@@ -9741,15 +11163,127 @@ export default function App() {
       collectHoldAndSpin() {
         finishAndCollectHoldAndSpin();
       },
+      triggerJackpotChallenge(
+        machineId?: PokieMachineId,
+        betAmount?: PokieBetAmount,
+        challengeType: JackpotChallengeType = 'GRAND_JACKPOT'
+      ) {
+        const mId = machineId || selectedPokieMachine;
+        const bet = betAmount || selectedPokieBet;
+        const jp = getMachineEffectiveJackpot(mId, bet, userProfile.machineJackpots[mId]);
+        return showJackpotGoalChallengePrompt(mId, bet, jp, challengeType);
+      },
+      launchJackpotChallengeMatch() {
+        return launchJackpotChallengeMatch();
+      },
+      completeActiveJackpotMatchWithGoal() {
+        scoreYou = 1;
+        scoreAi = 0;
+        if (activeJackpotChallenge) {
+          endMatch('⚽ GOAL SCORED! SPIN TO WIN UNLOCKED!');
+        }
+      },
+      openShop(tab?: 'POKIES' | 'STADIUMS') {
+        const splashEl = document.getElementById('splashScreen');
+        if (splashEl) splashEl.classList.add('hidden');
+        openClubShopModal(tab);
+      },
+      buyPokieMachine(machineId: PokieMachineId) {
+        return handleBuyShopPokie(machineId);
+      },
+      buyStadium(stadiumId: PitchThemeId) {
+        return handleBuyShopStadium(stadiumId);
+      },
+      openLeaderboard(sortMode?: LeaderboardSortMode) {
+        const splashEl = document.getElementById('splashScreen');
+        if (splashEl) splashEl.classList.add('hidden');
+        openLeaderboardModal(sortMode);
+      },
+      setLeaderboardSort(sortMode: LeaderboardSortMode) {
+        setLeaderboardSort(sortMode);
+      },
+      getLeaderboardEntries() {
+        return getMergedLeaderboardEntries();
+      },
+      getUnlockedPokies() {
+        return [...userProfile.unlockedPokies];
+      },
+      getUnlockedStadiums() {
+        return [...userProfile.unlockedStadiums];
+      },
+      getPendingJackpotChallenge() {
+        return pendingJackpotChallenge;
+      },
+      setBalance(amount: number) {
+        userProfile.balance = Math.max(0, Math.floor(amount));
+        saveUserProfileToStorage();
+        syncUserProfileUI();
+        syncClubShopUI();
+        syncPokieMachineThemeAndBetUI();
+        return userProfile.balance;
+      },
+      setMatchTimer(sec: number) {
+        matchTime = sec;
+        const tmEl = document.getElementById('timerText');
+        if (tmEl) tmEl.innerText = formatMatchTimer(Math.max(0, Math.ceil(matchTime)));
+      },
+      setPlayerAndBallPosition(x: number, y: number) {
+        if (controlledPlayer) {
+          controlledPlayer.x = x;
+          controlledPlayer.y = y;
+          controlledPlayer.vx = 0;
+          controlledPlayer.vy = 0;
+        }
+        ball.x = x + 16;
+        ball.y = y;
+        ball.vx = 0;
+        ball.vy = 0;
+        for (let i = 0; i < 40; i++) {
+          updateCameraAndVFX();
+        }
+      },
+      getCameraAndViewportState() {
+        return {
+          camX: cam.x,
+          camY: cam.y,
+          camZoom: cam.zoom,
+          viewScale,
+          canvasWidth: canvas?.width || 0,
+          canvasHeight: canvas?.height || 0,
+          matchTime,
+          scoreYou,
+          scoreAi,
+          selectedPitchTheme,
+          activeJackpotChallenge,
+          pendingJackpotChallenge,
+        };
+      },
       getProfileState() {
         return {
           ...userProfile,
           selectedPokieMachine,
           selectedPokieBet,
+          selectedTournamentTier,
+          pokieModalScreen,
           activeHoldAndSpinSession,
+          pendingJackpotChallenge,
+          activeJackpotChallenge,
+          preferredArenaMode,
+          selectedPitchTheme,
         };
       },
+      cycleStadium(step = 1) {
+        cycleUnlockedStadium(step);
+        return { preferredArenaMode, selectedPitchTheme };
+      },
+      toggleShuffleStadium() {
+        toggleShuffleArenaMode();
+        return { preferredArenaMode, selectedPitchTheme };
+      },
     };
+    (window as unknown as Record<string, unknown>).__TIKI_TAKA_TEST__ = (
+      window as unknown as Record<string, unknown>
+    ).__REMATCH_TEST__;
 
     rafId = requestAnimationFrame(renderLoop);
 
@@ -9760,6 +11294,8 @@ export default function App() {
       clearSlotTimers();
       stopProfileCameraStream();
       sound.stopMusic();
+      unsubscribeLeaderboard();
+      unsubscribeAuth();
       window.removeEventListener('resize', resizeCanvas);
       window.removeEventListener('contextmenu', handleContextMenu);
       window.removeEventListener('blur', handleWindowBlur);
@@ -9809,7 +11345,7 @@ export default function App() {
             Rotate Device to Landscape
           </h2>
           <p className="text-xs font-bold text-slate-600 mt-1.5 mb-5">
-            REMATCH <span className="text-amber-500 font-black">0.2</span> is locked to widescreen landscape on mobile &amp; tablet for full-pitch viewing and dual-thumb arcade controls.
+            TIKI TAKA <span className="text-amber-500 font-black">0.2</span> is locked to widescreen landscape on mobile &amp; tablet for full-pitch viewing and dual-thumb arcade controls.
           </p>
           <button
             id="dismissLandscapeLockBtn"
@@ -9832,8 +11368,8 @@ export default function App() {
           </div>
 
           <div className="flex flex-nowrap items-baseline justify-center gap-3.5 sm:gap-6 md:gap-8 mb-6 sm:mb-12 whitespace-nowrap">
-            <span className="text-5xl sm:text-7xl md:text-8xl lg:text-9xl font-black tracking-tight text-white drop-shadow-[0_6px_0_#0f172a]">
-              REMATCH
+            <span className="font-display text-5xl sm:text-7xl md:text-8xl lg:text-9xl font-black tracking-wide text-white drop-shadow-[0_6px_0_#0f172a]">
+              TIKI TAKA
             </span>
             <span className="font-mono-num text-4xl sm:text-6xl md:text-7xl lg:text-8xl font-black tracking-tight text-amber-300 drop-shadow-[0_6px_0_#0f172a]">
               0.2
@@ -9873,7 +11409,7 @@ export default function App() {
 
           <div
             id="hudTourneyBadge"
-            className="hidden glass-pill rounded-xl sm:rounded-2xl px-2 py-1 sm:px-3 sm:py-1.5 text-[9px] sm:text-[10px] font-black uppercase tracking-wider text-amber-900 bg-amber-200/95 whitespace-nowrap"
+            className="hidden absolute top-12 left-1/2 -translate-x-1/2 sm:static sm:translate-x-0 glass-pill rounded-xl sm:rounded-2xl px-2.5 py-0.5 sm:px-3 sm:py-1.5 text-[9px] sm:text-[10px] font-black uppercase tracking-wider text-amber-900 bg-amber-200/95 whitespace-nowrap shadow-[0_2px_0_#0f172a]"
           >
             CUP 1/3 · QF
           </div>
@@ -9954,57 +11490,53 @@ export default function App() {
         </div>
       </div>
 
-      {/* Mobile & Tablet Touch Controls (Upgraded Neo-Brutalist Arcade Controls for Portrait & Landscape) */}
+      {/* Mobile & Tablet Touch Controls (Clean, Uncluttered Arcade Controls for Portrait & Landscape) */}
       <div
         id="mobileControls"
         style={{ display: 'none' }}
         className="mobile-controls-safe hidden fixed bottom-0 left-0 w-full justify-between items-end pointer-events-none z-20"
       >
-        {/* Left Thumb: Precision 360° Arcade Analog Thumbstick with Tactile Bezel & Directional Pips */}
+        {/* Left Thumb: Clean Translucent 360° Analog Thumbstick */}
         <div
           id="joystickZone"
           aria-label="Virtual Movement Joystick"
           className="touch-joy-zone rounded-full relative flex items-center justify-center pointer-events-auto touch-none transition-opacity"
         >
-          <span className="absolute top-1.5 text-[8px] font-black text-white/80 drop-shadow-[0_1px_0_#0f172a] pointer-events-none">▲</span>
-          <span className="absolute bottom-1.5 text-[8px] font-black text-white/80 drop-shadow-[0_1px_0_#0f172a] pointer-events-none">▼</span>
-          <span className="absolute left-2 text-[8px] font-black text-white/80 drop-shadow-[0_1px_0_#0f172a] pointer-events-none">◀</span>
-          <span className="absolute right-2 text-[8px] font-black text-white/80 drop-shadow-[0_1px_0_#0f172a] pointer-events-none">▶</span>
-          <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-full border-2 border-dashed border-white/40 pointer-events-none absolute" />
+          <div className="w-9 h-9 sm:w-11 sm:h-11 rounded-full border border-white/25 pointer-events-none absolute" />
           <div
             id="joystickKnob"
             className="touch-joy-knob rounded-full transition-transform duration-75 pointer-events-none relative z-10 flex items-center justify-center"
           >
-            <div className="w-4 h-4 rounded-full bg-amber-300 border-2 border-slate-900 shadow-inner" />
+            <div className="w-3.5 h-3.5 rounded-full bg-amber-300 border-2 border-slate-900" />
           </div>
         </div>
 
-        {/* Right Thumb: Ergonomic Dual-Button Arcade Action Cluster */}
-        <div className="flex items-end space-x-2.5 sm:space-x-3.5 pointer-events-auto touch-none">
+        {/* Right Thumb: Clean Dual-Button Action Cluster */}
+        <div className="flex items-end space-x-2 sm:space-x-3 pointer-events-auto touch-none">
           <button
             id="mobileSwitchBtn"
             type="button"
             aria-label="Send Teammate Run or Switch Defender"
-            className="touch-btn-secondary px-2 rounded-full font-black flex flex-col items-center justify-center active:scale-92 active:translate-y-0.5 transition-all mb-0.5 overflow-hidden text-center"
+            className="touch-btn-secondary px-1.5 rounded-full font-black flex flex-col items-center justify-center active:scale-92 active:translate-y-0.5 transition-all mb-0.5 overflow-hidden text-center"
           >
-            <span className="w-5 h-5 rounded-full bg-amber-300 border-2 border-slate-900 flex items-center justify-center mb-0.5 shrink-0 shadow-[0_1px_0_#0f172a]">
-              <i className="fa-solid fa-bolt text-[10px] text-slate-900" />
+            <span className="w-4 h-4 sm:w-5 sm:h-5 rounded-full bg-amber-300 border-2 border-slate-900 flex items-center justify-center mb-0.5 shrink-0">
+              <i className="fa-solid fa-bolt text-[9px] text-slate-900" />
             </span>
-            <span id="mobileSecondaryText" className="text-[9.5px] sm:text-[10.5px] uppercase tracking-tight leading-[1.05] font-black text-center max-w-full drop-shadow-[0_1px_0_rgba(15,23,42,0.8)]">
-              Send Run
+            <span id="mobileSecondaryText" className="text-[9px] sm:text-[10px] uppercase tracking-wider leading-none font-black text-center whitespace-nowrap">
+              RUN
             </span>
           </button>
           <button
             id="mobileActionBtn"
             type="button"
             aria-label="Kick, Pass, or Hold for Finesse Shot"
-            className="touch-btn-primary px-2 rounded-full font-black flex flex-col items-center justify-center active:scale-92 active:translate-y-1 transition-all mb-2 overflow-hidden text-center"
+            className="touch-btn-primary px-1.5 rounded-full font-black flex flex-col items-center justify-center active:scale-92 active:translate-y-1 transition-all mb-1.5 overflow-hidden text-center"
           >
-            <span className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-white/95 border-2 border-slate-900 flex items-center justify-center mb-0.5 shrink-0 shadow-[0_2px_0_#0f172a]">
-              <PixelSoccerBallIcon className="w-4 h-4 sm:w-5 sm:h-5" />
+            <span className="w-6 h-6 sm:w-7 sm:h-7 rounded-full bg-white/95 border-2 border-slate-900 flex items-center justify-center mb-0.5 shrink-0">
+              <PixelSoccerBallIcon className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
             </span>
-            <span id="mobileActionText" className="text-[11px] sm:text-xs uppercase tracking-wider leading-none font-black text-center max-w-full drop-shadow-[0_1px_0_rgba(15,23,42,0.85)]">
-              Kick
+            <span id="mobileActionText" className="text-[10px] sm:text-[11px] uppercase tracking-wider leading-none font-black text-center whitespace-nowrap">
+              KICK
             </span>
           </button>
         </div>
@@ -10286,7 +11818,7 @@ export default function App() {
             TOURNAMENT CHAMPIONS!
           </h2>
           <p className="text-xs sm:text-sm font-bold text-slate-600 mt-1 mb-4">
-            You conquered the Quarter-Final, Semi-Final &amp; Grand Final to lift the Rematch Cup!
+            You conquered the Quarter-Final, Semi-Final &amp; Grand Final to lift the Tiki Taka Cup!
           </p>
 
           {/* Champion Club Identity Card */}
@@ -10416,16 +11948,16 @@ export default function App() {
               <div className="text-left">
                 <div
                   id="menuTitleVisible"
-                  className="flex items-baseline gap-2.5 sm:gap-3.5 text-xl sm:text-3xl md:text-4xl font-black tracking-tight text-slate-900 whitespace-nowrap"
+                  className="flex items-baseline gap-2 sm:gap-3 text-xl sm:text-3xl md:text-4xl font-black tracking-tight text-slate-900 whitespace-nowrap"
                 >
-                  <span>REMATCH</span>
+                  <span className="font-display tracking-wide">TIKI TAKA</span>
                   <span className="font-mono-num text-xl sm:text-3xl md:text-4xl font-black text-amber-400 drop-shadow-[0_2px_0_#0f172a]">
                     0.2
                   </span>
                 </div>
               </div>
               <h1 id="menuTitle" className="sr-only">
-                REMATCH 0.2
+                TIKI TAKA 0.2
               </h1>
             </div>
 
@@ -10480,9 +12012,9 @@ export default function App() {
                   <div className="flex items-center space-x-1.5 mt-0.5">
                     <span
                       id="menuProfileRankBadge"
-                      className="inline-flex items-center px-2 py-0.2 rounded-full border text-[9px] sm:text-[10px] font-black tracking-wide whitespace-nowrap bg-amber-100 text-amber-900 border-amber-700"
+                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[9px] sm:text-[10px] font-black tracking-wide whitespace-nowrap bg-amber-100 text-amber-900 border-amber-700"
                     >
-                      Bronze I
+                      Bronze I • LVL 1
                     </span>
                     <span
                       id="profileFirstBootPrompt"
@@ -10533,19 +12065,58 @@ export default function App() {
                     Tournament
                   </button>
                 </div>
+
+                {/* Tiered Tournament Entry Selector ($100 / $1,000 / $10,000 Entry & Scaled Cup Awards) */}
+                <div id="tournamentTierSelectorWrap" className="hidden mt-2 p-2 rounded-2xl bg-amber-50/90 border-2 border-slate-900 shadow-[0_3px_0_#0f172a]">
+                  <div className="flex items-center justify-between mb-1.5 px-0.5">
+                    <span className="text-[9px] sm:text-[10px] font-black uppercase tracking-wider text-slate-900">
+                      🏆 SELECT TOURNAMENT TIER
+                    </span>
+                    <span className="text-[8.5px] font-black uppercase text-emerald-800">
+                      5X CUP PAYOUT
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-3 gap-1.5">
+                    {TOURNAMENT_TIER_LIST.map((t) => (
+                      <button
+                        key={t.id}
+                        id={`tourneyTierBtn_${t.id}`}
+                        type="button"
+                        data-tier={t.id}
+                        className="tourney-tier-btn p-1.5 sm:p-2 rounded-xl border-2 border-slate-900 bg-white text-left transition-all cursor-pointer flex flex-col justify-between min-w-0"
+                      >
+                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-0.5">
+                          <span className="text-[8.5px] sm:text-[10px] font-black uppercase tracking-tight text-slate-900 truncate">
+                            {t.shortName}
+                          </span>
+                          <span className="font-mono-num text-[8.5px] sm:text-[9px] font-black px-1.5 py-0.2 rounded bg-slate-900 text-amber-300 self-start sm:self-auto">
+                            ${t.entryFee.toLocaleString()}
+                          </span>
+                        </div>
+                        <div className="mt-1 text-[7.5px] sm:text-[8.5px] font-extrabold text-emerald-800 uppercase tracking-tight truncate">
+                          Win: ${t.totalCupPrize.toLocaleString()}
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                  <div
+                    id="tourneyEntryStatusBanner"
+                    className="hidden mt-1.5 p-1.5 rounded-xl bg-emerald-200 border-2 border-slate-900 text-emerald-950 font-black text-[9.5px] uppercase tracking-wide text-center"
+                  />
+                </div>
               </div>
 
               {/* 2. Home / Away Kit Selector */}
               <div id="kitSelectorWrap">
-                <div className="text-[11px] font-black uppercase tracking-wider text-slate-500 mb-2 px-1">
+                <div className="text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1.5 px-1">
                   SELECT TEAM KIT
                 </div>
-                <div className="grid grid-cols-2 gap-2.5">
+                <div className="grid grid-cols-2 gap-2">
                   <button
                     id="kitHomeBtn"
                     type="button"
                     data-kit="HOME"
-                    className="kit-btn min-h-[44px] py-2.5 px-3.5 sm:px-4 rounded-xl text-xs sm:text-sm font-black transition-all cursor-pointer bg-sky-400 text-slate-900 border-2 border-slate-900 shadow-[0_3px_0_#0f172a] flex items-center justify-center gap-2"
+                    className="kit-btn min-h-[42px] py-2 px-3 sm:px-4 rounded-xl text-xs sm:text-sm font-black transition-all cursor-pointer bg-sky-400 text-slate-900 border-2 border-slate-900 shadow-[0_3px_0_#0f172a] flex items-center justify-center gap-2"
                   >
                     <span className="w-3.5 h-3.5 rounded-full bg-amber-300 border border-slate-900 shrink-0" />
                     <span className="truncate">Home Kit (Sky)</span>
@@ -10554,10 +12125,76 @@ export default function App() {
                     id="kitAwayBtn"
                     type="button"
                     data-kit="AWAY"
-                    className="kit-btn min-h-[44px] py-2.5 px-3.5 sm:px-4 rounded-xl text-xs sm:text-sm font-extrabold transition-all cursor-pointer bg-slate-100 text-slate-600 hover:text-slate-900 border-2 border-slate-300 flex items-center justify-center gap-2"
+                    className="kit-btn min-h-[42px] py-2 px-3 sm:px-4 rounded-xl text-xs sm:text-sm font-extrabold transition-all cursor-pointer bg-slate-100 text-slate-600 hover:text-slate-900 border-2 border-slate-300 flex items-center justify-center gap-2"
                   >
                     <span className="w-3.5 h-3.5 rounded-full bg-rose-500 border border-slate-900 shrink-0" />
                     <span className="truncate">Away Kit (Coral)</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* 3. Home Arena Selector & Shuffle Bar (Moved out of Club Shop for instant Home Menu switching) */}
+              <div id="stadiumSelectorWrap" className="pt-1 border-t-2 border-slate-100">
+                <div className="flex items-center justify-between mb-1.5 px-1">
+                  <span className="text-[11px] font-black uppercase tracking-wider text-slate-500">
+                    MATCH STADIUM ARENA
+                  </span>
+                  <span
+                    id="stadiumUnlockedCountText"
+                    className="font-mono-num text-[9.5px] font-black uppercase tracking-wider text-emerald-700"
+                  >
+                    1/10 UNLOCKED
+                  </span>
+                </div>
+                <div className="p-2 rounded-2xl bg-slate-100 border-2 border-slate-900 flex items-center justify-between gap-2">
+                  <button
+                    id="stadiumPrevBtn"
+                    type="button"
+                    aria-label="Previous Unlocked Stadium"
+                    className="btn-clean w-8 h-8 rounded-xl bg-white hover:bg-slate-200 border-2 border-slate-900 text-slate-900 font-black text-xs flex items-center justify-center cursor-pointer shrink-0 shadow-[0_2px_0_#0f172a]"
+                  >
+                    ◀
+                  </button>
+                  <div className="flex items-center gap-2 min-w-0 flex-1">
+                    <span
+                      id="activeStadiumSwatch"
+                      className="w-6 h-6 rounded-lg border-2 border-slate-900 shrink-0 shadow-xs"
+                      style={{
+                        background: 'linear-gradient(135deg, #63d297 0%, #52b788 100%)',
+                      }}
+                    />
+                    <div className="min-w-0 flex-1">
+                      <div
+                        id="activeStadiumNameText"
+                        className="text-xs sm:text-sm font-black text-slate-900 truncate leading-tight"
+                      >
+                        🎲 Shuffle (Sunlit Classic)
+                      </div>
+                      <div className="flex items-center gap-1.5 mt-0.5">
+                        <span
+                          id="activeStadiumModePill"
+                          className="px-1.5 py-0.2 rounded text-[8px] font-black uppercase tracking-wider border border-slate-900 bg-amber-300 text-slate-950"
+                        >
+                          SHUFFLE UNLOCKED
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                  <button
+                    id="stadiumNextBtn"
+                    type="button"
+                    aria-label="Next Unlocked Stadium"
+                    className="btn-clean w-8 h-8 rounded-xl bg-white hover:bg-slate-200 border-2 border-slate-900 text-slate-900 font-black text-xs flex items-center justify-center cursor-pointer shrink-0 shadow-[0_2px_0_#0f172a]"
+                  >
+                    ▶
+                  </button>
+                  <button
+                    id="stadiumShuffleBtn"
+                    type="button"
+                    title="Shuffle between your unlocked stadiums"
+                    className="btn-clean py-1.5 px-2.5 rounded-xl bg-amber-300 border-2 border-slate-900 text-slate-950 font-black text-[10px] uppercase tracking-wider shadow-[0_2px_0_#0f172a] cursor-pointer shrink-0"
+                  >
+                    🎲 Shuffle: ON
                   </button>
                 </div>
               </div>
@@ -10768,44 +12405,64 @@ export default function App() {
                 id="startBtn"
                 type="button"
                 data-start="true"
-                className="indie-cta-btn w-full sm:w-auto sm:min-w-[230px] sm:max-w-[310px] min-h-[46px] sm:min-h-[50px] py-3 sm:py-3.5 px-6 rounded-2xl bg-sky-500 hover:bg-sky-400 text-white font-black text-sm sm:text-base tracking-wide cursor-pointer flex items-center justify-center space-x-2.5"
+                className="indie-cta-btn w-full sm:w-auto sm:min-w-[210px] min-h-[44px] sm:min-h-[48px] py-2.5 sm:py-3 px-5 sm:px-6 rounded-2xl bg-sky-500 hover:bg-sky-400 text-white font-black text-xs sm:text-sm tracking-wide cursor-pointer flex items-center justify-center space-x-2"
               >
                 <i id="startBtnIcon" className="fa-solid fa-play text-xs shrink-0" />
-                <span id="startBtnText" className="truncate">FIND CASUAL MATCH</span>
+                <span id="startBtnText" className="whitespace-nowrap">FIND CASUAL MATCH</span>
               </button>
 
               <button
                 id="openSlotMachineBtn"
                 type="button"
                 aria-label="Open Pokies Lounge"
-                className="indie-cta-btn w-full sm:w-auto sm:min-w-[165px] sm:max-w-[230px] min-h-[46px] sm:min-h-[50px] py-2.5 sm:py-3 px-5 rounded-2xl bg-gradient-to-r from-amber-300 via-yellow-300 to-amber-400 hover:from-amber-200 hover:to-yellow-200 text-slate-900 font-black text-xs sm:text-sm tracking-wide cursor-pointer flex items-center justify-center space-x-2.5"
+                className="indie-cta-btn w-full sm:w-auto sm:min-w-[130px] min-h-[44px] sm:min-h-[48px] py-2.5 sm:py-3 px-4 rounded-2xl bg-gradient-to-r from-amber-300 via-yellow-300 to-amber-400 hover:from-amber-200 hover:to-yellow-200 text-slate-900 font-black text-xs sm:text-sm tracking-wide cursor-pointer flex items-center justify-center space-x-2"
               >
-                <PixelSlotMachineIcon className="w-5 h-5 shrink-0" />
-                <span className="truncate">POKIES</span>
+                <PixelSlotMachineIcon className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" />
+                <span className="whitespace-nowrap">POKIES</span>
+              </button>
+
+              <button
+                id="openShopBtn"
+                type="button"
+                aria-label="Open Club Shop"
+                className="indie-cta-btn w-full sm:w-auto sm:min-w-[125px] min-h-[44px] sm:min-h-[48px] py-2.5 sm:py-3 px-4 rounded-2xl bg-gradient-to-r from-emerald-300 via-teal-300 to-emerald-400 hover:from-emerald-200 hover:to-teal-200 text-slate-900 font-black text-xs sm:text-sm tracking-wide cursor-pointer flex items-center justify-center space-x-2"
+              >
+                <PixelGoldCoinIcon className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" />
+                <span className="whitespace-nowrap">SHOP</span>
+              </button>
+
+              <button
+                id="openLeaderboardBtn"
+                type="button"
+                aria-label="Open Online Leaderboard"
+                className="indie-cta-btn w-full sm:w-auto sm:min-w-[145px] min-h-[44px] sm:min-h-[48px] py-2.5 sm:py-3 px-4 rounded-2xl bg-gradient-to-r from-indigo-300 via-sky-300 to-cyan-300 hover:from-indigo-200 hover:to-cyan-200 text-slate-900 font-black text-xs sm:text-sm tracking-wide cursor-pointer flex items-center justify-center space-x-2"
+              >
+                <i className="fa-solid fa-ranking-star text-xs sm:text-sm text-slate-900 shrink-0" />
+                <span className="whitespace-nowrap">LEADERBOARD</span>
               </button>
 
               <button
                 id="rematchSameBtn"
                 type="button"
-                className="btn-clean hidden w-full sm:w-auto sm:min-w-[175px] sm:max-w-[250px] min-h-[42px] py-2.5 px-5 rounded-2xl bg-amber-300 hover:bg-amber-200 border-2 border-slate-900 text-slate-900 font-black text-xs sm:text-sm tracking-wide cursor-pointer flex items-center justify-center space-x-2"
+                className="btn-clean hidden w-full sm:w-auto sm:min-w-[160px] min-h-[42px] py-2 px-4 sm:px-5 rounded-2xl bg-amber-300 hover:bg-amber-200 border-2 border-slate-900 text-slate-900 font-black text-xs sm:text-sm tracking-wide cursor-pointer flex items-center justify-center space-x-2"
               >
                 <i className="fa-solid fa-rotate-right text-xs shrink-0" />
-                <span id="rematchSameText" className="truncate">Rematch</span>
+                <span id="rematchSameText" className="whitespace-nowrap">Rematch</span>
               </button>
 
               <button
                 id="mainMenuBtn"
                 type="button"
-                className="btn-clean hidden w-full sm:w-auto sm:min-w-[165px] sm:max-w-[235px] min-h-[42px] py-2.5 px-5 rounded-2xl bg-slate-200 hover:bg-slate-300 border-2 border-slate-900 text-slate-900 font-black text-xs sm:text-sm tracking-wide cursor-pointer flex items-center justify-center space-x-2"
+                className="btn-clean hidden w-full sm:w-auto sm:min-w-[150px] min-h-[42px] py-2 px-4 sm:px-5 rounded-2xl bg-slate-200 hover:bg-slate-300 border-2 border-slate-900 text-slate-900 font-black text-xs sm:text-sm tracking-wide cursor-pointer flex items-center justify-center space-x-2"
               >
                 <i className="fa-solid fa-house text-xs shrink-0" />
-                <span className="truncate">Home Menu</span>
+                <span className="whitespace-nowrap">Home Menu</span>
               </button>
 
               <button
                 id="resumeBtn"
                 type="button"
-                className="indie-cta-btn hidden w-full sm:w-auto sm:min-w-[185px] sm:max-w-[250px] min-h-[44px] py-3 px-6 rounded-2xl bg-emerald-500 hover:bg-emerald-400 text-white font-black text-sm sm:text-base tracking-wide cursor-pointer"
+                className="indie-cta-btn hidden w-full sm:w-auto sm:min-w-[165px] min-h-[44px] py-2.5 px-5 rounded-2xl bg-emerald-500 hover:bg-emerald-400 text-white font-black text-xs sm:text-sm tracking-wide cursor-pointer"
               >
                 Resume Match
               </button>
@@ -10813,17 +12470,17 @@ export default function App() {
               <button
                 id="forfeitBtn"
                 type="button"
-                className="btn-clean hidden w-full sm:w-auto sm:min-w-[165px] sm:max-w-[225px] min-h-[42px] py-2.5 px-5 rounded-2xl bg-rose-500 hover:bg-rose-400 border-2 border-slate-900 text-white font-black text-xs sm:text-sm tracking-wide uppercase cursor-pointer flex items-center justify-center space-x-2"
+                className="btn-clean hidden w-full sm:w-auto sm:min-w-[155px] min-h-[42px] py-2 px-4 sm:px-5 rounded-2xl bg-rose-500 hover:bg-rose-400 border-2 border-slate-900 text-white font-black text-xs sm:text-sm tracking-wide uppercase cursor-pointer flex items-center justify-center space-x-2"
               >
                 <i className="fa-solid fa-house text-xs shrink-0" />
-                <span className="truncate">Forfeit Match</span>
+                <span className="whitespace-nowrap">Forfeit Match</span>
               </button>
 
               <div id="howToPlayWrap" className="flex items-center justify-center w-full sm:w-auto">
                 <button
                   id="howToPlayBtn"
                   type="button"
-                  className="btn-clean w-full sm:w-auto min-h-[42px] py-2.5 px-5 rounded-2xl bg-slate-100 hover:bg-slate-200 border-2 border-slate-300 text-slate-700 font-extrabold text-xs tracking-wide cursor-pointer whitespace-nowrap"
+                  className="btn-clean w-full sm:w-auto min-h-[42px] py-2 px-4 sm:px-5 rounded-2xl bg-slate-100 hover:bg-slate-200 border-2 border-slate-300 text-slate-700 font-extrabold text-xs tracking-wide cursor-pointer whitespace-nowrap"
                 >
                   How to Play &amp; Controls
                 </button>
@@ -10993,7 +12650,7 @@ export default function App() {
             </button>
           </div>
 
-          {/* VIEW 1: PROFILE OVERVIEW (Displays Rank, Wallet, Edit Profile, Store Teaser & Bottom Coupon Code Input) */}
+          {/* VIEW 1: PROFILE OVERVIEW (Displays Rank Crest, Level-Up Bar, Wallet, Edit Profile & Bottom Coupon Code Input) */}
           <div id="profileOverviewSection" className="space-y-3.5">
             <div className="p-3.5 rounded-2xl bg-slate-50 border-2 border-slate-900 flex items-center space-x-3.5">
               <div
@@ -11013,8 +12670,16 @@ export default function App() {
                 </span>
               </div>
               <div className="min-w-0 flex-1">
-                <div className="text-[10px] font-black uppercase tracking-wider text-slate-500">
-                  CLUB CAPTAIN
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[10px] font-black uppercase tracking-wider text-slate-500">
+                    CLUB CAPTAIN
+                  </span>
+                  <span
+                    id="overviewClubLevelBadge"
+                    className="px-2 py-0.2 rounded-full bg-slate-900 text-amber-300 font-mono-num text-[9px] font-black uppercase tracking-wider"
+                  >
+                    CLUB LVL 1
+                  </span>
                 </div>
                 <div
                   id="overviewProfileName"
@@ -11025,7 +12690,7 @@ export default function App() {
                 <div className="mt-1 flex flex-wrap items-center gap-1.5">
                   <span
                     id="overviewRankBadge"
-                    className="inline-flex items-center px-2.5 py-0.5 rounded-full border-2 text-xs font-black tracking-wide bg-amber-100 text-amber-900 border-amber-700"
+                    className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full border-2 text-xs font-black tracking-wide bg-amber-100 text-amber-900 border-amber-700"
                   >
                     Bronze I
                   </span>
@@ -11039,49 +12704,97 @@ export default function App() {
               </div>
             </div>
 
-            {/* Competitive Rank Progression Card */}
-            <div className="p-3.5 rounded-2xl bg-white border-2 border-slate-900 shadow-[0_3px_0_#0f172a] space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-[11px] font-black uppercase tracking-wider text-slate-700 flex items-center space-x-1.5">
-                  <i className="fa-solid fa-trophy text-amber-500" />
-                  <span>Competitive Rank</span>
-                </span>
-                <span
-                  id="overviewRankedWinsText"
-                  className="font-mono-num text-xs font-black text-emerald-700 bg-emerald-100 px-2.5 py-0.5 rounded-full border border-emerald-400"
-                >
-                  0 Wins
-                </span>
-              </div>
-
-              <div className="w-full h-3 bg-slate-200 rounded-full overflow-hidden border border-slate-900">
-                <div
-                  id="overviewRankProgressBar"
-                  className="h-full bg-gradient-to-r from-amber-400 to-emerald-400 rounded-full transition-all duration-300"
-                  style={{ width: '8%' }}
-                />
-              </div>
-
-              <div id="overviewNextRankText" className="text-[11px] font-bold text-slate-600">
-                Win 1 more Ranked match to reach Bronze II
-              </div>
-            </div>
-
-            {/* Unlaunched Club Store Teaser */}
-            <div
-              id="clubStoreTeaserCard"
-              className="p-3 rounded-2xl bg-slate-100 border-2 border-dashed border-slate-400 text-left flex items-center justify-between opacity-90 select-none"
-            >
-              <div className="flex items-center space-x-2.5">
-                <span className="text-lg leading-none">🛍️</span>
-                <div>
-                  <div className="text-xs font-black text-slate-800 leading-tight">Club Store</div>
-                  <div className="text-[10px] font-bold text-slate-500">Custom Kits &amp; FX — Not Launched Yet</div>
+            {/* Refined Competitive Rank & Division Crest + Level-Up Progression Card */}
+            <div className="p-3.5 rounded-2xl bg-white border-2 border-slate-900 shadow-[0_3px_0_#0f172a] space-y-2.5">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div
+                    id="overviewRankSymbolBox"
+                    className="w-12 h-12 rounded-2xl border-2 border-amber-700 bg-amber-100 flex items-center justify-center shrink-0 shadow-[0_2px_0_#0f172a]"
+                    dangerouslySetInnerHTML={{
+                      __html: getRankCrestSvgHtml(RANK_TIERS[0], 'w-8 h-8'),
+                    }}
+                  />
+                  <div className="min-w-0">
+                    <div className="text-[10px] font-black uppercase tracking-wider text-slate-500">
+                      COMPETITIVE DIVISION &amp; RANK
+                    </div>
+                    <div className="flex items-center gap-1.5 mt-0.5">
+                      <span
+                        id="overviewRankedWinsText"
+                        className="font-mono-num text-xs font-black text-emerald-800 bg-emerald-100 px-2.5 py-0.5 rounded-full border border-emerald-500"
+                      >
+                        0 Wins • Div I
+                      </span>
+                      <span
+                        id="overviewRankPointsText"
+                        className="font-mono-num text-xs font-black text-amber-900 bg-amber-100 px-2 py-0.5 rounded-full border border-amber-500"
+                      >
+                        0 RP
+                      </span>
+                    </div>
+                  </div>
                 </div>
               </div>
-              <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded bg-slate-800 text-amber-300 shrink-0">
-                COMING SOON
-              </span>
+
+              {/* Division Promotion Bar */}
+              <div>
+                <div className="flex items-center justify-between text-[9.5px] font-black uppercase tracking-wider text-slate-600 mb-1">
+                  <span>RANK LADDER PROGRESS</span>
+                  <span className="font-mono-num text-emerald-700">100 RP PER WIN</span>
+                </div>
+                <div className="w-full h-3 bg-slate-200 rounded-full overflow-hidden border border-slate-900 p-0.5">
+                  <div
+                    id="overviewRankProgressBar"
+                    className="h-full bg-gradient-to-r from-amber-400 via-emerald-400 to-sky-400 rounded-full transition-all duration-300"
+                    style={{ width: '8%' }}
+                  />
+                </div>
+                <div id="overviewNextRankText" className="text-[10.5px] font-bold text-slate-700 mt-1">
+                  Win 1 more Ranked match to reach Bronze II
+                </div>
+              </div>
+
+              {/* Club Level-Up XP Bar */}
+              <div className="pt-1 border-t border-slate-100">
+                <div className="flex items-center justify-between text-[9.5px] font-black uppercase tracking-wider text-slate-600 mb-1">
+                  <span>CLUB LEVEL-UP BAR</span>
+                  <span id="overviewLevelXpText" className="font-mono-num text-indigo-700">
+                    0 / 100 XP TO LVL 2
+                  </span>
+                </div>
+                <div className="w-full h-2.5 bg-slate-200 rounded-full overflow-hidden border border-slate-900">
+                  <div
+                    id="overviewLevelProgressBar"
+                    className="h-full bg-gradient-to-r from-indigo-400 via-sky-400 to-emerald-400 rounded-full transition-all duration-300"
+                    style={{ width: '6%' }}
+                  />
+                </div>
+              </div>
+
+              {/* 7-Division Crest Symbols Strip */}
+              <div className="grid grid-cols-7 gap-1 pt-1">
+                {RANK_TIERS.map((tier, idx) => (
+                  <div
+                    key={tier.name}
+                    id={`overviewTierNode${idx}`}
+                    className="p-1 rounded-xl border flex flex-col items-center justify-center text-center transition-all"
+                    style={{
+                      backgroundColor: idx === 0 ? tier.badgeBgHex : '#f1f5f9',
+                      borderColor: idx === 0 ? tier.borderHex : '#cbd5e1',
+                    }}
+                  >
+                    <span
+                      dangerouslySetInnerHTML={{
+                        __html: getRankCrestSvgHtml(tier, 'w-4 h-4'),
+                      }}
+                    />
+                    <span className="text-[7.5px] font-black text-slate-800 leading-tight mt-0.5 truncate max-w-full">
+                      {tier.shortLabel}
+                    </span>
+                  </div>
+                ))}
+              </div>
             </div>
 
             <button
@@ -11221,7 +12934,7 @@ export default function App() {
         </div>
       </div>
 
-      {/* REMATCH POKIES LOUNGE — 3 Stadium Machines, $10/$100 Stakes & Separate Hold & Spin Bonus Screen */}
+      {/* REMATCH POKIES LOUNGE — 4-Button Machine Selection Screen + Decluttered Cabinet & Hold & Spin Bonus */}
       <div
         id="slotMachineModal"
         className="hidden fixed inset-0 z-50 bg-slate-950/82 flex items-center justify-center p-2 sm:p-3.5 overflow-y-auto"
@@ -11233,7 +12946,7 @@ export default function App() {
           {/* Top Arcade Marquee Header with Chasing Stadium Floodlight Bulbs */}
           <div
             id="slotCabinetHeader"
-            className="p-2.5 rounded-2xl bg-slate-900 border-2 border-amber-400 shadow-[0_4px_0_#0f172a] mb-2 relative overflow-hidden"
+            className="p-2.5 rounded-2xl bg-slate-900 border-2 border-amber-400 shadow-[0_4px_0_#0f172a] mb-2.5 relative overflow-hidden"
           >
             <div id="slotMarqueeBar" className="flex items-center justify-between px-1 mb-1">
               {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11].map((idx) => (
@@ -11246,22 +12959,29 @@ export default function App() {
             </div>
 
             <div className="flex items-center justify-between gap-2">
-              <div className="flex items-center space-x-2.5 min-w-0">
-                <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-2xl bg-gradient-to-b from-amber-300 to-amber-400 border-2 border-slate-950 shadow-[0_3px_0_#000000] flex items-center justify-center shrink-0">
-                  <PixelSlotMachineIcon className="w-5 h-5 sm:w-6 sm:h-6" />
+              <div className="flex items-center space-x-2 min-w-0">
+                <button
+                  id="backToPokieLobbyBtn"
+                  type="button"
+                  className="hidden btn-clean px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 border-2 border-slate-950 text-amber-300 font-black text-[10px] uppercase tracking-wider cursor-pointer shrink-0 shadow-[0_2px_0_#000000]"
+                >
+                  ← Machines
+                </button>
+                <div className="w-9 h-9 rounded-2xl bg-gradient-to-b from-amber-300 to-amber-400 border-2 border-slate-950 shadow-[0_3px_0_#000000] flex items-center justify-center shrink-0">
+                  <PixelSlotMachineIcon className="w-5 h-5" />
                 </div>
                 <div className="min-w-0">
                   <div
                     id="slotCabinetTagline"
                     className="text-[8.5px] sm:text-[9px] font-black uppercase tracking-widest text-amber-300 truncate"
                   >
-                    CHAMPIONS CATHEDRAL • ROYAL EMERALD &amp; GOLD ARENA
+                    TIKI TAKA 0.2 POKIES LOUNGE • 4 STADIUM &amp; VIP MACHINES
                   </div>
                   <h2
                     id="slotCabinetTitle"
                     className="text-sm sm:text-lg font-black text-white tracking-tight truncate"
                   >
-                    CHAMPIONS GOLD POKIES
+                    SELECT A POKIE MACHINE
                   </h2>
                 </div>
               </div>
@@ -11279,182 +12999,229 @@ export default function App() {
             </div>
           </div>
 
-          {/* 3-Machine Stadium Selector Bar (Each with Distinct Aesthetic & Progressive Jackpot) */}
-          <div id="slotMachineSelectorBar" className="grid grid-cols-3 gap-1.5 sm:gap-2 mb-2">
-            {POKIE_MACHINE_LIST.map((m) => (
-              <button
-                key={m.id}
-                id={`slotMachineBtn_${m.id}`}
-                type="button"
-                data-machine-id={m.id}
-                className="slot-machine-select-btn p-2 rounded-2xl border-2 border-slate-900 bg-white text-left transition-all cursor-pointer"
-              >
-                <div className="flex items-center justify-between gap-1">
-                  <span
-                    id={`slotMachineName_${m.id}`}
-                    className="text-[9.5px] sm:text-[11px] font-black uppercase tracking-tight truncate"
-                  >
-                    {m.shortName}
-                  </span>
+          {/* =================================================================== */}
+          {/* DEDICATED SCREEN 1: 4-BUTTON POKIE MACHINE SELECTION LOUNGE         */}
+          {/* =================================================================== */}
+          <div id="pokieLobbyScreen" className="space-y-2.5">
+            <div className="flex items-center justify-between px-3 py-2 rounded-2xl bg-white border-2 border-slate-900 shadow-[0_3px_0_#0f172a]">
+              <div>
+                <div className="text-[10px] font-black uppercase tracking-wider text-slate-900">
+                  CHOOSE A MACHINE TO ENTER
                 </div>
-                <div
-                  id={`slotMachineSub_${m.id}`}
-                  className="text-[7.5px] sm:text-[8.5px] font-extrabold uppercase tracking-wider truncate mt-0.5"
-                >
-                  {m.stadiumName}
+                <div className="text-[9px] font-bold text-slate-500">
+                  Unlock locked machines in the Club Shop ($1,500 to $80,000 High Roller)
                 </div>
-                <div className="mt-1 flex items-center justify-between">
-                  <span className="text-[7.5px] font-black uppercase text-amber-400">JACKPOT</span>
-                  <span
-                    id={`slotMachineJackpot_${m.id}`}
-                    className="font-mono-num text-[9px] sm:text-[10px] font-black px-1.5 py-0.2 rounded bg-amber-300 text-slate-950 border border-slate-950"
-                  >
-                    ${m.baseJackpot10}
-                  </span>
-                </div>
-              </button>
-            ))}
-          </div>
-
-          {/* Progressive Grand Jackpot, Bankroll, Last Payout & $10 / $100 Bet Selector */}
-          <div className="grid grid-cols-12 gap-1.5 sm:gap-2 mb-2 items-stretch">
-            <div className="col-span-4 p-1.5 sm:p-2 rounded-2xl bg-gradient-to-b from-amber-200 via-yellow-200 to-amber-300 border-2 border-slate-900 shadow-[0_3px_0_#0f172a] text-center flex flex-col justify-center">
-              <div className="text-[8px] sm:text-[8.5px] font-black uppercase tracking-wider text-amber-950">
-                🏆 GRAND JACKPOT
               </div>
-              <div
-                id="slotJackpotDisplay"
-                className="font-mono-num text-xs sm:text-base font-black text-slate-900 mt-0.5"
-              >
-                $500
-              </div>
-            </div>
-
-            <div className="col-span-4 p-1.5 sm:p-2 rounded-2xl bg-emerald-100 border-2 border-slate-900 shadow-[0_3px_0_#0f172a] text-center flex flex-col justify-center">
-              <div className="text-[8px] sm:text-[8.5px] font-black uppercase tracking-wider text-emerald-950 flex items-center justify-center gap-1">
-                <PixelGoldCoinIcon className="w-3 h-3 sm:w-3.5 sm:h-3.5 shrink-0" />
-                <span>BANKROLL</span>
-              </div>
-              <div className="flex items-center justify-center gap-1 mt-0.5">
-                <span
-                  id="slotBalanceDisplay"
-                  className="font-mono-num text-xs sm:text-base font-black text-emerald-900"
-                >
+              <div className="flex items-center gap-1.5 px-3 py-1 rounded-xl bg-emerald-100 border-2 border-slate-900 shrink-0">
+                <PixelGoldCoinIcon className="w-4 h-4 shrink-0" />
+                <span id="pokieLobbyBalanceText" className="font-mono-num text-xs sm:text-sm font-black text-emerald-950">
                   $30
                 </span>
-                <span
-                  id="slotBalanceDeltaBadge"
-                  className="hidden font-mono-num text-[8.5px] font-black px-1.5 py-0.2 rounded-full bg-amber-300 border border-slate-900 text-slate-900 animate-bounce"
-                >
-                  +$20
-                </span>
               </div>
             </div>
 
-            <div className="col-span-4 p-1.5 sm:p-2 rounded-2xl bg-sky-100 border-2 border-slate-900 shadow-[0_3px_0_#0f172a] text-center flex flex-col justify-center">
-              <div className="text-[8px] sm:text-[8.5px] font-black uppercase tracking-wider text-sky-950">
-                ⚡ LAST WIN
+            <div
+              id="pokieLobbyLockBanner"
+              className="hidden p-2 rounded-xl bg-rose-200 border-2 border-slate-900 text-rose-950 font-black text-[10px] uppercase tracking-wide text-center shadow-[0_2px_0_#0f172a]"
+            />
+
+            {/* 4 Distinct Pokie Machine Buttons (Locked machines appear greyed out with LOCKED overlay until bought) */}
+            <div id="slotMachineSelectorBar" className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+              {POKIE_MACHINE_LIST.map((m) => {
+                const isHighRoller = m.id === 'HIGH_ROLLER_ROYAL';
+                const stakesBadgeText = isHighRoller ? '$1,000 VIP SPIN' : '$10 / $100 SPINS';
+                const defaultJp = m.defaultBet === 1000 ? m.baseJackpot10 * 100 : m.baseJackpot10;
+                const isDefaultUnlocked = DEFAULT_UNLOCKED_POKIES.includes(m.id);
+                return (
+                  <button
+                    key={m.id}
+                    id={`slotMachineBtn_${m.id}`}
+                    type="button"
+                    data-machine-id={m.id}
+                    data-unlocked={isDefaultUnlocked ? 'true' : 'false'}
+                    style={{ background: m.headerGradient }}
+                    className={`slot-machine-select-btn relative p-3.5 rounded-2xl border-3 border-slate-900 shadow-[0_4px_0_#0f172a] text-left transition-all flex flex-col justify-between min-h-[116px] overflow-hidden ${
+                      isDefaultUnlocked
+                        ? 'hover:translate-y-[-1px] cursor-pointer'
+                        : 'cursor-not-allowed grayscale opacity-75'
+                    }`}
+                  >
+                    {/* LOCKED OVERLAY (Shown until purchased in the Club Shop) */}
+                    <div
+                      id={`slotMachineLockOverlay_${m.id}`}
+                      className={`${
+                        isDefaultUnlocked ? 'hidden ' : ''
+                      }absolute inset-0 z-20 bg-slate-950/75 backdrop-blur-[1.5px] flex flex-col items-center justify-center p-2 text-center`}
+                    >
+                      <div className="px-3 py-1 rounded-full bg-amber-300 border-2 border-slate-950 text-slate-950 font-black text-[10px] sm:text-xs uppercase tracking-widest shadow-[0_3px_0_#000000]">
+                        🔒 LOCKED • ${m.unlockPrice.toLocaleString()}
+                      </div>
+                      <div className="text-[9px] font-extrabold uppercase tracking-wider text-white mt-1">
+                        Unlock in Club Shop to Play
+                      </div>
+                    </div>
+
+                    <div>
+                      <div className="flex items-center justify-between gap-1.5">
+                        <span
+                          className="text-[8.5px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full border border-slate-950"
+                          style={{ backgroundColor: m.accentHex, color: '#0f172a' }}
+                        >
+                          {stakesBadgeText}
+                        </span>
+                        <span className="text-[8.5px] font-black uppercase tracking-wider text-white/80 truncate">
+                          {m.stadiumName}
+                        </span>
+                      </div>
+                      <div
+                        id={`slotMachineName_${m.id}`}
+                        className="text-sm sm:text-base font-black uppercase tracking-tight text-white mt-1.5"
+                      >
+                        {m.name}
+                      </div>
+                      <div
+                        id={`slotMachineSub_${m.id}`}
+                        className="text-[9px] font-bold uppercase tracking-wider text-white/80 mt-0.5"
+                      >
+                        {m.tagline}
+                      </div>
+                    </div>
+
+                    <div className="mt-2.5 pt-2 border-t border-white/15 flex items-center justify-between">
+                      <div>
+                        <div className="text-[7.5px] font-black uppercase tracking-widest text-amber-300">
+                          GRAND JACKPOT
+                        </div>
+                        <div
+                          id={`slotMachineJackpot_${m.id}`}
+                          className="font-mono-num text-xs sm:text-sm font-black text-white"
+                        >
+                          ${defaultJp.toLocaleString()}
+                        </div>
+                      </div>
+                      <span
+                        id={`slotMachineCtaPill_${m.id}`}
+                        className="px-2.5 py-1 rounded-xl font-black text-[9.5px] uppercase tracking-wider border-2 border-slate-950 shadow-[0_2px_0_#000000]"
+                        style={{ backgroundColor: m.accentHex, color: '#0f172a' }}
+                      >
+                        {isDefaultUnlocked ? 'PLAY MACHINE →' : `🔒 $${m.unlockPrice.toLocaleString()} IN SHOP`}
+                      </span>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* =================================================================== */}
+          {/* DEDICATED SCREEN 2: DECLUTTERED POKIE MACHINE CABINET               */}
+          {/* =================================================================== */}
+          <div id="pokieCabinetScreen" className="hidden">
+            {/* Progressive Grand Jackpot, Bankroll, Last Payout */}
+            <div className="grid grid-cols-12 gap-1.5 sm:gap-2 mb-2 items-stretch">
+              <div className="col-span-4 p-1.5 sm:p-2 rounded-2xl bg-gradient-to-b from-amber-200 via-yellow-200 to-amber-300 border-2 border-slate-900 shadow-[0_3px_0_#0f172a] text-center flex flex-col justify-center">
+                <div className="text-[8px] sm:text-[8.5px] font-black uppercase tracking-wider text-amber-950">
+                  🏆 GRAND JACKPOT
+                </div>
+                <div
+                  id="slotJackpotDisplay"
+                  className="font-mono-num text-xs sm:text-base font-black text-slate-900 mt-0.5"
+                >
+                  $500
+                </div>
+              </div>
+
+              <div className="col-span-4 p-1.5 sm:p-2 rounded-2xl bg-emerald-100 border-2 border-slate-900 shadow-[0_3px_0_#0f172a] text-center flex flex-col justify-center">
+                <div className="text-[8px] sm:text-[8.5px] font-black uppercase tracking-wider text-emerald-950 flex items-center justify-center gap-1">
+                  <PixelGoldCoinIcon className="w-3 h-3 sm:w-3.5 sm:h-3.5 shrink-0" />
+                  <span>BANKROLL</span>
+                </div>
+                <div className="flex items-center justify-center gap-1 mt-0.5">
+                  <span
+                    id="slotBalanceDisplay"
+                    className="font-mono-num text-xs sm:text-base font-black text-emerald-900"
+                  >
+                    $30
+                  </span>
+                  <span
+                    id="slotBalanceDeltaBadge"
+                    className="hidden font-mono-num text-[8.5px] font-black px-1.5 py-0.2 rounded-full bg-amber-300 border border-slate-900 text-slate-900 animate-bounce"
+                  >
+                    +$20
+                  </span>
+                </div>
+              </div>
+
+              <div className="col-span-4 p-1.5 sm:p-2 rounded-2xl bg-sky-100 border-2 border-slate-900 shadow-[0_3px_0_#0f172a] text-center flex flex-col justify-center">
+                <div className="text-[8px] sm:text-[8.5px] font-black uppercase tracking-wider text-sky-950">
+                  ⚡ LAST WIN
+                </div>
+                <div
+                  id="slotWinAmountBadge"
+                  className="font-mono-num text-xs sm:text-base font-black text-slate-600 mt-0.5"
+                >
+                  $0
+                </div>
+              </div>
+            </div>
+
+            {/* Clean Spin Stakes Bar ($10/$100 Toggle OR $1,000 High Roller VIP Badge) */}
+            <div className="flex items-center justify-between gap-2 p-1.5 sm:p-2 rounded-2xl bg-white border-2 border-slate-900 shadow-[0_2px_0_#0f172a] mb-2">
+              <div className="flex items-center gap-1.5 pl-1">
+                <PixelGoldCoinIcon className="w-4 h-4 shrink-0" />
+                <div>
+                  <div id="slotStakesTitle" className="text-[9px] sm:text-[10px] font-black uppercase tracking-wider text-slate-900 leading-tight">
+                    SPIN STAKES
+                  </div>
+                  <div id="slotStakesSubtitle" className="text-[8px] font-bold text-slate-500 leading-tight">
+                    $100 Bet = 10x Line Wins &amp; 10x Jackpot
+                  </div>
+                </div>
+              </div>
+              <div id="slotStandardBetBtnsWrap" className="flex items-center gap-1.5 shrink-0">
+                <button
+                  id="slotBet10Btn"
+                  type="button"
+                  className="py-1.5 px-3 rounded-xl font-mono-num text-xs font-black bg-amber-300 text-slate-900 border-2 border-slate-900 shadow-[0_2px_0_#0f172a] cursor-pointer transition-all"
+                >
+                  $10 SPIN
+                </button>
+                <button
+                  id="slotBet100Btn"
+                  type="button"
+                  className="py-1.5 px-3 rounded-xl font-mono-num text-xs font-extrabold bg-slate-100 text-slate-600 hover:text-slate-900 border border-slate-300 cursor-pointer transition-all"
+                >
+                  $100 SPIN
+                </button>
               </div>
               <div
-                id="slotWinAmountBadge"
-                className="font-mono-num text-xs sm:text-base font-black text-slate-600 mt-0.5"
+                id="slotHighRollerStakeBadge"
+                className="hidden py-1.5 px-3 rounded-xl font-mono-num text-xs font-black bg-gradient-to-r from-amber-300 via-yellow-300 to-orange-300 text-slate-950 border-2 border-slate-900 shadow-[0_2px_0_#0f172a] shrink-0"
               >
-                $0
+                👑 $1,000 VIP SPIN
               </div>
             </div>
-          </div>
 
-          {/* Bet Stakes Selector Bar ($10 Standard vs $100 High-Roller) */}
-          <div className="flex items-center justify-between gap-2 p-1.5 sm:p-2 rounded-2xl bg-white border-2 border-slate-900 shadow-[0_2px_0_#0f172a] mb-2">
-            <div className="flex items-center gap-1.5 pl-1">
-              <PixelGoldCoinIcon className="w-4 h-4 shrink-0" />
-              <div>
-                <div className="text-[9px] sm:text-[10px] font-black uppercase tracking-wider text-slate-900 leading-tight">
-                  CHOOSE SPIN STAKES
-                </div>
-                <div className="text-[8px] font-bold text-slate-500 leading-tight">
-                  $100 Bet = 10x Line Wins &amp; 10x Jackpot!
-                </div>
-              </div>
-            </div>
-            <div className="flex items-center gap-1.5 shrink-0">
-              <button
-                id="slotBet10Btn"
-                type="button"
-                className="py-1.5 px-3 rounded-xl font-mono-num text-xs font-black bg-amber-300 text-slate-900 border-2 border-slate-900 shadow-[0_2px_0_#0f172a] cursor-pointer transition-all"
+            {/* =================================================================== */}
+            {/* SCREEN MODE 1: MAIN 3x3 5-PAYLINE REEL CABINET (CLEAN & REFINED)    */}
+            {/* =================================================================== */}
+            <div id="slotMainGameScreen">
+              <div
+                id="slotReelHousing"
+                className="p-2 sm:p-2.5 rounded-3xl bg-slate-900 border-3 border-amber-400 shadow-[0_4px_0_#0f172a,inset_0_4px_12px_rgba(0,0,0,0.65)] mb-2 relative"
               >
-                $10 SPIN
-              </button>
-              <button
-                id="slotBet100Btn"
-                type="button"
-                className="py-1.5 px-3 rounded-xl font-mono-num text-xs font-extrabold bg-slate-100 text-slate-600 hover:text-slate-900 border border-slate-300 cursor-pointer transition-all"
-              >
-                $100 SPIN
-              </button>
-            </div>
-          </div>
-
-          {/* =================================================================== */}
-          {/* SCREEN MODE 1: MAIN 3x3 5-PAYLINE REEL CABINET                      */}
-          {/* =================================================================== */}
-          <div id="slotMainGameScreen">
-            <div
-              id="slotReelHousing"
-              className="p-2 sm:p-2.5 rounded-3xl bg-slate-900 border-3 border-amber-400 shadow-[0_4px_0_#0f172a,inset_0_4px_12px_rgba(0,0,0,0.65)] mb-2 relative"
-            >
-              <div className="flex items-center justify-between text-[8.5px] sm:text-[9px] font-black uppercase tracking-widest text-amber-300 mb-1.5 px-1">
-                <span className="flex items-center gap-1.5">
-                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-                  <span>5 PAYLINES • 3+ CROWN ORBS = HOLD &amp; SPIN</span>
-                </span>
-                <span id="slotSpinsLeftDisplay" className="text-emerald-300 font-mono-num">
-                  3 SPINS READY
-                </span>
-              </div>
-
-              <div className="flex items-stretch gap-1.5 sm:gap-2">
-                {/* Left Payline Anchor Pills */}
-                <div className="flex flex-col justify-around py-1 shrink-0 select-none">
-                  <span
-                    id="slotPaylineLeft_4"
-                    title="Payline 4: Diagonal Down"
-                    className="px-1.5 py-0.5 rounded-md bg-emerald-400 text-slate-950 font-mono-num text-[8px] font-black border border-slate-950 transition-all"
-                  >
-                    4↘
+                <div className="flex items-center justify-between text-[8.5px] sm:text-[9px] font-black uppercase tracking-widest text-amber-300 mb-1.5 px-1">
+                  <span className="flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+                    <span>5 PAYLINES • 3+ ORBS = HOLD &amp; SPIN</span>
                   </span>
-                  <span
-                    id="slotPaylineLeft_2"
-                    title="Payline 2: Top Row"
-                    className="px-1.5 py-0.5 rounded-md bg-sky-400 text-slate-950 font-mono-num text-[8px] font-black border border-slate-950 transition-all"
-                  >
-                    2─
-                  </span>
-                  <span
-                    id="slotPaylineLeft_1"
-                    title="Payline 1: Center Row"
-                    className="px-1.5 py-0.5 rounded-md bg-amber-300 text-slate-950 font-mono-num text-[8px] font-black border border-slate-950 transition-all"
-                  >
-                    1═
-                  </span>
-                  <span
-                    id="slotPaylineLeft_3"
-                    title="Payline 3: Bottom Row"
-                    className="px-1.5 py-0.5 rounded-md bg-rose-400 text-slate-950 font-mono-num text-[8px] font-black border border-slate-950 transition-all"
-                  >
-                    3─
-                  </span>
-                  <span
-                    id="slotPaylineLeft_5"
-                    title="Payline 5: Diagonal Up"
-                    className="px-1.5 py-0.5 rounded-md bg-fuchsia-400 text-slate-950 font-mono-num text-[8px] font-black border border-slate-950 transition-all"
-                  >
-                    5↗
+                  <span id="slotSpinsLeftDisplay" className="text-emerald-300 font-mono-num">
+                    3 SPINS READY
                   </span>
                 </div>
 
-                {/* 3x3 Reel Window */}
-                <div className="flex-1 grid grid-cols-3 gap-1.5 sm:gap-2 bg-slate-950 p-1.5 sm:p-2 rounded-2xl border-2 border-slate-700 overflow-hidden relative">
+                {/* Full-Width 3x3 Reel Window (Decluttered without side anchor pills) */}
+                <div className="grid grid-cols-3 gap-1.5 sm:gap-2 bg-slate-950 p-1.5 sm:p-2 rounded-2xl border-2 border-slate-700 overflow-hidden relative">
                   {[0, 1, 2].map((col) => (
                     <div
                       key={col}
@@ -11474,114 +13241,95 @@ export default function App() {
                     </div>
                   ))}
                 </div>
-
-                {/* Right Payline Anchor Pills */}
-                <div className="flex flex-col justify-around py-1 shrink-0 select-none">
-                  <span
-                    id="slotPaylineRight_5"
-                    className="px-1.5 py-0.5 rounded-md bg-fuchsia-400 text-slate-950 font-mono-num text-[8px] font-black border border-slate-950 transition-all"
-                  >
-                    ↗5
-                  </span>
-                  <span
-                    id="slotPaylineRight_2"
-                    className="px-1.5 py-0.5 rounded-md bg-sky-400 text-slate-950 font-mono-num text-[8px] font-black border border-slate-950 transition-all"
-                  >
-                    ─2
-                  </span>
-                  <span
-                    id="slotPaylineRight_1"
-                    className="px-1.5 py-0.5 rounded-md bg-amber-300 text-slate-950 font-mono-num text-[8px] font-black border border-slate-950 transition-all"
-                  >
-                    ═1
-                  </span>
-                  <span
-                    id="slotPaylineRight_3"
-                    className="px-1.5 py-0.5 rounded-md bg-rose-400 text-slate-950 font-mono-num text-[8px] font-black border border-slate-950 transition-all"
-                  >
-                    ─3
-                  </span>
-                  <span
-                    id="slotPaylineRight_4"
-                    className="px-1.5 py-0.5 rounded-md bg-emerald-400 text-slate-950 font-mono-num text-[8px] font-black border border-slate-950 transition-all"
-                  >
-                    ↘4
-                  </span>
-                </div>
               </div>
-            </div>
 
-            {/* Live Pokie Status & Win Callout Banner */}
-            <div
-              id="slotStatusBanner"
-              className="p-2 rounded-2xl bg-slate-100 border-2 border-slate-900 text-slate-800 font-black text-[11px] uppercase tracking-wide text-center mb-2 shadow-[0_2px_0_#0f172a]"
-            >
-              CHOOSE YOUR MACHINE &amp; BET • LAND 3+ CROWN ORBS FOR HOLD &amp; SPIN!
-            </div>
-
-            {/* Primary Arcade Spin Lever Button */}
-            <button
-              id="slotSpinBtn"
-              type="button"
-              className="indie-cta-btn w-full min-h-[46px] py-2.5 px-6 rounded-2xl bg-gradient-to-r from-emerald-400 via-teal-300 to-sky-400 hover:from-emerald-300 hover:to-sky-300 disabled:opacity-60 text-slate-900 font-black text-sm sm:text-base uppercase tracking-wider cursor-pointer flex items-center justify-center space-x-2.5 mb-2"
-            >
-              <PixelGoldCoinIcon className="w-5 h-5 sm:w-6 sm:h-6 shrink-0" />
-              <span id="slotSpinBtnLabel">SPIN REELS • $10</span>
-            </button>
-
-            {/* Clean, Structured Bottom Pokie Guide & Dynamic Paytable Footer */}
-            <div
-              id="slotPaytableFooter"
-              className="p-2.5 rounded-2xl bg-white border-2 border-slate-900 shadow-[0_3px_0_#0f172a] space-y-2"
-            >
-              <div className="flex items-center justify-between gap-2 border-b border-slate-200 pb-1.5">
-                <span className="text-[9.5px] font-black uppercase tracking-wider text-slate-800">
-                  HOW TO WIN &amp; PAYOUT GUIDE
-                </span>
-                <span
-                  id="slotPaytableBetBadge"
-                  className="px-2 py-0.5 rounded-full bg-slate-900 text-amber-300 font-mono-num text-[8.5px] font-black uppercase"
+              {/* JACKPOT GOAL CHALLENGE SPEECH BUBBLE / MESSAGE CARD (Appears when Jackpot or Hold & Spin is hit!) */}
+              <div
+                id="jackpotChallengePromptWrap"
+                className="hidden mb-2 p-3 rounded-2xl bg-gradient-to-b from-amber-200 via-yellow-100 to-white border-3 border-slate-900 shadow-[0_5px_0_#0f172a] text-center relative"
+              >
+                <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-slate-900 text-amber-300 text-[9px] font-black uppercase tracking-widest mb-1">
+                  <span>💬 JACKPOT GOAL CHALLENGE!</span>
+                </div>
+                <h3
+                  id="jackpotBubbleTitle"
+                  className="text-sm sm:text-base font-black text-slate-950 uppercase tracking-tight"
                 >
-                  $10 BET
-                </span>
+                  🎰 YOU HIT THE $500 JACKPOT!
+                </h3>
+                <p
+                  id="jackpotBubbleText"
+                  className="mt-1 text-[10px] sm:text-[11px] font-extrabold text-slate-800 leading-snug bg-white/90 p-2 rounded-xl border-2 border-slate-900 shadow-[0_2px_0_#0f172a]"
+                >
+                  &ldquo;You won the Jackpot! Score 1 GOAL in 30 seconds in the machine&apos;s stadium to claim your Jackpot! If you concede a goal or run out of time, you lose the Jackpot!&rdquo;
+                </p>
+                <div className="mt-1.5 mb-2">
+                  <span
+                    id="jackpotBubbleStadiumPill"
+                    className="inline-block px-2.5 py-0.5 rounded-full bg-emerald-200 border border-slate-900 text-[9px] font-black uppercase tracking-wider text-emerald-950"
+                  >
+                    🏟️ CHAMPIONS CATHEDRAL • 30s SUDDEN DEATH
+                  </span>
+                </div>
+                <button
+                  id="launchJackpotMatchBtn"
+                  type="button"
+                  className="indie-cta-btn w-full min-h-[44px] py-2.5 px-4 rounded-xl bg-gradient-to-r from-amber-400 via-yellow-300 to-emerald-400 hover:from-amber-300 hover:to-emerald-300 text-slate-950 font-black text-xs sm:text-sm uppercase tracking-wider cursor-pointer flex items-center justify-center gap-2 animate-bounce"
+                >
+                  <PixelSoccerBallIcon className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" />
+                  <span id="launchJackpotMatchBtnLabel">⚽ PLAY 30s JACKPOT MATCH ($500)</span>
+                </button>
               </div>
 
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
-                <div className="p-1.5 rounded-xl bg-amber-100 border border-slate-900 text-left">
-                  <div className="text-[8px] font-black uppercase text-amber-900">🏆 3x GRAND CUP</div>
-                  <div id="slotPtJackpotVal" className="font-mono-num text-[10px] font-black text-slate-950 mt-0.5">
-                    $500
-                  </div>
-                </div>
-                <div className="p-1.5 rounded-xl bg-pink-100 border border-slate-900 text-left">
-                  <div className="text-[8px] font-black uppercase text-pink-900">👑 3+ CROWN ORBS</div>
-                  <div id="slotPtHoldVal" className="font-mono-num text-[9.5px] font-black text-slate-950 mt-0.5">
-                    +$150 + 3 RESPINS
-                  </div>
-                </div>
-                <div className="p-1.5 rounded-xl bg-sky-100 border border-slate-900 text-left">
-                  <div className="text-[8px] font-black uppercase text-sky-900">⭐ WILD STAR</div>
-                  <div id="slotPtWildVal" className="font-mono-num text-[9.5px] font-black text-slate-950 mt-0.5">
-                    2X LINE (3x = $400)
-                  </div>
-                </div>
-                <div className="p-1.5 rounded-xl bg-emerald-100 border border-slate-900 text-left">
-                  <div className="text-[8px] font-black uppercase text-emerald-900">⚽/👟/🔥/🍒 LINES</div>
-                  <div id="slotPtLineVal" className="font-mono-num text-[9.5px] font-black text-slate-950 mt-0.5">
-                    $10 – $200
-                  </div>
-                </div>
+              {/* Live Pokie Status & Win Callout Banner */}
+              <div
+                id="slotStatusBanner"
+                className="p-2 rounded-2xl bg-slate-100 border-2 border-slate-900 text-slate-800 font-black text-[10px] sm:text-[11px] uppercase tracking-wide text-center mb-2 shadow-[0_2px_0_#0f172a]"
+              >
+                LAND 3+ CROWN ORBS FOR HOLD &amp; SPIN OR 3x CUPS FOR JACKPOT MATCH!
               </div>
 
-              <div className="text-[9.5px] font-bold text-slate-600 leading-snug bg-slate-50 px-2.5 py-1.5 rounded-xl border border-slate-200">
-                <strong className="text-slate-900">HOLD &amp; SPIN FEATURE:</strong> Land <strong>3+ Crown Orbs</strong> anywhere to enter the bonus arena with <strong>3 Respins</strong>. Every new Orb locks cash/jackpot prizes and resets respins to 3 — fill all <strong>9/9 slots</strong> to win the <strong>Grand Jackpot</strong>!
+              {/* Primary Arcade Spin Lever Button */}
+              <button
+                id="slotSpinBtn"
+                type="button"
+                className="indie-cta-btn w-full min-h-[46px] py-2.5 px-5 rounded-2xl bg-gradient-to-r from-emerald-400 via-teal-300 to-sky-400 hover:from-emerald-300 hover:to-sky-300 disabled:opacity-60 text-slate-900 font-black text-xs sm:text-sm uppercase tracking-wider cursor-pointer flex items-center justify-center space-x-2 mb-2"
+              >
+                <PixelGoldCoinIcon className="w-5 h-5 shrink-0" />
+                <span id="slotSpinBtnLabel">SPIN REELS • $10</span>
+              </button>
+
+              {/* Simple, Clean 3-Badge Payout Strip */}
+              <div
+                id="slotPaytableFooter"
+                className="p-1.5 sm:p-2 rounded-2xl bg-white/95 border-2 border-slate-900 shadow-[0_2px_0_#0f172a]"
+              >
+                <div className="grid grid-cols-3 gap-1.5 text-center">
+                  <div className="p-1 rounded-xl bg-amber-100 border border-slate-900">
+                    <div className="text-[7.5px] font-black uppercase text-amber-900">🏆 3x CUP = MATCH</div>
+                    <div id="slotPtJackpotVal" className="font-mono-num text-[9px] sm:text-[10px] font-black text-slate-950 truncate">
+                      $500
+                    </div>
+                  </div>
+                  <div className="p-1 rounded-xl bg-pink-100 border border-slate-900">
+                    <div className="text-[7.5px] font-black uppercase text-pink-900">👑 3+ ORBS = MATCH</div>
+                    <div id="slotPtHoldVal" className="font-mono-num text-[8.5px] sm:text-[9.5px] font-black text-slate-950 truncate">
+                      HOLD &amp; SPIN
+                    </div>
+                  </div>
+                  <div className="p-1 rounded-xl bg-sky-100 border border-slate-900">
+                    <div className="text-[7.5px] font-black uppercase text-sky-900">⭐ WILD / LINES</div>
+                    <div id="slotPtLineVal" className="font-mono-num text-[8.5px] sm:text-[9.5px] font-black text-slate-950 truncate">
+                      2X • $10–$200
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
-          </div>
 
-          {/* =================================================================== */}
-          {/* SCREEN MODE 2: SEPARATE HOLD & SPIN (HOLD & WIN) BONUS ARENA        */}
-          {/* =================================================================== */}
+            {/* =================================================================== */}
+            {/* SCREEN MODE 2: SEPARATE HOLD & SPIN (HOLD & WIN) BONUS ARENA        */}
+            {/* =================================================================== */}
           <div id="slotHoldAndSpinScreen" className="hidden">
             <div className="p-2.5 sm:p-3 rounded-3xl bg-gradient-to-b from-slate-900 via-slate-950 to-indigo-950 border-3 border-amber-400 shadow-[0_6px_0_#0f172a] mb-2 text-white">
               {/* Bonus Mode Header & Live Counters */}
@@ -11669,6 +13417,241 @@ export default function App() {
               <span id="holdSpinActionBtnLabel">LAUNCH RESPIN (3 RESPINS LEFT)</span>
             </button>
           </div>
+          </div>
+        </div>
+      </div>
+
+      {/* =================================================================== */}
+      {/* CLUB SHOP MODAL — UNLOCK NEW POKIE MACHINES ($0–$80k) & STADIUMS ($0–$100k) */}
+      {/* =================================================================== */}
+      <div
+        id="clubShopModal"
+        className="hidden fixed inset-0 z-50 bg-slate-950/82 flex items-center justify-center p-2.5 sm:p-4 overflow-y-auto"
+      >
+        <div className="glass-modal screen-enter rounded-[28px] max-w-2xl w-full max-h-[92dvh] overflow-y-auto p-4 sm:p-5 text-left relative my-auto border-3 border-slate-900 shadow-[0_10px_0_#0f172a]">
+          <div className="flex items-center justify-between gap-2 pb-3 mb-3 border-b-2 border-slate-200">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div className="w-10 h-10 rounded-2xl bg-emerald-400 border-2 border-slate-900 shadow-[0_3px_0_#0f172a] flex items-center justify-center shrink-0">
+                <PixelGoldCoinIcon className="w-5 h-5" />
+              </div>
+              <div className="min-w-0">
+                <div className="text-[9.5px] font-black uppercase tracking-widest text-emerald-700">
+                  TIKI TAKA 0.2 CLUB SHOP • STADIUMS &amp; POKIE MACHINES
+                </div>
+                <h2 className="text-lg sm:text-xl font-black text-slate-900 truncate">
+                  Unlock Stadiums &amp; Pokies
+                </h2>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 shrink-0">
+              <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-100 border-2 border-slate-900 shadow-[0_2px_0_#0f172a]">
+                <PixelGoldCoinIcon className="w-4 h-4 shrink-0" />
+                <span id="clubShopBalanceText" className="font-mono-num text-xs sm:text-sm font-black text-emerald-950">
+                  $30
+                </span>
+              </div>
+              <button
+                id="closeShopModalBtn"
+                type="button"
+                aria-label="Close Club Shop"
+                className="btn-clean w-9 h-9 rounded-xl bg-slate-100 hover:bg-rose-500 hover:text-white border-2 border-slate-900 text-slate-700 font-black text-sm flex items-center justify-center cursor-pointer shadow-[0_2px_0_#0f172a]"
+              >
+                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="18" y1="6" x2="6" y2="18" />
+                  <line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+              </button>
+            </div>
+          </div>
+
+          {/* Category Tabs */}
+          <div className="grid grid-cols-2 gap-2 p-1 rounded-2xl bg-slate-100 border-2 border-slate-900 mb-3">
+            <button
+              id="shopTabPokiesBtn"
+              type="button"
+              className="py-2 px-4 rounded-xl text-xs font-black bg-amber-300 text-slate-950 border-2 border-slate-900 shadow-[0_2px_0_#0f172a] cursor-pointer flex items-center justify-center gap-1.5"
+            >
+              <PixelSlotMachineIcon className="w-4 h-4 shrink-0" />
+              <span>Pokie Machines ($0 – $80k)</span>
+            </button>
+            <button
+              id="shopTabStadiumsBtn"
+              type="button"
+              className="py-2 px-4 rounded-xl text-xs font-extrabold bg-white text-slate-600 hover:text-slate-900 border border-slate-300 cursor-pointer flex items-center justify-center gap-1.5"
+            >
+              <PixelSoccerBallIcon className="w-4 h-4 shrink-0" />
+              <span>Unlock Stadiums ($0 – $100k)</span>
+            </button>
+          </div>
+
+          <div id="clubShopFeedbackBanner" className="hidden" />
+
+          {/* TAB 1: POKIE MACHINES ($0 Starter to $80,000 High Roller) */}
+          <div id="shopPokiesSection" className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {SHOP_POKIE_ITEMS.map((item) => (
+              <div
+                key={item.id}
+                className="p-3 rounded-2xl bg-white border-2 border-slate-900 shadow-[0_3px_0_#0f172a] flex flex-col justify-between gap-2.5"
+              >
+                <div className="space-y-2">
+                  <ShopPokiePreviewIllustration machineId={item.id} />
+                  <div>
+                    <div className="flex items-center justify-between gap-1.5">
+                      <span className="text-[9px] font-black uppercase tracking-wider text-amber-700">
+                        {item.allowedBetsLabel} • Jackpot {item.baseJackpotLabel}
+                      </span>
+                      <span
+                        id={`shopPokieStatus_${item.id}`}
+                        className="px-2 py-0.5 rounded-full bg-slate-200 border border-slate-400 text-slate-700 text-[8.5px] font-black uppercase tracking-wider"
+                      >
+                        {item.price === 0 ? 'UNLOCKED' : `🔒 $${item.price.toLocaleString()}`}
+                      </span>
+                    </div>
+                    <div className="text-sm sm:text-base font-black text-slate-900 mt-1">
+                      {item.name}
+                    </div>
+                    <div className="text-[10.5px] font-bold text-slate-600 mt-0.5 leading-snug">
+                      {item.subtitle}
+                    </div>
+                  </div>
+                </div>
+                <div className="pt-2 border-t border-slate-200 flex items-center justify-between gap-2">
+                  <div className="font-mono-num text-xs font-black text-slate-900">
+                    {item.price === 0 ? 'STARTER MACHINE' : `$${item.price.toLocaleString()}`}
+                  </div>
+                  <button
+                    id={`buyPokieBtn_${item.id}`}
+                    type="button"
+                    className="btn-clean py-2 px-3.5 rounded-xl bg-amber-300 hover:bg-amber-200 border-2 border-slate-900 text-slate-950 font-black text-[11px] uppercase tracking-wider shadow-[0_2px_0_#0f172a] cursor-pointer"
+                  >
+                    {item.price === 0 ? 'PLAY IN POKIES →' : `BUY • $${item.price.toLocaleString()}`}
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* TAB 2: STADIUMS ($0 Starter to $100,000 Cosmic Space — Select/Shuffle on Home Menu) */}
+          <div id="shopStadiumsSection" className="hidden grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {SHOP_STADIUM_ITEMS.map((st) => (
+              <div
+                key={st.id}
+                className="p-3 rounded-2xl bg-white border-2 border-slate-900 shadow-[0_3px_0_#0f172a] flex flex-col justify-between gap-2.5"
+              >
+                <div className="space-y-2">
+                  <ShopStadiumPreviewIllustration stadiumId={st.id} />
+                  <div>
+                    <div className="flex items-center justify-between gap-1.5">
+                      <span
+                        className="px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-wider border border-slate-900"
+                        style={{ backgroundColor: st.accentHex, color: '#0f172a' }}
+                      >
+                        {st.tierLabel}
+                      </span>
+                      <span
+                        id={`shopStadiumStatus_${st.id}`}
+                        className="px-2 py-0.5 rounded-full bg-slate-200 border border-slate-400 text-slate-700 text-[8px] font-black uppercase tracking-wider"
+                      >
+                        {st.price === 0 ? 'UNLOCKED' : `🔒 $${st.price.toLocaleString()}`}
+                      </span>
+                    </div>
+                    <div className="text-sm font-black text-slate-900 mt-1">{st.name}</div>
+                    <div className="text-[10px] font-bold text-slate-600 mt-0.5 leading-snug">
+                      {st.subtitle}
+                    </div>
+                  </div>
+                </div>
+                <div className="pt-2 border-t border-slate-200 flex items-center justify-between gap-2">
+                  <div className="font-mono-num text-xs font-black text-slate-900">
+                    {st.price === 0 ? 'STARTER ARENA' : `$${st.price.toLocaleString()}`}
+                  </div>
+                  <button
+                    id={`buyStadiumBtn_${st.id}`}
+                    type="button"
+                    className="py-1.5 px-3 rounded-xl bg-emerald-200 border-2 border-slate-900 text-emerald-950 font-black text-[10.5px] uppercase tracking-wider cursor-default"
+                  >
+                    {st.price === 0 ? 'OWNED' : `BUY • $${st.price.toLocaleString()}`}
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* =================================================================== */}
+      {/* ONLINE LEADERBOARD MODAL — REAL PLAYER PROFILES (RANK OR MONEY)      */}
+      {/* =================================================================== */}
+      <div
+        id="onlineLeaderboardModal"
+        className="hidden fixed inset-0 z-50 bg-slate-950/82 flex items-center justify-center p-2.5 sm:p-4 overflow-y-auto"
+      >
+        <div className="glass-modal screen-enter rounded-[28px] max-w-xl w-full max-h-[92dvh] overflow-y-auto p-4 sm:p-5 text-left relative my-auto border-3 border-slate-900 shadow-[0_10px_0_#0f172a]">
+          <div className="flex items-center justify-between gap-2 pb-3 mb-3 border-b-2 border-slate-200">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div className="w-10 h-10 rounded-2xl bg-indigo-400 border-2 border-slate-900 shadow-[0_3px_0_#0f172a] flex items-center justify-center shrink-0">
+                <i className="fa-solid fa-ranking-star text-white text-sm" />
+              </div>
+              <div className="min-w-0">
+                <div className="text-[9.5px] font-black uppercase tracking-widest text-indigo-700">
+                  {FIREBASE_SERVICE_NAME} • LIVE STANDINGS
+                </div>
+                <h2 className="text-lg sm:text-xl font-black text-slate-900 truncate">
+                  Tiki Taka 0.2 Club Leaderboard
+                </h2>
+              </div>
+            </div>
+
+            <button
+              id="closeLeaderboardModalBtn"
+              type="button"
+              aria-label="Close Leaderboard"
+              className="btn-clean w-9 h-9 rounded-xl bg-slate-100 hover:bg-rose-500 hover:text-white border-2 border-slate-900 text-slate-700 font-black text-sm flex items-center justify-center cursor-pointer shadow-[0_2px_0_#0f172a]"
+            >
+              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="18" y1="6" x2="6" y2="18" />
+                <line x1="6" y1="6" x2="18" y2="18" />
+              </svg>
+            </button>
+          </div>
+
+          {/* Cloud Profile Sync Bar */}
+          <div className="p-2.5 rounded-2xl bg-slate-100 border-2 border-slate-900 flex flex-wrap items-center justify-between gap-2 mb-3">
+            <span id="lbAuthStatusText" className="text-[10.5px] font-bold text-slate-700">
+              Sign in with Google to publish your live profile globally
+            </span>
+            <button
+              id="lbGoogleSignInBtn"
+              type="button"
+              className="btn-clean py-1.5 px-3 rounded-xl bg-sky-400 hover:bg-sky-300 border-2 border-slate-900 text-slate-950 font-black text-[10px] uppercase tracking-wider shadow-[0_2px_0_#0f172a] cursor-pointer shrink-0"
+            >
+              SIGN IN &amp; PUBLISH PROFILE
+            </button>
+          </div>
+
+          {/* Order By: Rank vs Money */}
+          <div className="grid grid-cols-2 gap-2 p-1 rounded-2xl bg-slate-100 border-2 border-slate-900 mb-3">
+            <button
+              id="lbSortRankBtn"
+              type="button"
+              className="py-2 px-4 rounded-xl text-xs font-black bg-amber-300 text-slate-950 border-2 border-slate-900 shadow-[0_2px_0_#0f172a] cursor-pointer flex items-center justify-center gap-1.5"
+            >
+              <i className="fa-solid fa-trophy text-xs" />
+              <span>Order by Rank</span>
+            </button>
+            <button
+              id="lbSortMoneyBtn"
+              type="button"
+              className="py-2 px-4 rounded-xl text-xs font-extrabold bg-white text-slate-600 hover:text-slate-900 border border-slate-300 cursor-pointer flex items-center justify-center gap-1.5"
+            >
+              <PixelGoldCoinIcon className="w-4 h-4 shrink-0" />
+              <span>Order by Money ($)</span>
+            </button>
+          </div>
+
+          {/* Player Profile Rows */}
+          <div id="leaderboardRowsContainer" className="space-y-2 max-h-[52dvh] overflow-y-auto pr-0.5" />
         </div>
       </div>
 

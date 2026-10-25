@@ -19,9 +19,26 @@ body,
   overflow: hidden;
   overscroll-behavior: none;
   background-color: #63d297;
-  font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
   color: #0f172a;
   touch-action: none;
+}
+
+h1,
+h2,
+h3,
+#menuTitleVisible,
+#splashScreen {
+  font-family: 'Bricolage Grotesque', 'DM Sans', sans-serif;
+}
+
+.font-display {
+  font-family: 'Barlow Condensed', 'Bricolage Grotesque', sans-serif;
+  letter-spacing: 0.03em;
+}
+
+.font-heading {
+  font-family: 'Bricolage Grotesque', 'DM Sans', sans-serif;
 }
 
 .app-viewport {
@@ -43,13 +60,13 @@ canvas {
 }
 
 .font-mono-num {
-  font-family: 'JetBrains Mono', monospace;
+  font-family: 'IBM Plex Mono', monospace;
   font-variant-numeric: tabular-nums;
 }
 
 /* Crisp Indie Pixel-Sports UI Pills & Modals */
 .glass-pill {
-  background: rgba(255, 255, 255, 0.95);
+  background: rgba(255, 255, 255, 0.96);
   border: 2.5px solid #0f172a;
   box-shadow: 0 3px 0 #0f172a;
 }
@@ -364,25 +381,25 @@ canvas {
   animation: holdOrbIdlePulse 1.8s ease-in-out infinite;
 }
 
-/* Default Mobile & Tablet Touch Control Sizing (Generous Arcade Ergonomics) */
+/* Default Mobile & Tablet Touch Control Sizing (Clean, Sleek & Uncluttered Arcade Ergonomics) */
 #joystickZone {
-  width: 8rem;
-  height: 8rem;
+  width: 6.6rem;
+  height: 6.6rem;
 }
 
 #joystickKnob {
-  width: 3.3rem;
-  height: 3.3rem;
+  width: 2.7rem;
+  height: 2.7rem;
 }
 
 #mobileActionBtn {
-  width: 5.85rem;
-  height: 5.85rem;
+  width: 5.1rem;
+  height: 5.1rem;
 }
 
 #mobileSwitchBtn {
-  width: 4.65rem;
-  height: 4.65rem;
+  width: 4.15rem;
+  height: 4.15rem;
 }
 
 /* Phone & Compact Portrait Optimization (e.g. iPhone 390x844, 430x932, 375x667) */
@@ -394,30 +411,30 @@ canvas {
   }
 
   .mobile-controls-safe {
-    padding-bottom: max(1rem, calc(env(safe-area-inset-bottom) + 0.55rem)) !important;
-    padding-left: max(0.85rem, calc(env(safe-area-inset-left) + 0.45rem)) !important;
-    padding-right: max(0.85rem, calc(env(safe-area-inset-right) + 0.45rem)) !important;
+    padding-bottom: max(0.85rem, calc(env(safe-area-inset-bottom) + 0.45rem)) !important;
+    padding-left: max(0.75rem, calc(env(safe-area-inset-left) + 0.4rem)) !important;
+    padding-right: max(0.75rem, calc(env(safe-area-inset-right) + 0.4rem)) !important;
   }
 
   #joystickZone {
-    width: 6.75rem !important;
-    height: 6.75rem !important;
+    width: 5.85rem !important;
+    height: 5.85rem !important;
   }
 
   #joystickKnob {
-    width: 2.85rem !important;
-    height: 2.85rem !important;
+    width: 2.45rem !important;
+    height: 2.45rem !important;
   }
 
   #mobileActionBtn {
-    width: 5.25rem !important;
-    height: 5.25rem !important;
-    margin-bottom: 0.35rem !important;
+    width: 4.65rem !important;
+    height: 4.65rem !important;
+    margin-bottom: 0.25rem !important;
   }
 
   #mobileSwitchBtn {
-    width: 4.45rem !important;
-    height: 4.45rem !important;
+    width: 3.85rem !important;
+    height: 3.85rem !important;
   }
 
   #menuModalCard {
@@ -443,29 +460,29 @@ canvas {
 /* Tablet Landscape Ergonomics (e.g. iPad 1024x768, 1180x820) */
 @media (min-width: 640px) and (max-width: 1366px) and (pointer: coarse) {
   .mobile-controls-safe {
-    padding-bottom: max(1.25rem, calc(env(safe-area-inset-bottom) + 0.6rem));
-    padding-left: max(1.6rem, calc(env(safe-area-inset-left) + 0.75rem));
-    padding-right: max(1.6rem, calc(env(safe-area-inset-right) + 0.75rem));
+    padding-bottom: max(1.1rem, calc(env(safe-area-inset-bottom) + 0.5rem));
+    padding-left: max(1.4rem, calc(env(safe-area-inset-left) + 0.65rem));
+    padding-right: max(1.4rem, calc(env(safe-area-inset-right) + 0.65rem));
   }
 
   #joystickZone {
-    width: 8.25rem !important;
-    height: 8.25rem !important;
+    width: 7.2rem !important;
+    height: 7.2rem !important;
   }
 
   #joystickKnob {
-    width: 3.45rem !important;
-    height: 3.45rem !important;
+    width: 3rem !important;
+    height: 3rem !important;
   }
 
   #mobileActionBtn {
-    width: 6rem !important;
-    height: 6rem !important;
+    width: 5.4rem !important;
+    height: 5.4rem !important;
   }
 
   #mobileSwitchBtn {
-    width: 4.85rem !important;
-    height: 4.85rem !important;
+    width: 4.4rem !important;
+    height: 4.4rem !important;
   }
 }
 
@@ -479,30 +496,30 @@ canvas {
   }
 
   .mobile-controls-safe {
-    padding-bottom: max(0.55rem, calc(env(safe-area-inset-bottom) + 0.25rem)) !important;
-    padding-left: max(1rem, calc(env(safe-area-inset-left) + 0.5rem)) !important;
-    padding-right: max(1rem, calc(env(safe-area-inset-right) + 0.5rem)) !important;
+    padding-bottom: max(0.5rem, calc(env(safe-area-inset-bottom) + 0.25rem)) !important;
+    padding-left: max(0.9rem, calc(env(safe-area-inset-left) + 0.45rem)) !important;
+    padding-right: max(0.9rem, calc(env(safe-area-inset-right) + 0.45rem)) !important;
   }
 
   #joystickZone {
-    width: 6.4rem !important;
-    height: 6.4rem !important;
+    width: 5.75rem !important;
+    height: 5.75rem !important;
   }
 
   #joystickKnob {
-    width: 2.7rem !important;
-    height: 2.7rem !important;
+    width: 2.4rem !important;
+    height: 2.4rem !important;
   }
 
   #mobileActionBtn {
-    width: 5.15rem !important;
-    height: 5.15rem !important;
-    margin-bottom: 0.35rem !important;
+    width: 4.6rem !important;
+    height: 4.6rem !important;
+    margin-bottom: 0.25rem !important;
   }
 
   #mobileSwitchBtn {
-    width: 4.5rem !important;
-    height: 4.5rem !important;
+    width: 3.8rem !important;
+    height: 3.8rem !important;
   }
 
   #splashScreen,
@@ -519,7 +536,7 @@ canvas {
   /* Centered, well-proportioned 2-column Home Menu & Post-Match UI in Phone Landscape (never stretched full-width) */
   #menuModalCard {
     gap: 0.32rem !important;
-    max-width: 41rem !important;
+    max-width: 42rem !important;
     margin-left: auto !important;
     margin-right: auto !important;
   }
@@ -569,11 +586,11 @@ canvas {
 
   #startBtn {
     width: auto !important;
-    min-width: 185px !important;
-    max-width: 245px !important;
+    min-width: 170px !important;
+    max-width: none !important;
     min-height: 36px !important;
-    padding: 0.32rem 1.15rem !important;
-    font-size: 0.8rem !important;
+    padding: 0.32rem 1rem !important;
+    font-size: 0.72rem !important;
     margin-left: 0 !important;
     margin-right: 0 !important;
   }
@@ -585,11 +602,11 @@ canvas {
   #forfeitBtn,
   #howToPlayBtn {
     width: auto !important;
-    min-width: 135px !important;
-    max-width: 215px !important;
+    min-width: 120px !important;
+    max-width: none !important;
     min-height: 34px !important;
-    padding: 0.25rem 0.9rem !important;
-    font-size: 0.74rem !important;
+    padding: 0.25rem 0.85rem !important;
+    font-size: 0.7rem !important;
   }
 
   #howToPlayWrap {

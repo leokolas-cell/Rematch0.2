@@ -884,15 +884,32 @@ export function isLongRangeGoal(
   return farOutsideBoxX && totalShotDist >= 700;
 }
 
+export const GAME_TITLE = 'TIKI TAKA 0.2';
+export const FIREBASE_CLOUD_TITLE = 'TIKI TAKA 0.2 • GLOBAL CLUB CLOUD';
+
+export type RankSymbolId =
+  | 'BRONZE_SHIELD_1'
+  | 'BRONZE_SHIELD_2'
+  | 'SILVER_CREST'
+  | 'GOLD_CROWN'
+  | 'PLATINUM_STAR'
+  | 'DIAMOND_GEM'
+  | 'STAR_CHAMPION';
+
 export interface RankTierInfo {
   index: number;
   name: string;
+  shortLabel: string;
   tierGroup: 'BRONZE' | 'SILVER' | 'GOLD' | 'PLATINUM' | 'DIAMOND' | 'STAR';
+  divisionNumeral: 'I' | 'II' | '★';
+  symbolId: RankSymbolId;
   minWins: number;
+  rankPointsRequired: number;
   borderHex: string;
   shadowHex: string;
   badgeBgHex: string;
   badgeTextHex: string;
+  accentGlowHex: string;
   cpuSpeed: number;
   cpuDribble: number;
   standOff: number;
@@ -907,12 +924,17 @@ export const RANK_TIERS: readonly RankTierInfo[] = [
   {
     index: 0,
     name: 'Bronze I',
+    shortLabel: 'BRZ I',
     tierGroup: 'BRONZE',
+    divisionNumeral: 'I',
+    symbolId: 'BRONZE_SHIELD_1',
     minWins: 0,
+    rankPointsRequired: 0,
     borderHex: '#cd7f32',
     shadowHex: '#7c2d12',
     badgeBgHex: '#ffedd5',
     badgeTextHex: '#9a3412',
+    accentGlowHex: '#fb923c',
     cpuSpeed: 3.35,
     cpuDribble: 1.82,
     standOff: 195,
@@ -925,12 +947,17 @@ export const RANK_TIERS: readonly RankTierInfo[] = [
   {
     index: 1,
     name: 'Bronze II',
+    shortLabel: 'BRZ II',
     tierGroup: 'BRONZE',
+    divisionNumeral: 'II',
+    symbolId: 'BRONZE_SHIELD_2',
     minWins: 1,
+    rankPointsRequired: 100,
     borderHex: '#d97706',
     shadowHex: '#78350f',
     badgeBgHex: '#fef3c7',
     badgeTextHex: '#92400e',
+    accentGlowHex: '#f59e0b',
     cpuSpeed: 3.55,
     cpuDribble: 1.95,
     standOff: 180,
@@ -943,12 +970,17 @@ export const RANK_TIERS: readonly RankTierInfo[] = [
   {
     index: 2,
     name: 'Silver I',
+    shortLabel: 'SLV I',
     tierGroup: 'SILVER',
+    divisionNumeral: 'I',
+    symbolId: 'SILVER_CREST',
     minWins: 2,
+    rankPointsRequired: 200,
     borderHex: '#94a3b8',
     shadowHex: '#334155',
     badgeBgHex: '#f1f5f9',
     badgeTextHex: '#1e293b',
+    accentGlowHex: '#cbd5e1',
     cpuSpeed: 3.78,
     cpuDribble: 2.08,
     standOff: 162,
@@ -961,12 +993,17 @@ export const RANK_TIERS: readonly RankTierInfo[] = [
   {
     index: 3,
     name: 'Gold II',
+    shortLabel: 'GLD II',
     tierGroup: 'GOLD',
+    divisionNumeral: 'II',
+    symbolId: 'GOLD_CROWN',
     minWins: 3,
+    rankPointsRequired: 300,
     borderHex: '#eab308',
     shadowHex: '#854d0e',
     badgeBgHex: '#fef08a',
     badgeTextHex: '#713f12',
+    accentGlowHex: '#fde047',
     cpuSpeed: 4.02,
     cpuDribble: 2.24,
     standOff: 146,
@@ -979,12 +1016,17 @@ export const RANK_TIERS: readonly RankTierInfo[] = [
   {
     index: 4,
     name: 'Platinum I',
+    shortLabel: 'PLT I',
     tierGroup: 'PLATINUM',
+    divisionNumeral: 'I',
+    symbolId: 'PLATINUM_STAR',
     minWins: 4,
+    rankPointsRequired: 400,
     borderHex: '#06b6d4',
     shadowHex: '#155e75',
     badgeBgHex: '#cffafe',
     badgeTextHex: '#0e7490',
+    accentGlowHex: '#22d3ee',
     cpuSpeed: 4.24,
     cpuDribble: 2.38,
     standOff: 130,
@@ -997,12 +1039,17 @@ export const RANK_TIERS: readonly RankTierInfo[] = [
   {
     index: 5,
     name: 'Diamond I',
+    shortLabel: 'DMD I',
     tierGroup: 'DIAMOND',
+    divisionNumeral: 'I',
+    symbolId: 'DIAMOND_GEM',
     minWins: 5,
+    rankPointsRequired: 500,
     borderHex: '#6366f1',
     shadowHex: '#312e81',
     badgeBgHex: '#e0e7ff',
     badgeTextHex: '#3730a3',
+    accentGlowHex: '#818cf8',
     cpuSpeed: 4.42,
     cpuDribble: 2.50,
     standOff: 118,
@@ -1015,12 +1062,17 @@ export const RANK_TIERS: readonly RankTierInfo[] = [
   {
     index: 6,
     name: 'Star League',
+    shortLabel: 'STAR',
     tierGroup: 'STAR',
+    divisionNumeral: 'MAX',
+    symbolId: 'STAR_CHAMPION',
     minWins: 6,
+    rankPointsRequired: 600,
     borderHex: '#d946ef',
     shadowHex: '#701a75',
     badgeBgHex: '#fae8ff',
     badgeTextHex: '#86198f',
+    accentGlowHex: '#f0abfc',
     cpuSpeed: 4.55,
     cpuDribble: 2.58,
     standOff: 112,
@@ -1065,21 +1117,56 @@ export interface RankProgressSummary {
   winsNeededForNext: number;
   statusHeadline: string;
   subtext: string;
+  clubLevel: number;
+  prevClubLevel: number;
+  leveledUp: boolean;
+  rankPoints: number;
+  nextRankPoints: number;
+  divisionProgressPct: number;
+  levelProgressPct: number;
+  xpInCurrentLevel: number;
+  xpForNextLevel: number;
 }
 
 /**
- * Computes the player's competitive rank progress bar percentage, promotion status, and UI labels.
+ * Computes the player's competitive rank progress bar percentage, Club Level XP, promotion status, and UI labels.
  */
 export function computeRankProgressSummary(
   rankedWins: number,
-  prevWins = rankedWins
+  prevWins = rankedWins,
+  rankedMatches = rankedWins,
+  prevMatches = prevWins
 ): RankProgressSummary {
   const safeWins = Math.max(0, Math.floor(Number.isFinite(rankedWins) ? rankedWins : 0));
   const safePrevWins = Math.max(0, Math.floor(Number.isFinite(prevWins) ? prevWins : safeWins));
+  const safeMatches = Math.max(safeWins, Math.floor(Number.isFinite(rankedMatches) ? rankedMatches : safeWins));
+  const safePrevMatches = Math.max(safePrevWins, Math.floor(Number.isFinite(prevMatches) ? prevMatches : safePrevWins));
+
   const currentRank = getUserRankInfo(safeWins);
   const prevRank = getUserRankInfo(safePrevWins);
   const nextRank = getNextRankInfo(safeWins);
   const rankedUp = currentRank.index > prevRank.index;
+
+  // Club XP & Level calculation: +100 XP per Ranked Win, +35 XP per non-win Ranked Match played
+  const nonWinMatches = Math.max(0, safeMatches - safeWins);
+  const prevNonWinMatches = Math.max(0, safePrevMatches - safePrevWins);
+  const totalXp = safeWins * 100 + nonWinMatches * 35;
+  const prevTotalXp = safePrevWins * 100 + prevNonWinMatches * 35;
+
+  const xpForNextLevel = 100;
+  const clubLevel = 1 + Math.floor(totalXp / xpForNextLevel);
+  const prevClubLevel = 1 + Math.floor(prevTotalXp / xpForNextLevel);
+  const leveledUp = clubLevel > prevClubLevel;
+  const xpInCurrentLevel = totalXp % xpForNextLevel;
+  const levelProgressPct = nextRank
+    ? Math.max(12, Math.min(98, Math.round(((currentRank.index + xpInCurrentLevel / 100) / (RANK_TIERS.length - 1)) * 100)))
+    : 100;
+
+  const rankPoints = totalXp;
+  const nextRankPoints = nextRank ? nextRank.rankPointsRequired : currentRank.rankPointsRequired;
+  const divisionProgressPct = nextRank
+    ? Math.min(96, Math.max(16, Math.round(((currentRank.index + 1) / RANK_TIERS.length) * 100 + (xpInCurrentLevel / 100) * 10)))
+    : 100;
 
   const progressPct = Math.min(100, Math.max(14, Math.round(((currentRank.index + 1) / RANK_TIERS.length) * 100)));
   const prevProgressPct = Math.min(100, Math.max(14, Math.round(((prevRank.index + 1) / RANK_TIERS.length) * 100)));
@@ -1109,6 +1196,15 @@ export function computeRankProgressSummary(
     winsNeededForNext,
     statusHeadline,
     subtext,
+    clubLevel,
+    prevClubLevel,
+    leveledUp,
+    rankPoints,
+    nextRankPoints,
+    divisionProgressPct,
+    levelProgressPct,
+    xpInCurrentLevel,
+    xpForNextLevel,
   };
 }
 
@@ -1707,7 +1803,7 @@ export function buildGoalCelebrationMessage(input: GoalCelebrationInput): GoalCe
 // ============================================================================
 
 export const SLOT_SPIN_COST = 10;
-export const SLOT_BET_OPTIONS = [10, 100] as const;
+export const SLOT_BET_OPTIONS = [10, 100, 1000] as const;
 export type PokieBetAmount = (typeof SLOT_BET_OPTIONS)[number];
 export const INITIAL_PLAYER_BALANCE = 30;
 export const BASE_JACKPOT_POOL = 1000;
@@ -1715,7 +1811,11 @@ export const COUPON_HACK_CODE = 'HACK';
 export const COUPON_HACK_SPINS = 10;
 export const COUPON_HACK_REWARD = SLOT_SPIN_COST * COUPON_HACK_SPINS; // $100 (10 spins at $10)
 
-export type PokieMachineId = 'CHAMPIONS_GOLD' | 'COSMIC_NEON' | 'VOLCANO_INFERNO';
+export type PokieMachineId =
+  | 'CHAMPIONS_GOLD'
+  | 'COSMIC_NEON'
+  | 'VOLCANO_INFERNO'
+  | 'HIGH_ROLLER_ROYAL';
 
 export interface PokieMachineConfig {
   id: PokieMachineId;
@@ -1724,10 +1824,18 @@ export interface PokieMachineConfig {
   stadiumName: string;
   pitchThemeId: PitchThemeId;
   tagline: string;
-  /** Base Grand Jackpot at $10 bet (scales 10x for $100 bet) */
+  /** Base Grand Jackpot at $10 bet (scales proportionally for $100 and $1,000 bets) */
   baseJackpot10: number;
   /** Multiplier on bet for 3x MEGA_TROPHY */
   jackpotMultiplier: number;
+  /** Allowed spin bet amounts on this machine */
+  allowedBets: readonly PokieBetAmount[];
+  /** Default spin bet when opening this machine */
+  defaultBet: PokieBetAmount;
+  /** Shop unlock price in dollars ($0 = unlocked by default, $80,000 for High Roller) */
+  unlockPrice: number;
+  /** Whether this machine is the dedicated $1,000 High Roller machine */
+  isHighRoller?: boolean;
   headerGradient: string;
   cabinetBg: string;
   cabinetBorderHex: string;
@@ -1754,6 +1862,9 @@ export const POKIE_MACHINES: Record<PokieMachineId, PokieMachineConfig> = {
     tagline: 'ROYAL EMERALD & GOLD ARENA',
     baseJackpot10: 500,
     jackpotMultiplier: 50,
+    allowedBets: [10, 100],
+    defaultBet: 10,
+    unlockPrice: 0,
     headerGradient: 'linear-gradient(135deg, #064e3b 0%, #0f172a 55%, #713f12 100%)',
     cabinetBg: 'linear-gradient(180deg, #ffffff 0%, #f0fdf4 55%, #fef9c3 100%)',
     cabinetBorderHex: '#facc15',
@@ -1778,6 +1889,9 @@ export const POKIE_MACHINES: Record<PokieMachineId, PokieMachineConfig> = {
     tagline: 'ZERO-G CYBER SUPERNOVA',
     baseJackpot10: 750,
     jackpotMultiplier: 75,
+    allowedBets: [10, 100],
+    defaultBet: 10,
+    unlockPrice: 1500,
     headerGradient: 'linear-gradient(135deg, #090d16 0%, #1e1b4b 52%, #4a044e 100%)',
     cabinetBg: 'linear-gradient(180deg, #f8fafc 0%, #e0f2fe 55%, #fae8ff 100%)',
     cabinetBorderHex: '#38bdf8',
@@ -1802,6 +1916,9 @@ export const POKIE_MACHINES: Record<PokieMachineId, PokieMachineConfig> = {
     tagline: 'MOLTEN OBSIDIAN MEGA-JACKPOT',
     baseJackpot10: 1000,
     jackpotMultiplier: 100,
+    allowedBets: [10, 100],
+    defaultBet: 10,
+    unlockPrice: 12000,
     headerGradient: 'linear-gradient(135deg, #1c0a0a 0%, #450a0a 52%, #7c2d12 100%)',
     cabinetBg: 'linear-gradient(180deg, #fff7ed 0%, #ffedd5 55%, #ffe4e6 100%)',
     cabinetBorderHex: '#fb923c',
@@ -1817,17 +1934,46 @@ export const POKIE_MACHINES: Record<PokieMachineId, PokieMachineConfig> = {
     orbBorderHex: '#fb923c',
     orbGlowRgba: 'rgba(249, 115, 22, 0.92)',
   },
+  HIGH_ROLLER_ROYAL: {
+    id: 'HIGH_ROLLER_ROYAL',
+    name: 'High Roller VIP Vault',
+    shortName: 'High Roller VIP',
+    stadiumName: 'Twilight Synthwave',
+    pitchThemeId: 'TWILIGHT_SYNTH',
+    tagline: '$1,000 SPIN • DIAMOND VIP HIGH ROLLER',
+    baseJackpot10: 1000, // At $1,000 spin (100x scale), effective Grand Jackpot starts at $100,000!
+    jackpotMultiplier: 100,
+    allowedBets: [1000],
+    defaultBet: 1000,
+    unlockPrice: 80000,
+    isHighRoller: true,
+    headerGradient: 'linear-gradient(135deg, #0f172a 0%, #3b0764 50%, #854d0e 100%)',
+    cabinetBg: 'linear-gradient(180deg, #fefce8 0%, #fae8ff 52%, #fef08a 100%)',
+    cabinetBorderHex: '#facc15',
+    reelHousingBg: '#2e1065',
+    reelBorderHex: '#facc15',
+    accentHex: '#fde047',
+    secondaryHex: '#e879f9',
+    badgeBgHex: '#fef08a',
+    badgeTextHex: '#3b0764',
+    bulbColors: ['#fde047', '#e879f9', '#38bdf8'],
+    orbName: 'DIAMOND ORB',
+    orbGradient: 'linear-gradient(180deg, #ffffff 0%, #fde047 48%, #a855f7 100%)',
+    orbBorderHex: '#fde047',
+    orbGlowRgba: 'rgba(250, 204, 21, 0.96)',
+  },
 };
 
 export const POKIE_MACHINE_LIST: PokieMachineConfig[] = [
   POKIE_MACHINES.CHAMPIONS_GOLD,
   POKIE_MACHINES.COSMIC_NEON,
   POKIE_MACHINES.VOLCANO_INFERNO,
+  POKIE_MACHINES.HIGH_ROLLER_ROYAL,
 ];
 
 /**
- * Computes the active Grand Jackpot for a given machine and bet amount ($10 or $100).
- * Switching from $10 to $100 scales the base jackpot 10x while preserving progressive contributions.
+ * Computes the active Grand Jackpot for a given machine and bet amount ($10, $100, or $1,000).
+ * Scales the base jackpot proportionally (`betAmount / 10`) while preserving progressive contributions.
  */
 export function getMachineEffectiveJackpot(
   machineId: PokieMachineId,
@@ -1842,6 +1988,83 @@ export function getMachineEffectiveJackpot(
   return Math.round(base10 * betScale + progressiveDelta10 * betScale);
 }
 
+// ============================================================================
+// TIERED TOURNAMENT BUY-INS & RESPECTIVE AWARDS ($100, $1,000, $10,000)
+// ============================================================================
+
+export type TournamentTierId = 'CUP_100' | 'CUP_1000' | 'CUP_10000';
+
+export interface TournamentTierConfig {
+  id: TournamentTierId;
+  name: string;
+  shortName: string;
+  entryFee: 100 | 1000 | 10000;
+  /** Scale multiplier applied to tournament round rewards (1x, 10x, 100x) */
+  rewardMultiplier: number;
+  /** Quarter-Final Win base + win payout */
+  qfWinReward: number;
+  /** Semi-Final Win base + win payout */
+  sfWinReward: number;
+  /** Grand Final Champion base + win payout */
+  finalWinReward: number;
+  /** Total guaranteed 3-round sweep prize (excluding extra goal/clean-sheet bonuses) */
+  totalCupPrize: number;
+  badgeBgHex: string;
+  badgeTextHex: string;
+  borderHex: string;
+}
+
+export const TOURNAMENT_TIERS: Record<TournamentTierId, TournamentTierConfig> = {
+  CUP_100: {
+    id: 'CUP_100',
+    name: 'Club Knockout Cup',
+    shortName: '$100 Cup',
+    entryFee: 100,
+    rewardMultiplier: 1,
+    qfWinReward: 75,
+    sfWinReward: 125,
+    finalWinReward: 300,
+    totalCupPrize: 500,
+    badgeBgHex: '#dcfce7',
+    badgeTextHex: '#14532d',
+    borderHex: '#22c55e',
+  },
+  CUP_1000: {
+    id: 'CUP_1000',
+    name: 'Champions Gold Cup',
+    shortName: '$1,000 Cup',
+    entryFee: 1000,
+    rewardMultiplier: 10,
+    qfWinReward: 750,
+    sfWinReward: 1250,
+    finalWinReward: 3000,
+    totalCupPrize: 5000,
+    badgeBgHex: '#fef08a',
+    badgeTextHex: '#713f12',
+    borderHex: '#eab308',
+  },
+  CUP_10000: {
+    id: 'CUP_10000',
+    name: 'Diamond VIP Masters',
+    shortName: '$10,000 Cup',
+    entryFee: 10000,
+    rewardMultiplier: 100,
+    qfWinReward: 7500,
+    sfWinReward: 12500,
+    finalWinReward: 30000,
+    totalCupPrize: 50000,
+    badgeBgHex: '#f3e8ff',
+    badgeTextHex: '#581c87',
+    borderHex: '#a855f7',
+  },
+};
+
+export const TOURNAMENT_TIER_LIST: TournamentTierConfig[] = [
+  TOURNAMENT_TIERS.CUP_100,
+  TOURNAMENT_TIERS.CUP_1000,
+  TOURNAMENT_TIERS.CUP_10000,
+];
+
 export interface MatchMoneyRewardInput {
   gameMode: 'CASUAL' | 'RANKED' | 'TOURNAMENT';
   didWin: boolean;
@@ -1850,6 +2073,7 @@ export interface MatchMoneyRewardInput {
   goalsAgainst: number;
   isMercyRule?: boolean;
   tournamentRound?: number; // 0 = QF, 1 = SF, 2 = Final
+  tournamentTier?: TournamentTierId;
 }
 
 export interface MatchMoneyRewardResult {
@@ -1863,7 +2087,7 @@ export interface MatchMoneyRewardResult {
 }
 
 /**
- * Calculates money earned from completing a match based on performance and game mode.
+ * Calculates money earned from completing a match based on performance, game mode, and tournament tier.
  */
 export function calculateMatchMoneyReward(input: MatchMoneyRewardInput): MatchMoneyRewardResult {
   const {
@@ -1874,48 +2098,60 @@ export function calculateMatchMoneyReward(input: MatchMoneyRewardInput): MatchMo
     goalsAgainst,
     isMercyRule = false,
     tournamentRound = 0,
+    tournamentTier = 'CUP_100',
   } = input;
 
-  // Base participation payout by mode
-  const basePay =
-    gameMode === 'TOURNAMENT'
-      ? 12 + Math.max(0, tournamentRound) * 4
-      : gameMode === 'RANKED'
-        ? 10
-        : 6;
+  if (gameMode === 'TOURNAMENT') {
+    const tierCfg = TOURNAMENT_TIERS[tournamentTier] || TOURNAMENT_TIERS.CUP_100;
+    const mult = tierCfg.rewardMultiplier;
+    const clampedRound = Math.max(0, Math.min(2, tournamentRound));
 
-  // Win / Draw bonus by mode
-  const winBonus = didWin
-    ? gameMode === 'TOURNAMENT'
-      ? 18 + Math.max(0, tournamentRound) * 10
-      : gameMode === 'RANKED'
-        ? 16
-        : 10
-    : isDraw
-      ? 4
-      : 0;
+    // Base match pay by round (QF = $15*mult, SF = $25*mult, Final = $50*mult)
+    const basePay = (clampedRound === 2 ? 50 : clampedRound === 1 ? 25 : 15) * mult;
 
-  // Per-goal bonus ($3 in Casual, $4 in Ranked, $5 in Tournament)
-  const perGoalRate = gameMode === 'TOURNAMENT' ? 5 : gameMode === 'RANKED' ? 4 : 3;
+    // Win bonus by round so QF Win = $75*mult, SF Win = $125*mult, Final Champion Win = $300*mult (Total = $500 / $5,000 / $50,000!)
+    const winBonus = didWin
+      ? (clampedRound === 2 ? 250 : clampedRound === 1 ? 100 : 60) * mult
+      : isDraw
+        ? 10 * mult
+        : 0;
+
+    const goalBonus = Math.max(0, goalsFor) * 5 * mult;
+    let specialBonus = 0;
+    if (didWin && isMercyRule) specialBonus += 10 * mult;
+    if (didWin && goalsAgainst === 0 && goalsFor > 0) specialBonus += 5 * mult;
+
+    const totalReward = basePay + winBonus + goalBonus + specialBonus;
+    const modeMultiplierLabel =
+      clampedRound >= 2
+        ? `${tierCfg.shortName.toUpperCase()} FINAL`
+        : clampedRound === 1
+          ? `${tierCfg.shortName.toUpperCase()} SEMI`
+          : `${tierCfg.shortName.toUpperCase()} QF`;
+
+    return {
+      totalReward,
+      basePay,
+      winBonus,
+      goalBonus,
+      specialBonus,
+      modeMultiplierLabel,
+      summaryText: `+$${totalReward.toLocaleString()} ${modeMultiplierLabel} PRIZE`,
+    };
+  }
+
+  // Casual & Ranked match payouts
+  const basePay = gameMode === 'RANKED' ? 10 : 6;
+  const winBonus = didWin ? (gameMode === 'RANKED' ? 16 : 10) : isDraw ? 4 : 0;
+  const perGoalRate = gameMode === 'RANKED' ? 4 : 3;
   const goalBonus = Math.max(0, goalsFor) * perGoalRate;
 
-  // Special performance bonuses (Mercy Rule KO +$8, Clean Sheet Win +$5)
   let specialBonus = 0;
   if (didWin && isMercyRule) specialBonus += 8;
   if (didWin && goalsAgainst === 0 && goalsFor > 0) specialBonus += 5;
 
   const totalReward = basePay + winBonus + goalBonus + specialBonus;
-  const modeMultiplierLabel =
-    gameMode === 'TOURNAMENT'
-      ? tournamentRound >= 2
-        ? 'CUP FINAL BONUS'
-        : tournamentRound === 1
-          ? 'SEMI-FINAL BONUS'
-          : 'TOURNAMENT PAY'
-      : gameMode === 'RANKED'
-        ? 'RANKED STAKES'
-        : 'CASUAL MATCH PAY';
-
+  const modeMultiplierLabel = gameMode === 'RANKED' ? 'RANKED STAKES' : 'CASUAL MATCH PAY';
   const spinsEarned = Math.floor(totalReward / SLOT_SPIN_COST);
   const summaryText =
     spinsEarned >= 1
@@ -2603,6 +2839,474 @@ export function stepHoldAndSpinSession(
   };
 }
 
+// ============================================================================
+// 30-SECOND SUDDEN-DEATH JACKPOT GOAL CHALLENGE
+// ============================================================================
 
+export const JACKPOT_CHALLENGE_DURATION_SECONDS = 30;
 
+export type JackpotChallengeType = 'HOLD_AND_SPIN' | 'GRAND_JACKPOT';
+
+export interface JackpotChallengeState {
+  active: boolean;
+  challengeType: JackpotChallengeType;
+  machineId: PokieMachineId;
+  machineName: string;
+  stadiumName: string;
+  pitchThemeId: PitchThemeId;
+  betAmount: PokieBetAmount;
+  jackpotPrize: number;
+  durationSeconds: number;
+  triggerPositions?: { reel: number; row: number }[];
+}
+
+export interface JackpotChallengeOutcome {
+  ended: boolean;
+  didWinJackpot: boolean;
+  unlocksHoldAndSpin: boolean;
+  payout: number;
+  reason: string;
+  headline: string;
+  subtext: string;
+}
+
+/**
+ * Creates a 30-second sudden-death Jackpot Goal Challenge state coinciding with the pokie machine's stadium theme.
+ * Supports both 'HOLD_AND_SPIN' (must score in 30s to enter the Hold & Spin bonus screen) and 'GRAND_JACKPOT'.
+ */
+export function createJackpotChallengeState(
+  machineId: PokieMachineId,
+  betAmount: PokieBetAmount,
+  jackpotPrize?: number,
+  challengeType: JackpotChallengeType = 'GRAND_JACKPOT',
+  triggerPositions?: { reel: number; row: number }[]
+): JackpotChallengeState {
+  const machine = POKIE_MACHINES[machineId] || POKIE_MACHINES.CHAMPIONS_GOLD;
+  const effectivePrize =
+    typeof jackpotPrize === 'number' && jackpotPrize > 0
+      ? Math.round(jackpotPrize)
+      : getMachineEffectiveJackpot(machineId, betAmount);
+  return {
+    active: true,
+    challengeType,
+    machineId,
+    machineName: machine.name,
+    stadiumName: machine.stadiumName,
+    pitchThemeId: machine.pitchThemeId,
+    betAmount,
+    jackpotPrize: effectivePrize,
+    durationSeconds: JACKPOT_CHALLENGE_DURATION_SECONDS,
+    triggerPositions: triggerPositions ? [...triggerPositions] : undefined,
+  };
+}
+
+/**
+ * Evaluates the live 30-second Jackpot Goal Challenge match:
+ * - Score 1 goal (`scoreYou > 0`) within 30s -> WIN! Either unlocks Hold & Spin screen or awards the 100% Grand Jackpot!
+ * - Concede 1 goal (`scoreAi > 0`) -> LOSE the bonus / Jackpot ($0)!
+ * - 30s timer expires (`matchTimeRemaining <= 0`) -> LOSE the bonus / Jackpot ($0)!
+ */
+export function evaluateJackpotChallengeOutcome(
+  state: JackpotChallengeState,
+  scoreYou: number,
+  scoreAi: number,
+  matchTimeRemaining: number
+): JackpotChallengeOutcome {
+  if (!state.active) {
+    return {
+      ended: false,
+      didWinJackpot: false,
+      unlocksHoldAndSpin: false,
+      payout: 0,
+      reason: '',
+      headline: '',
+      subtext: '',
+    };
+  }
+  const isHoldAndSpinGate = state.challengeType === 'HOLD_AND_SPIN';
+  if (scoreYou > 0) {
+    if (isHoldAndSpinGate) {
+      return {
+        ended: true,
+        didWinJackpot: true,
+        unlocksHoldAndSpin: true,
+        payout: 0,
+        reason: 'HOLD & SPIN UNLOCKED!',
+        headline: `👑 HOLD & SPIN UNLOCKED!`,
+        subtext: `You scored in ${state.stadiumName} within 30s! Entering the ${state.machineName} Hold & Spin Bonus Screen now!`,
+      };
+    }
+    return {
+      ended: true,
+      didWinJackpot: true,
+      unlocksHoldAndSpin: false,
+      payout: state.jackpotPrize,
+      reason: 'JACKPOT GOAL SCORED!',
+      headline: `🏆 JACKPOT WON! +$${state.jackpotPrize.toLocaleString()}!`,
+      subtext: `You scored in ${state.stadiumName} within 30s and claimed the $${state.jackpotPrize.toLocaleString()} ${state.machineName} Jackpot!`,
+    };
+  }
+  if (scoreAi > 0) {
+    return {
+      ended: true,
+      didWinJackpot: false,
+      unlocksHoldAndSpin: false,
+      payout: 0,
+      reason: isHoldAndSpinGate ? 'CONCEDED GOAL — HOLD & SPIN LOST!' : 'CONCEDED GOAL — JACKPOT LOST!',
+      headline: isHoldAndSpinGate ? '💔 HOLD & SPIN LOST! GOAL CONCEDED' : '💔 JACKPOT LOST! GOAL CONCEDED',
+      subtext: isHoldAndSpinGate
+        ? `You conceded a goal in ${state.stadiumName}! Your Hold & Spin Bonus Screen entry was forfeited.`
+        : `You conceded a goal in ${state.stadiumName}! The $${state.jackpotPrize.toLocaleString()} Jackpot was forfeited.`,
+    };
+  }
+  if (matchTimeRemaining <= 0) {
+    return {
+      ended: true,
+      didWinJackpot: false,
+      unlocksHoldAndSpin: false,
+      payout: 0,
+      reason: isHoldAndSpinGate ? '30s EXPIRED — HOLD & SPIN LOST!' : '30s EXPIRED — JACKPOT LOST!',
+      headline: isHoldAndSpinGate ? '⏱️ TIME UP! HOLD & SPIN LOST' : '⏱️ TIME UP! JACKPOT LOST',
+      subtext: isHoldAndSpinGate
+        ? `30 seconds expired before you scored a goal! Your Hold & Spin Bonus Screen entry slipped away.`
+        : `30 seconds expired before you scored a goal! The $${state.jackpotPrize.toLocaleString()} Jackpot slipped away.`,
+    };
+  }
+  return {
+    ended: false,
+    didWinJackpot: false,
+    unlocksHoldAndSpin: false,
+    payout: 0,
+    reason: '',
+    headline: '',
+    subtext: '',
+  };
+}
+
+// ============================================================================
+// CLUB SHOP (STADIUM & POKIE MACHINE UNLOCKS) & ONLINE LEADERBOARD LOGIC
+// ============================================================================
+
+export const DEFAULT_UNLOCKED_STADIUMS: readonly PitchThemeId[] = ['CLASSIC_TURF'] as const;
+export const DEFAULT_UNLOCKED_POKIES: readonly PokieMachineId[] = ['CHAMPIONS_GOLD'] as const;
+
+export interface ShopStadiumItem {
+  id: PitchThemeId;
+  name: string;
+  subtitle: string;
+  price: number;
+  tierLabel: string;
+  accentHex: string;
+  bgHex: string;
+}
+
+export const SHOP_STADIUM_ITEMS: readonly ShopStadiumItem[] = [
+  {
+    id: 'CLASSIC_TURF',
+    name: 'Sunlit Turf',
+    subtitle: 'Royal Botanical Park • Starter Arena',
+    price: 0,
+    tierLabel: 'STARTER',
+    accentHex: '#22c55e',
+    bgHex: '#dcfce7',
+  },
+  {
+    id: 'URBAN_CONCRETE',
+    name: 'Urban Street Concrete',
+    subtitle: 'Downtown Rooftop Block Party',
+    price: 200,
+    tierLabel: 'STREET',
+    accentHex: '#f59e0b',
+    bgHex: '#fef3c7',
+  },
+  {
+    id: 'RIO_CLAY',
+    name: 'Copacabana Sunset Clay',
+    subtitle: 'Rio Beach Carnival Court',
+    price: 600,
+    tierLabel: 'BEACH',
+    accentHex: '#f97316',
+    bgHex: '#ffedd5',
+  },
+  {
+    id: 'TURF_AUTUMN',
+    name: 'Autumn Harvest Turf',
+    subtitle: 'Golden Maple Park',
+    price: 1800,
+    tierLabel: 'CLUB',
+    accentHex: '#84cc16',
+    bgHex: '#ecfccb',
+  },
+  {
+    id: 'TURF_SAKURA',
+    name: 'Sakura Blossom Turf',
+    subtitle: 'Kyoto Imperial Zen Garden',
+    price: 4500,
+    tierLabel: 'IMPERIAL',
+    accentHex: '#ec4899',
+    bgHex: '#fce7f3',
+  },
+  {
+    id: 'ARCTIC_ICE',
+    name: 'Glacier Frost Arena',
+    subtitle: 'Sub-Zero Aurora Fjord',
+    price: 10000,
+    tierLabel: 'PRO',
+    accentHex: '#06b6d4',
+    bgHex: '#cffafe',
+  },
+  {
+    id: 'TURF_CHAMPIONS',
+    name: 'Champions Cathedral',
+    subtitle: 'European Floodlit Trophy Arena',
+    price: 22000,
+    tierLabel: 'ELITE',
+    accentHex: '#3b82f6',
+    bgHex: '#dbeafe',
+  },
+  {
+    id: 'TWILIGHT_SYNTH',
+    name: 'Twilight Synthwave',
+    subtitle: 'Cyberpunk Outrun Laser Grid',
+    price: 40000,
+    tierLabel: 'MASTER',
+    accentHex: '#a855f7',
+    bgHex: '#f3e8ff',
+  },
+  {
+    id: 'VOLCANO_FORGE',
+    name: 'Magma Caldera Citadel',
+    subtitle: 'Molten Obsidian Dragon Forge',
+    price: 65000,
+    tierLabel: 'LEGEND',
+    accentHex: '#ef4444',
+    bgHex: '#fee2e2',
+  },
+  {
+    id: 'COSMIC_SPACE',
+    name: 'Cosmic Orbit Station',
+    subtitle: 'Zero-G Supernova Orbital Ring',
+    price: 100000,
+    tierLabel: 'ULTIMATE 100K',
+    accentHex: '#0ea5e9',
+    bgHex: '#e0f2fe',
+  },
+] as const;
+
+export interface ShopPokieItem {
+  id: PokieMachineId;
+  name: string;
+  subtitle: string;
+  price: number;
+  tierLabel: string;
+  baseJackpotLabel: string;
+  allowedBetsLabel: string;
+  accentHex: string;
+  bgHex: string;
+}
+
+export const SHOP_POKIE_ITEMS: readonly ShopPokieItem[] = [
+  {
+    id: 'CHAMPIONS_GOLD',
+    name: 'Champions Cathedral Pokie',
+    subtitle: 'Royal Emerald & Gold • Starter Machine',
+    price: 0,
+    tierLabel: 'STARTER',
+    baseJackpotLabel: '$500 / $5,000',
+    allowedBetsLabel: '$10 / $100 Spins',
+    accentHex: '#eab308',
+    bgHex: '#fef9c3',
+  },
+  {
+    id: 'COSMIC_NEON',
+    name: 'Cosmic Orbit Pokie',
+    subtitle: 'Zero-G Cyber Supernova Reels',
+    price: 1500,
+    tierLabel: 'CYBER',
+    baseJackpotLabel: '$750 / $7,500',
+    allowedBetsLabel: '$10 / $100 Spins',
+    accentHex: '#0ea5e9',
+    bgHex: '#e0f2fe',
+  },
+  {
+    id: 'VOLCANO_INFERNO',
+    name: 'Magma Caldera Pokie',
+    subtitle: 'Molten Obsidian Mega-Jackpot',
+    price: 12000,
+    tierLabel: 'INFERNO',
+    baseJackpotLabel: '$1,000 / $10,000',
+    allowedBetsLabel: '$10 / $100 Spins',
+    accentHex: '#f97316',
+    bgHex: '#ffedd5',
+  },
+  {
+    id: 'HIGH_ROLLER_ROYAL',
+    name: 'High Roller VIP Vault',
+    subtitle: '$1,000 Spin • Diamond VIP Lounge',
+    price: 80000,
+    tierLabel: 'VIP 80K',
+    baseJackpotLabel: '$100,000+',
+    allowedBetsLabel: '$1,000 VIP Spins',
+    accentHex: '#a855f7',
+    bgHex: '#fae8ff',
+  },
+] as const;
+
+export interface ShopPurchaseResult<T extends string> {
+  success: boolean;
+  alreadyUnlocked: boolean;
+  insufficientFunds: boolean;
+  price: number;
+  newBalance: number;
+  unlockedItems: T[];
+  message: string;
+}
+
+export function purchaseShopStadium(
+  stadiumId: PitchThemeId,
+  currentBalance: number,
+  unlockedStadiums: readonly PitchThemeId[]
+): ShopPurchaseResult<PitchThemeId> {
+  const safeBal = Math.max(0, Math.floor(Number.isFinite(currentBalance) ? currentBalance : 0));
+  const currentSet = new Set<PitchThemeId>(
+    unlockedStadiums && unlockedStadiums.length > 0 ? unlockedStadiums : DEFAULT_UNLOCKED_STADIUMS
+  );
+  const item = SHOP_STADIUM_ITEMS.find((s) => s.id === stadiumId);
+  if (!item) {
+    return {
+      success: false,
+      alreadyUnlocked: false,
+      insufficientFunds: false,
+      price: 0,
+      newBalance: safeBal,
+      unlockedItems: Array.from(currentSet),
+      message: 'INVALID STADIUM',
+    };
+  }
+  if (currentSet.has(stadiumId)) {
+    return {
+      success: false,
+      alreadyUnlocked: true,
+      insufficientFunds: false,
+      price: item.price,
+      newBalance: safeBal,
+      unlockedItems: Array.from(currentSet),
+      message: `${item.name.toUpperCase()} IS ALREADY UNLOCKED!`,
+    };
+  }
+  if (safeBal < item.price) {
+    return {
+      success: false,
+      alreadyUnlocked: false,
+      insufficientFunds: true,
+      price: item.price,
+      newBalance: safeBal,
+      unlockedItems: Array.from(currentSet),
+      message: `NEED $${item.price.toLocaleString()} TO UNLOCK ${item.name.toUpperCase()} (YOU HAVE $${safeBal.toLocaleString()})`,
+    };
+  }
+  currentSet.add(stadiumId);
+  const newBalance = safeBal - item.price;
+  return {
+    success: true,
+    alreadyUnlocked: false,
+    insufficientFunds: false,
+    price: item.price,
+    newBalance,
+    unlockedItems: Array.from(currentSet),
+    message: `🏟️ UNLOCKED ${item.name.toUpperCase()} FOR $${item.price.toLocaleString()}!`,
+  };
+}
+
+export function purchaseShopPokieMachine(
+  machineId: PokieMachineId,
+  currentBalance: number,
+  unlockedPokies: readonly PokieMachineId[]
+): ShopPurchaseResult<PokieMachineId> {
+  const safeBal = Math.max(0, Math.floor(Number.isFinite(currentBalance) ? currentBalance : 0));
+  const currentSet = new Set<PokieMachineId>(
+    unlockedPokies && unlockedPokies.length > 0 ? unlockedPokies : DEFAULT_UNLOCKED_POKIES
+  );
+  const item = SHOP_POKIE_ITEMS.find((p) => p.id === machineId);
+  if (!item) {
+    return {
+      success: false,
+      alreadyUnlocked: false,
+      insufficientFunds: false,
+      price: 0,
+      newBalance: safeBal,
+      unlockedItems: Array.from(currentSet),
+      message: 'INVALID POKIE MACHINE',
+    };
+  }
+  if (currentSet.has(machineId)) {
+    return {
+      success: false,
+      alreadyUnlocked: true,
+      insufficientFunds: false,
+      price: item.price,
+      newBalance: safeBal,
+      unlockedItems: Array.from(currentSet),
+      message: `${item.name.toUpperCase()} IS ALREADY UNLOCKED!`,
+    };
+  }
+  if (safeBal < item.price) {
+    return {
+      success: false,
+      alreadyUnlocked: false,
+      insufficientFunds: true,
+      price: item.price,
+      newBalance: safeBal,
+      unlockedItems: Array.from(currentSet),
+      message: `NEED $${item.price.toLocaleString()} TO UNLOCK ${item.name.toUpperCase()} (YOU HAVE $${safeBal.toLocaleString()})`,
+    };
+  }
+  currentSet.add(machineId);
+  const newBalance = safeBal - item.price;
+  return {
+    success: true,
+    alreadyUnlocked: false,
+    insufficientFunds: false,
+    price: item.price,
+    newBalance,
+    unlockedItems: Array.from(currentSet),
+    message: `🎰 UNLOCKED ${item.name.toUpperCase()} FOR $${item.price.toLocaleString()}!`,
+  };
+}
+
+export type LeaderboardSortMode = 'RANK' | 'MONEY';
+
+export interface LeaderboardEntry {
+  uid: string;
+  name: string;
+  iconType: 'preset' | 'photo';
+  presetIcon: string;
+  photoDataUrl: string | null;
+  rankedWins: number;
+  rankedMatches: number;
+  balance: number;
+  isSelf?: boolean;
+  isOnline?: boolean;
+}
+
+/**
+ * Deterministically orders player profiles for the Online Leaderboard by either:
+ * - 'RANK' (rankedWins descending, tie-broken by balance descending, then name ascending)
+ * - 'MONEY' (balance descending, tie-broken by rankedWins descending, then name ascending)
+ */
+export function sortLeaderboardEntries(
+  entries: readonly LeaderboardEntry[],
+  sortBy: LeaderboardSortMode
+): LeaderboardEntry[] {
+  return [...entries].sort((a, b) => {
+    if (sortBy === 'MONEY') {
+      if (b.balance !== a.balance) return b.balance - a.balance;
+      if (b.rankedWins !== a.rankedWins) return b.rankedWins - a.rankedWins;
+      return a.name.localeCompare(b.name);
+    }
+    if (b.rankedWins !== a.rankedWins) return b.rankedWins - a.rankedWins;
+    if (b.balance !== a.balance) return b.balance - a.balance;
+    return a.name.localeCompare(b.name);
+  });
+}
 

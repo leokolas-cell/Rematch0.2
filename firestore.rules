@@ -1,0 +1,165 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Pillar 1 & Phase 4.1: Global Default-Deny Safety Net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Phase 3: Hardened Global Primitives
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerifiedUser() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    // Pillar 2: Validation Blueprint for TikiTakaClubStanding (synced with firebase-blueprint.json)
+    function isValidTikiTakaClubStanding(data) {
+      return data.keys().hasAll([
+          'uid',
+          'name',
+          'iconType',
+          'presetIcon',
+          'photoDataUrl',
+          'rankedWins',
+          'rankedMatches',
+          'balance',
+          'isPublic',
+          'createdAt',
+          'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'uid',
+          'name',
+          'iconType',
+          'presetIcon',
+          'photoDataUrl',
+          'rankedWins',
+          'rankedMatches',
+          'balance',
+          'isPublic',
+          'createdAt',
+          'updatedAt'
+        ]) &&
+        data.uid is string &&
+        data.uid.size() >= 1 &&
+        data.uid.size() <= 128 &&
+        data.uid.matches('^[a-zA-Z0-9_\\-]+$') &&
+        data.uid == request.auth.uid &&
+        data.name is string &&
+        data.name.size() >= 1 &&
+        data.name.size() <= 16 &&
+        data.iconType is string &&
+        data.iconType.size() >= 5 &&
+        data.iconType.size() <= 6 &&
+        (data.iconType == 'preset' || data.iconType == 'photo') &&
+        data.presetIcon is string &&
+        data.presetIcon.size() >= 1 &&
+        data.presetIcon.size() <= 16 &&
+        data.photoDataUrl is string &&
+        data.photoDataUrl.size() <= 120000 &&
+        data.rankedWins is int &&
+        data.rankedWins >= 0 &&
+        data.rankedWins <= 1000000 &&
+        data.rankedMatches is int &&
+        data.rankedMatches >= 0 &&
+        data.rankedMatches <= 1000000 &&
+        data.balance is int &&
+        data.balance >= 0 &&
+        data.balance <= 1000000000 &&
+        data.isPublic is bool &&
+        data.isPublic == true &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    // Primary Collection: /tiki_taka_club_standings/{userId}
+    match /tiki_taka_club_standings/{userId} {
+      allow get: if isValidId(userId) && existing().isPublic == true;
+      allow list: if existing().isPublic == true && request.query.limit <= 100;
+
+      allow create: if isVerifiedUser() &&
+        isValidId(userId) &&
+        userId == request.auth.uid &&
+        isValidTikiTakaClubStanding(incoming()) &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time;
+
+      allow update: if (
+        isVerifiedUser() &&
+        isValidTikiTakaClubStanding(incoming()) &&
+        isValidId(userId) &&
+        userId == request.auth.uid &&
+        incoming().uid == existing().uid &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time && (
+          incoming().diff(existing()).affectedKeys().hasOnly([
+            'name',
+            'iconType',
+            'presetIcon',
+            'photoDataUrl',
+            'rankedWins',
+            'rankedMatches',
+            'balance',
+            'isPublic',
+            'updatedAt'
+          ])
+        )
+      );
+
+      allow delete: if isVerifiedUser() && isValidId(userId) && userId == request.auth.uid && existing().uid == request.auth.uid;
+    }
+
+    // Legacy Alias Collection: /leaderboard_profiles/{userId}
+    match /leaderboard_profiles/{userId} {
+      allow get: if isValidId(userId) && existing().isPublic == true;
+      allow list: if existing().isPublic == true && request.query.limit <= 100;
+
+      allow create: if isVerifiedUser() &&
+        isValidId(userId) &&
+        userId == request.auth.uid &&
+        isValidTikiTakaClubStanding(incoming()) &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time;
+
+      allow update: if (
+        isVerifiedUser() &&
+        isValidTikiTakaClubStanding(incoming()) &&
+        isValidId(userId) &&
+        userId == request.auth.uid &&
+        incoming().uid == existing().uid &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time && (
+          incoming().diff(existing()).affectedKeys().hasOnly([
+            'name',
+            'iconType',
+            'presetIcon',
+            'photoDataUrl',
+            'rankedWins',
+            'rankedMatches',
+            'balance',
+            'isPublic',
+            'updatedAt'
+          ])
+        )
+      );
+
+      allow delete: if isVerifiedUser() && isValidId(userId) && userId == request.auth.uid && existing().uid == request.auth.uid;
+    }
+  }
+}

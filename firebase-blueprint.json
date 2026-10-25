@@ -1,0 +1,96 @@
+{
+  "entities": {
+    "TikiTakaClubStanding": {
+      "title": "TikiTakaClubStanding",
+      "description": "Public player club profile and standings for the TIKI TAKA 0.2 global online leaderboard ordered by Rank (rankedWins) or Money (balance). Contains no PII.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "description": "The authenticated Firebase user UID owning this club profile.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "name": {
+          "type": "string",
+          "description": "Player display name (1 to 16 characters).",
+          "minLength": 1,
+          "maxLength": 16
+        },
+        "iconType": {
+          "type": "string",
+          "description": "Avatar display mode: preset icon or captured camera photo.",
+          "enum": ["preset", "photo"],
+          "minLength": 5,
+          "maxLength": 6
+        },
+        "presetIcon": {
+          "type": "string",
+          "description": "Preset icon identifier (#10, STAR, BOLT, CROWN, FIRE, TROPHY).",
+          "minLength": 1,
+          "maxLength": 16
+        },
+        "photoDataUrl": {
+          "type": "string",
+          "description": "Optional compact base64 JPEG avatar data URL or empty string when using preset icon.",
+          "minLength": 0,
+          "maxLength": 120000
+        },
+        "rankedWins": {
+          "type": "integer",
+          "description": "Total ranked/tournament match wins used to compute player rank tier and level."
+        },
+        "rankedMatches": {
+          "type": "integer",
+          "description": "Total ranked/tournament matches played."
+        },
+        "balance": {
+          "type": "integer",
+          "description": "Current player bankroll in dollars ($)."
+        },
+        "isPublic": {
+          "type": "boolean",
+          "description": "Flag indicating this club profile is publicly queryable on the TIKI TAKA 0.2 global leaderboard."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Immutable server timestamp when the profile was first created."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when the profile was last updated."
+        }
+      },
+      "required": [
+        "uid",
+        "name",
+        "iconType",
+        "presetIcon",
+        "photoDataUrl",
+        "rankedWins",
+        "rankedMatches",
+        "balance",
+        "isPublic",
+        "createdAt",
+        "updatedAt"
+      ]
+    }
+  },
+  "firestore": {
+    "/tiki_taka_club_standings/{userId}": {
+      "schema": {
+        "$ref": "#/entities/TikiTakaClubStanding"
+      },
+      "description": "Stores public player profiles for the TIKI TAKA 0.2 online leaderboard ordered by Rank or Money."
+    },
+    "/leaderboard_profiles/{userId}": {
+      "schema": {
+        "$ref": "#/entities/TikiTakaClubStanding"
+      },
+      "description": "Legacy alias collection for public player leaderboard profiles."
+    }
+  }
+}
