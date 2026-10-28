@@ -5,7 +5,17 @@ import {
   PASSES_FOR_FLOW_BOOST,
   TOURNAMENT_ROUNDS,
   TOTAL_TOURNAMENT_GAMES,
+  TEAM_KITS,
+  TEAM_KIT_LIST,
+  CLUB_KIT_LIST,
+  COUNTRY_KIT_LIST,
+  DEFAULT_UNLOCKED_KITS,
+  SHOP_KIT_ITEMS,
+  purchaseShopKit,
+  getTeamKitSpec,
   getContrastingKit,
+  canSpinPokieReels,
+  getJackpotChallengePromptCopy,
   getFlowPassBoost,
   computeTackleReach,
   computeKeeperTargetPosition,
@@ -96,9 +106,11 @@ test('Expanded PITCH specification provides spread-out tiki-taka passing room an
   assert.deepEqual(TOURNAMENT_ROUNDS, ['Quarter-Final', 'Semi-Final', 'Grand Final']);
 });
 
-test('getContrastingKit ensures CPU kit always contrasts user Home/Away kit selection', () => {
-  assert.equal(getContrastingKit('HOME'), 'AWAY');
-  assert.equal(getContrastingKit('AWAY'), 'HOME');
+test('getContrastingKit ensures CPU kit always contrasts user kit selection', () => {
+  assert.equal(getContrastingKit('AUSTRALIA'), 'FRANCE');
+  assert.equal(getContrastingKit('BRISBANE_ROAR'), 'MAN_CITY');
+  assert.equal(getContrastingKit('REAL_MADRID'), 'BARCELONA');
+  assert.equal(getContrastingKit('BARCELONA'), 'REAL_MADRID');
 });
 
 test('getFlowPassBoost scales pass speed, teammate catch radius, and shrinks AI/keeper interception as Flow builds', () => {
@@ -1110,6 +1122,8 @@ test('createDefaultPlayerProfile returns clean starter account state for Delete 
   assert.equal(fresh.balance, 30);
   assert.deepEqual(fresh.unlockedStadiums, ['CLASSIC_TURF']);
   assert.deepEqual(fresh.unlockedPokieMachines, ['CHAMPIONS_GOLD']);
+  assert.deepEqual(fresh.unlockedKits, ['AUSTRALIA', 'BRISBANE_ROAR']);
+  assert.equal(fresh.selectedKitId, 'AUSTRALIA');
   assert.equal(fresh.selectedStadiumId, 'CLASSIC_TURF');
   assert.equal(fresh.stadiumShuffleEnabled, false);
 });
@@ -1187,4 +1201,75 @@ test('All 10 Stadiums have asymmetric, non-repetitive 4-quadrant surroundings di
   assert.equal(allQuadrantTitles.size, 40, 'All 40 stadium exterior quadrants across the 10 arenas are unique');
 });
 
+test('30 Team Kits (15 Famous Clubs + 15 Famous Countries), starter kits Australia & Brisbane Roar, and Club Shop kit purchasing', () => {
+  assert.equal(CLUB_KIT_LIST.length, 15, 'Must have exactly 15 famous football club kits');
+  assert.equal(COUNTRY_KIT_LIST.length, 15, 'Must have exactly 15 famous football country kits');
+  assert.equal(TEAM_KIT_LIST.length, 30, 'Must have 30 total team kits');
+  assert.equal(SHOP_KIT_ITEMS.length, 30, 'All 30 kits are registered in SHOP_KIT_ITEMS');
+
+  // Verify default starter kits are Australia and Brisbane Roar ($0 price)
+  assert.deepEqual(DEFAULT_UNLOCKED_KITS, ['AUSTRALIA', 'BRISBANE_ROAR']);
+  assert.equal(TEAM_KITS.AUSTRALIA.price, 0);
+  assert.equal(TEAM_KITS.AUSTRALIA.category, 'COUNTRY');
+  assert.equal(TEAM_KITS.AUSTRALIA.body, '#facc15'); // Socceroos Gold
+  assert.equal(TEAM_KITS.AUSTRALIA.collar, '#15803d'); // Socceroos Green
+
+  assert.equal(TEAM_KITS.BRISBANE_ROAR.price, 0);
+  assert.equal(TEAM_KITS.BRISBANE_ROAR.category, 'CLUB');
+  assert.equal(TEAM_KITS.BRISBANE_ROAR.body, '#f97316'); // Brisbane Roar Orange
+  assert.equal(TEAM_KITS.BRISBANE_ROAR.shortsColor, '#0f172a'); // Black shorts
+
+  // Every kit has a valid contrasting opponent kit with a different primary jersey color
+  for (const kit of TEAM_KIT_LIST) {
+    const spec = getTeamKitSpec(kit.id);
+    assert.equal(spec.id, kit.id);
+    const cpuKitId = getContrastingKit(kit.id);
+    assert.notEqual(cpuKitId, kit.id, `Expected contrasting CPU kit for ${kit.id}`);
+    const cpuSpec = getTeamKitSpec(cpuKitId);
+    assert.notEqual(cpuSpec.body, spec.body, `Expected CPU kit (${cpuKitId}) body color to contrast ${kit.id}`);
+  }
+
+  // Test purchasing kits in the Club Shop
+  const alreadyOwned = purchaseShopKit('AUSTRALIA', 5000, DEFAULT_UNLOCKED_KITS);
+  assert.equal(alreadyOwned.success, false);
+  assert.equal(alreadyOwned.alreadyUnlocked, true);
+
+  const insufficient = purchaseShopKit('REAL_MADRID', 500, DEFAULT_UNLOCKED_KITS);
+  assert.equal(insufficient.success, false);
+  assert.equal(insufficient.insufficientFunds, true);
+
+  const bought = purchaseShopKit('REAL_MADRID', 8000, DEFAULT_UNLOCKED_KITS);
+  assert.equal(bought.success, true);
+  assert.equal(bought.newBalance, 3000);
+  assert.ok(bought.unlockedItems.includes('REAL_MADRID'));
+  assert.ok(bought.unlockedItems.includes('AUSTRALIA'));
+  assert.ok(bought.unlockedItems.includes('BRISBANE_ROAR'));
+});
+
+test('Pokie Spin-to-Win / Jackpot qualifier locks reel spinning and displays WIN GAME TO ENTER JACKPOT SPIN TO WIN', () => {
+  assert.equal(canSpinPokieReels(false, false, false), true);
+  assert.equal(canSpinPokieReels(true, false, false), false);
+  assert.equal(canSpinPokieReels(false, true, false), false);
+  assert.equal(canSpinPokieReels(false, false, true), false, 'Cannot spin again while pendingJackpotChallenge is active');
+
+  const spinToWinCopy = getJackpotChallengePromptCopy('Suffolk Tavern', 5000, 'HOLD_AND_SPIN');
+  assert.match(spinToWinCopy.headline, /WIN GAME TO ENTER JACKPOT SPIN TO WIN/i);
+  assert.match(spinToWinCopy.subtext, /WIN GAME TO ENTER JACKPOT SPIN TO WIN/i);
+  assert.match(spinToWinCopy.buttonLabel, /WIN GAME TO ENTER JACKPOT SPIN TO WIN/i);
+  assert.match(spinToWinCopy.statusBanner, /WIN GAME TO ENTER JACKPOT SPIN TO WIN/i);
+
+  const jackpotCopy = getJackpotChallengePromptCopy('Cosmic Orbit', 50000, 'GRAND_JACKPOT');
+  assert.match(jackpotCopy.headline, /WIN GAME TO ENTER JACKPOT SPIN TO WIN/i);
+  assert.match(jackpotCopy.buttonLabel, /WIN GAME TO ENTER JACKPOT SPIN TO WIN/i);
+
+  // Verify Clunes, Byron Bay, and Suffolk Tavern renames
+  const clunesTheme = PITCH_THEMES.find((t) => t.id === 'CLASSIC_TURF');
+  const byronTheme = PITCH_THEMES.find((t) => t.id === 'RIO_CLAY');
+  assert.equal(clunesTheme?.name, 'Clunes');
+  assert.equal(byronTheme?.name, 'Byron Bay');
+  assert.equal(POKIE_MACHINES.CHAMPIONS_GOLD.name, 'Suffolk Tavern');
+  assert.equal(SHOP_POKIE_ITEMS.find((p) => p.id === 'CHAMPIONS_GOLD')?.name, 'Suffolk Tavern');
+  assert.equal(SHOP_STADIUM_ITEMS.find((s) => s.id === 'CLASSIC_TURF')?.name, 'Clunes');
+  assert.equal(SHOP_STADIUM_ITEMS.find((s) => s.id === 'RIO_CLAY')?.name, 'Byron Bay');
+});
 

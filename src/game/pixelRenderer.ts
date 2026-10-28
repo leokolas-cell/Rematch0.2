@@ -9,7 +9,13 @@
  */
 
 import { GRAPHICS_CONFIG, PIXEL_DIGITS_3X5 } from './graphicsConfig';
-import { PITCH, simulateCurvedPreviewArc } from './rules';
+import {
+  PITCH,
+  simulateCurvedPreviewArc,
+  type KitChoice,
+  getTeamKitSpec,
+  getContrastingKit,
+} from './rules';
 
 export function snapPx(val: number, grid = GRAPHICS_CONFIG.pixelPipeline.pixelSize): number {
   return Math.round(val / grid) * grid;
@@ -121,14 +127,14 @@ export function drawPixelPlayer(
     isOpenLane: boolean;
     queuedOneTouch: boolean;
     opponentTag?: string;
-    userKit?: 'HOME' | 'AWAY';
+    userKit?: KitChoice;
   }
 ): void {
-  const { palette, dimensions, animation } = GRAPHICS_CONFIG;
+  const { dimensions, animation } = GRAPHICS_CONFIG;
   const isYou = p.team === 'YOU';
-  const userWearsHome = (opts.userKit || 'HOME') === 'HOME';
-  const wearsHomeKit = isYou ? userWearsHome : !userWearsHome;
-  const kit = wearsHomeKit ? palette.homeKit : palette.awayKit;
+  const chosenUserKit: KitChoice = opts.userKit || 'HOME';
+  const activeKitId: KitChoice = isYou ? chosenUserKit : getContrastingKit(chosenUserKit);
+  const kitSpec = getTeamKitSpec(activeKitId);
 
   ctx.save();
   // Smooth floating-point translation for 100% butter-smooth 60-144Hz movement
@@ -155,9 +161,7 @@ export function drawPixelPlayer(
   // Rich, high-contrast team-colored floor platter fill under the player's feet
   ctx.fillStyle = opts.superFlow
     ? 'rgba(234, 179, 8, 0.68)'
-    : wearsHomeKit
-      ? 'rgba(2, 132, 199, 0.65)'
-      : 'rgba(225, 29, 72, 0.65)';
+    : kitSpec.platterFill;
   ctx.beginPath();
   ctx.arc(0, 0, baseRadius - 1.5, 0, Math.PI * 2);
   ctx.fill();
@@ -165,9 +169,7 @@ export function drawPixelPlayer(
   // Inner bright team accent ring
   ctx.strokeStyle = opts.superFlow
     ? '#fef08a'
-    : wearsHomeKit
-      ? '#7dd3fc'
-      : '#fda4af';
+    : kitSpec.platterRing;
   ctx.lineWidth = opts.isControlled ? 3.2 : 2.5;
   ctx.beginPath();
   ctx.arc(0, 0, baseRadius - 2.2, 0, Math.PI * 2);
@@ -177,7 +179,7 @@ export function drawPixelPlayer(
   const faceAngle = opts.isControlled ? opts.aimAngle : p.angle;
   ctx.save();
   ctx.rotate(faceAngle);
-  ctx.fillStyle = opts.superFlow ? '#fde047' : wearsHomeKit ? '#38bdf8' : '#fb7185';
+  ctx.fillStyle = opts.superFlow ? '#fde047' : kitSpec.pointerColor;
   ctx.strokeStyle = '#0f172a';
   ctx.lineWidth = 3.2;
   ctx.lineJoin = 'round';
@@ -305,13 +307,13 @@ export function drawPixelPlayer(
 
   // Left Cleat + Team Sock
   fillLocalPx(ctx, leftCleatX - 5, -p.radius * 0.85 - 2, dimensions.cleatLength + 2, dimensions.cleatWidth + 2, '#0f172a');
-  fillLocalPx(ctx, leftCleatX - 4, -p.radius * 0.85 - 1, dimensions.cleatLength, dimensions.cleatWidth, kit.cleats);
-  fillLocalPx(ctx, leftCleatX - 2, -p.radius * 0.85, 4, dimensions.cleatWidth - 2, kit.socks);
+  fillLocalPx(ctx, leftCleatX - 4, -p.radius * 0.85 - 1, dimensions.cleatLength, dimensions.cleatWidth, kitSpec.cleatsColor);
+  fillLocalPx(ctx, leftCleatX - 2, -p.radius * 0.85, 4, dimensions.cleatWidth - 2, kitSpec.socksColor);
 
   // Right Cleat + Team Sock
   fillLocalPx(ctx, rightCleatX - 5, p.radius * 0.85 - dimensions.cleatWidth, dimensions.cleatLength + 2, dimensions.cleatWidth + 2, '#0f172a');
-  fillLocalPx(ctx, rightCleatX - 4, p.radius * 0.85 - dimensions.cleatWidth + 1, dimensions.cleatLength, dimensions.cleatWidth, kit.cleats);
-  fillLocalPx(ctx, rightCleatX - 2, p.radius * 0.85 - dimensions.cleatWidth + 2, 4, dimensions.cleatWidth - 2, kit.socks);
+  fillLocalPx(ctx, rightCleatX - 4, p.radius * 0.85 - dimensions.cleatWidth + 1, dimensions.cleatLength, dimensions.cleatWidth, kitSpec.cleatsColor);
+  fillLocalPx(ctx, rightCleatX - 2, p.radius * 0.85 - dimensions.cleatWidth + 2, 4, dimensions.cleatWidth - 2, kitSpec.socksColor);
 
   const sw = 36; // Generous 36px wide shoulders so team jersey color is unmistakable
   const td = 26; // 26px deep torso
@@ -336,39 +338,39 @@ export function drawPixelPlayer(
     '#0f172a'
   );
 
-  if (wearsHomeKit) {
-    // HOME KIT: Electric Sky-Cyan Jersey + Crisp White Shoulder Trim + Lemon-Gold Center Stripe
-    fillLocalPx(ctx, -td / 2, -sw / 2, td, sw, '#0284c7');
-    fillLocalPx(ctx, -td / 2 + 2, -sw / 2 + 2, td - 4, sw - 4, '#38bdf8');
-    // Crisp White Shoulder Sleeves
-    fillLocalPx(ctx, -td / 2 + 2, -sw / 2 + 2, td - 4, 5, '#ffffff');
-    fillLocalPx(ctx, -td / 2 + 2, sw / 2 - 7, td - 4, 5, '#ffffff');
-    // Sunny Lemon-Gold Center Chest Stripe
-    fillLocalPx(ctx, -3, -sw / 2 + 5, 6, sw - 10, '#fde047');
+  // Bespoke 16-Bit Jersey Base, Body, Shoulder Sleeves & Pattern
+  fillLocalPx(ctx, -td / 2, -sw / 2, td, sw, kitSpec.jerseyBase);
+  fillLocalPx(ctx, -td / 2 + 2, -sw / 2 + 2, td - 4, sw - 4, kitSpec.jerseyBody);
+  // Shoulder Sleeves
+  fillLocalPx(ctx, -td / 2 + 2, -sw / 2 + 2, td - 4, 5, kitSpec.sleeveTrim);
+  fillLocalPx(ctx, -td / 2 + 2, sw / 2 - 7, td - 4, 5, kitSpec.sleeveTrim);
+
+  if (kitSpec.stripeStyle === 'TWIN_STRIPES') {
+    fillLocalPx(ctx, -6, -sw / 2 + 5, 4, sw - 10, kitSpec.stripeColor);
+    fillLocalPx(ctx, 2, -sw / 2 + 5, 4, sw - 10, kitSpec.stripeColor);
+  } else if (kitSpec.stripeStyle === 'SASH') {
+    fillLocalPx(ctx, -6, -sw / 2 + 5, 5, 8, kitSpec.stripeColor);
+    fillLocalPx(ctx, -2, -4, 5, 8, kitSpec.stripeColor);
+    fillLocalPx(ctx, 2, sw / 2 - 13, 5, 8, kitSpec.stripeColor);
+  } else if (kitSpec.stripeStyle === 'CHEST_HOOP') {
+    fillLocalPx(ctx, -td / 2 + 3, -5, td - 6, 10, kitSpec.stripeColor);
   } else {
-    // AWAY KIT: Vibrant Coral-Crimson Jersey + White Shoulder Trim + Warm-Gold Center Stripe
-    fillLocalPx(ctx, -td / 2, -sw / 2, td, sw, '#e11d48');
-    fillLocalPx(ctx, -td / 2 + 2, -sw / 2 + 2, td - 4, sw - 4, '#fb7185');
-    // Crisp Cream-White Shoulder Sleeves
-    fillLocalPx(ctx, -td / 2 + 2, -sw / 2 + 2, td - 4, 5, '#fff1f2');
-    fillLocalPx(ctx, -td / 2 + 2, sw / 2 - 7, td - 4, 5, '#fff1f2');
-    // Warm Amber-Gold Center Stripe
-    fillLocalPx(ctx, -3, -sw / 2 + 5, 6, sw - 10, '#fde047');
+    fillLocalPx(ctx, -3, -sw / 2 + 5, 6, sw - 10, kitSpec.stripeColor);
   }
 
   // Swinging Pixel Arms / Hands with Dark Outline
   const armSwing = -rawStride * 0.65;
   fillLocalPx(ctx, armSwing - 4, -sw / 2 - 6, 9, 6, '#0f172a');
-  fillLocalPx(ctx, armSwing - 3, -sw / 2 - 5, 7, 4, kit.skin);
+  fillLocalPx(ctx, armSwing - 3, -sw / 2 - 5, 7, 4, kitSpec.skinColor);
   fillLocalPx(ctx, -armSwing - 4, sw / 2, 9, 6, '#0f172a');
-  fillLocalPx(ctx, -armSwing - 3, sw / 2 + 1, 7, 4, kit.skin);
+  fillLocalPx(ctx, -armSwing - 3, sw / 2 + 1, 7, 4, kitSpec.skinColor);
 
   // Compact Forward-Shifted 16-Bit Head (Leaves the vibrant colored jersey shoulders & back clearly visible!)
   const hr = 6;
   const headX = 4;
   fillLocalPx(ctx, headX - hr - 2, -hr - 2, hr * 2 + 4, hr * 2 + 4, '#0f172a');
-  fillLocalPx(ctx, headX - hr, -hr, hr * 2, hr * 2, kit.skin);
-  fillLocalPx(ctx, headX - hr, -hr, hr * 1.2, hr * 2, wearsHomeKit ? '#fde047' : '#1e293b');
+  fillLocalPx(ctx, headX - hr, -hr, hr * 2, hr * 2, kitSpec.skinColor);
+  fillLocalPx(ctx, headX - hr, -hr, hr * 1.2, hr * 2, kitSpec.hairColor);
 
   ctx.restore();
 
@@ -404,7 +406,7 @@ export function drawPixelPlayer(
   ctx.closePath();
   ctx.fill();
 
-  ctx.fillStyle = opts.superFlow ? '#facc15' : wearsHomeKit ? '#0ea5e9' : '#f43f5e';
+  ctx.fillStyle = opts.superFlow ? '#facc15' : kitSpec.pointerColor;
   ctx.strokeStyle = '#0f172a';
   ctx.lineWidth = 2.4;
   ctx.beginPath();
@@ -424,9 +426,7 @@ export function drawPixelPlayer(
   // Bold team-colored pill with dark slate border (pops on light pitches)
   ctx.fillStyle = opts.isControlled
     ? (opts.superFlow ? '#fde047' : '#0f172a')
-    : wearsHomeKit
-      ? '#0284c7'
-      : '#e11d48';
+    : kitSpec.pillColor;
   ctx.strokeStyle = '#0f172a';
   ctx.lineWidth = 2.4;
   ctx.beginPath();
@@ -455,12 +455,11 @@ export interface PixelKeeperRenderData {
 export function drawPixelKeeper(
   ctx: CanvasRenderingContext2D,
   k: PixelKeeperRenderData,
-  userKit: 'HOME' | 'AWAY' = 'HOME'
+  userKit: KitChoice = 'HOME'
 ): void {
-  const { palette } = GRAPHICS_CONFIG;
   const isYou = k.team === 'YOU';
-  const wearsHomeKit = isYou ? userKit === 'HOME' : userKit !== 'HOME';
-  const kit = wearsHomeKit ? palette.keeperHome : palette.keeperAway;
+  const activeKitId: KitChoice = isYou ? userKit : getContrastingKit(userKit);
+  const kitSpec = getTeamKitSpec(activeKitId);
 
   ctx.save();
   ctx.translate(k.x, k.y);
@@ -479,12 +478,12 @@ export function drawPixelKeeper(
   ctx.arc(0, 0, kRingR, 0, Math.PI * 2);
   ctx.stroke();
 
-  ctx.fillStyle = wearsHomeKit ? 'rgba(16, 185, 129, 0.62)' : 'rgba(168, 85, 247, 0.62)';
+  ctx.fillStyle = kitSpec.keeperPlatter;
   ctx.beginPath();
   ctx.arc(0, 0, kRingR - 1.5, 0, Math.PI * 2);
   ctx.fill();
 
-  ctx.strokeStyle = kit.primary;
+  ctx.strokeStyle = kitSpec.keeperPrimary;
   ctx.lineWidth = 2.8;
   ctx.beginPath();
   ctx.arc(0, 0, kRingR - 2, 0, Math.PI * 2);
@@ -498,14 +497,14 @@ export function drawPixelKeeper(
   [-gloveSpread, gloveSpread - 6].forEach((gy) => {
     fillLocalPx(ctx, 1, gy - 3, 12, 12, '#ffffff');
     fillLocalPx(ctx, 2, gy - 2, 10, 10, '#0f172a');
-    fillLocalPx(ctx, 4, gy, 6, 6, kit.gloves);
+    fillLocalPx(ctx, 4, gy, 6, 6, '#fde047');
   });
 
   // Pixel Keeper Torso & Head with Crisp White Outer Halo + Dark Ink Outline
   fillLocalPx(ctx, -k.radius - 4, -k.radius - 4, k.radius * 2 + 8, k.radius * 2 + 8, '#ffffff');
   fillLocalPx(ctx, -k.radius - 2, -k.radius - 2, k.radius * 2 + 4, k.radius * 2 + 4, '#0f172a');
-  fillLocalPx(ctx, -k.radius, -k.radius, k.radius * 2, k.radius * 2, kit.secondary);
-  fillLocalPx(ctx, -k.radius + 2, -k.radius + 2, k.radius * 2 - 4, k.radius * 2 - 4, kit.primary);
+  fillLocalPx(ctx, -k.radius, -k.radius, k.radius * 2, k.radius * 2, kitSpec.keeperSecondary);
+  fillLocalPx(ctx, -k.radius + 2, -k.radius + 2, k.radius * 2 - 4, k.radius * 2 - 4, kitSpec.keeperPrimary);
   fillLocalPx(ctx, -3, -3, 6, 6, '#ffffff');
   ctx.restore();
 
@@ -518,7 +517,7 @@ export function drawPixelKeeper(
   ctx.beginPath();
   ctx.roundRect(-15, gkY - 8, 30, 15, 5);
   ctx.fill();
-  ctx.fillStyle = kit.secondary;
+  ctx.fillStyle = kitSpec.keeperSecondary;
   ctx.strokeStyle = '#0f172a';
   ctx.lineWidth = 2.0;
   ctx.beginPath();
@@ -630,13 +629,13 @@ export function drawPixelGoal(
   goalTop: number,
   goalBot: number,
   nodes: Array<{ x: number; y: number; baseX: number; baseY: number }>,
-  userKit: 'HOME' | 'AWAY' = 'HOME'
+  userKit: KitChoice = 'HOME'
 ): void {
   const { palette, pixelPipeline } = GRAPHICS_CONFIG;
   const px = pixelPipeline.pixelSize;
   const gx = isLeft ? 0 : PITCH.width;
-  const leftWearsHome = userKit === 'HOME';
-  const sideIsHomeKit = isLeft ? leftWearsHome : !leftWearsHome;
+  const sideKitId: KitChoice = isLeft ? userKit : getContrastingKit(userKit);
+  const sideKitSpec = getTeamKitSpec(sideKitId);
 
   ctx.save();
   // Soft interior goal shadow polygon
@@ -651,7 +650,7 @@ export function drawPixelGoal(
   ctx.fill();
 
   // Hand-crafted pixel mesh net lines that stretch with spring physics
-  ctx.strokeStyle = sideIsHomeKit ? palette.cage.netMeshHome : palette.cage.netMeshAway;
+  ctx.strokeStyle = sideKitSpec.netMeshColor;
   ctx.lineWidth = 2;
   for (let i = 0; i < nodes.length; i++) {
     ctx.beginPath();
@@ -689,7 +688,7 @@ export function drawPixelGoal(
     goalTop,
     px * 2,
     goalBot - goalTop,
-    sideIsHomeKit ? 'rgba(14, 165, 233, 0.85)' : 'rgba(244, 63, 94, 0.85)',
+    sideKitSpec.goalTapeColor,
     px
   );
 
@@ -731,18 +730,6 @@ export function drawCurvedTrajectoryPreview(
   ctx.save();
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
-
-  // If charging a curved shot/pass, draw a subtle ghost straight reference chord so the player
-  // can intuitively see how much curve bend they are putting on the ball!
-  if (chargePower > 0.08 && Math.abs(appliedSpin) > 0.001) {
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.22)';
-    ctx.lineWidth = 1.8;
-    ctx.setLineDash([4, 6]);
-    ctx.beginPath();
-    ctx.moveTo(startX, startY);
-    ctx.lineTo(targetX, targetY);
-    ctx.stroke();
-  }
 
   // Subtle dark outer stroke for contrast on bright pastel turf
   ctx.strokeStyle = 'rgba(15, 23, 42, 0.35)';
@@ -815,8 +802,8 @@ export function drawPixelReticle(
   ctx: CanvasRenderingContext2D,
   rx: number,
   ry: number,
-  playerX: number | null,
-  playerY: number | null,
+  _playerX: number | null,
+  _playerY: number | null,
   chargePower: number,
   inSweetSpot: boolean,
   isSuperFlow: boolean,
@@ -829,20 +816,6 @@ export function drawPixelReticle(
       : hasPossession
         ? '#38bdf8'
         : '#fb7185';
-
-  // Clean modern dashed tether line from Controlled Player to Mouse Reticle
-  if (playerX !== null && playerY !== null) {
-    ctx.save();
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.32)';
-    ctx.lineWidth = 2;
-    ctx.lineCap = 'round';
-    ctx.setLineDash([4, 7]);
-    ctx.beginPath();
-    ctx.moveTo(playerX, playerY);
-    ctx.lineTo(rx, ry);
-    ctx.stroke();
-    ctx.restore();
-  }
 
   ctx.save();
   ctx.translate(rx, ry);

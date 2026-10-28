@@ -300,8 +300,8 @@ export interface PitchThemeDefinition {
 export const PITCH_THEMES: PitchThemeDefinition[] = [
   {
     id: 'CLASSIC_TURF',
-    name: 'Sunlit Turf',
-    subtitle: 'Royal Botanical Park',
+    name: 'Clunes',
+    subtitle: 'Clunes Heritage Park',
     swatchLight: '#88ebb0',
     swatchDark: '#63d297',
     swatchLine: '#ffffff',
@@ -498,8 +498,8 @@ export const PITCH_THEMES: PitchThemeDefinition[] = [
   },
   {
     id: 'RIO_CLAY',
-    name: 'Sunset Clay',
-    subtitle: 'Copacabana Beach',
+    name: 'Byron Bay',
+    subtitle: 'Byron Bay Coastal Court',
     swatchLight: '#ebd084',
     swatchDark: '#dec06d',
     swatchLine: '#fef3c7',

@@ -16,8 +16,1208 @@ export const PITCH = {
 } as const;
 
 export type GameMode = 'CASUAL' | 'RANKED' | 'TOURNAMENT';
-export type KitChoice = 'HOME' | 'AWAY';
+export type KitCategory = 'CLUB' | 'COUNTRY';
+
+export type ClubKitId =
+  | 'BRISBANE_ROAR'
+  | 'REAL_MADRID'
+  | 'BARCELONA'
+  | 'MAN_CITY'
+  | 'ARSENAL'
+  | 'LIVERPOOL'
+  | 'MAN_UNITED'
+  | 'BAYERN_MUNICH'
+  | 'PSG'
+  | 'JUVENTUS'
+  | 'AC_MILAN'
+  | 'INTER_MILAN'
+  | 'DORTMUND'
+  | 'INTER_MIAMI'
+  | 'BOCA_JUNIORS';
+
+export type CountryKitId =
+  | 'AUSTRALIA'
+  | 'BRAZIL'
+  | 'ARGENTINA'
+  | 'FRANCE'
+  | 'ENGLAND'
+  | 'SPAIN'
+  | 'GERMANY'
+  | 'ITALY'
+  | 'PORTUGAL'
+  | 'NETHERLANDS'
+  | 'JAPAN'
+  | 'CROATIA'
+  | 'MEXICO'
+  | 'URUGUAY'
+  | 'NEW_ZEALAND';
+
+export type KitChoice = ClubKitId | CountryKitId;
 export type ControlGuideTab = 'COMPUTER' | 'REMOTE' | 'MOBILE';
+
+export interface TeamKitSpec {
+  id: KitChoice;
+  name: string;
+  shortName: string;
+  clubNickname: string;
+  subtitle: string;
+  category: KitCategory;
+  countryOrLeague: string;
+  price: number;
+  tierLabel: string;
+  contrastKit: KitChoice;
+  base: string;
+  body: string;
+  collar: string;
+  stripe: string;
+  jerseyBase: string;
+  jerseyBody: string;
+  sleeveTrim: string;
+  stripeColor: string;
+  stripeStyle: 'CENTER_STRIPE' | 'SASH' | 'TWIN_STRIPES' | 'CHEST_HOOP';
+  shortsColor: string;
+  socksColor: string;
+  cleatsColor: string;
+  hairColor: string;
+  skinColor: string;
+  platterFill: string;
+  platterRing: string;
+  pointerColor: string;
+  pillColor: string;
+  netMeshColor: string;
+  goalTapeColor: string;
+  keeperPrimary: string;
+  keeperSecondary: string;
+  keeperPlatter: string;
+  hudPillBg: string;
+  hudPillBorder: string;
+  hudPillText: string;
+  avatarBg: string;
+  avatarText: string;
+  avatarBorder: string;
+  badgeBg: string;
+  badgeText: string;
+  badgeBorder: string;
+  hudBg: string;
+  hudText: string;
+}
+
+export const DEFAULT_UNLOCKED_KITS: readonly KitChoice[] = ['AUSTRALIA', 'BRISBANE_ROAR'] as const;
+
+interface CompactKitInput {
+  id: KitChoice;
+  name: string;
+  shortName: string;
+  clubNickname: string;
+  category: KitCategory;
+  countryOrLeague: string;
+  price: number;
+  tierLabel: string;
+  contrastKit: KitChoice;
+  base: string;
+  body: string;
+  collar: string;
+  stripe: string;
+  stripeStyle: 'CENTER_STRIPE' | 'SASH' | 'TWIN_STRIPES' | 'CHEST_HOOP';
+  shortsColor: string;
+  socksColor: string;
+  cleatsColor?: string;
+  hairColor?: string;
+  skinColor?: string;
+  platterFill: string;
+  platterRing: string;
+  keeperPrimary?: string;
+  keeperSecondary?: string;
+  hudPillBg: string;
+  hudPillBorder: string;
+  hudPillText: string;
+  avatarBg: string;
+  avatarText: string;
+  avatarBorder: string;
+  badgeBg: string;
+  badgeText: string;
+  badgeBorder: string;
+  hudBg: string;
+  hudText: string;
+}
+
+function buildTeamKitSpec(input: CompactKitInput): TeamKitSpec {
+  return {
+    id: input.id,
+    name: input.name,
+    shortName: input.shortName,
+    clubNickname: input.clubNickname,
+    subtitle: `${input.clubNickname} • ${input.countryOrLeague}`,
+    category: input.category,
+    countryOrLeague: input.countryOrLeague,
+    price: input.price,
+    tierLabel: input.tierLabel,
+    contrastKit: input.contrastKit,
+    base: input.base,
+    body: input.body,
+    collar: input.collar,
+    stripe: input.stripe,
+    jerseyBase: input.base,
+    jerseyBody: input.body,
+    sleeveTrim: input.collar,
+    stripeColor: input.stripe,
+    stripeStyle: input.stripeStyle,
+    shortsColor: input.shortsColor,
+    socksColor: input.socksColor,
+    cleatsColor: input.cleatsColor || '#0f172a',
+    hairColor: input.hairColor || '#1e293b',
+    skinColor: input.skinColor || '#fde68a',
+    platterFill: input.platterFill,
+    platterRing: input.platterRing,
+    pointerColor: input.body,
+    pillColor: input.base,
+    netMeshColor: input.platterRing,
+    goalTapeColor: input.platterFill,
+    keeperPrimary: input.keeperPrimary || '#2dd4bf',
+    keeperSecondary: input.keeperSecondary || '#0d9488',
+    keeperPlatter: 'rgba(16, 185, 129, 0.62)',
+    hudPillBg: input.hudPillBg,
+    hudPillBorder: input.hudPillBorder,
+    hudPillText: input.hudPillText,
+    avatarBg: input.avatarBg,
+    avatarText: input.avatarText,
+    avatarBorder: input.avatarBorder,
+    badgeBg: input.badgeBg,
+    badgeText: input.badgeText,
+    badgeBorder: input.badgeBorder,
+    hudBg: input.hudBg,
+    hudText: input.hudText,
+  };
+}
+
+export const TEAM_KITS: Record<KitChoice, TeamKitSpec> = {
+  // ==========================================================================
+  // 15 FAMOUS FOOTBALL COUNTRIES (STARTER: AUSTRALIA)
+  // ==========================================================================
+  AUSTRALIA: buildTeamKitSpec({
+    id: 'AUSTRALIA',
+    name: 'Australia',
+    shortName: 'Australia',
+    clubNickname: 'Socceroos',
+    category: 'COUNTRY',
+    countryOrLeague: 'AFC • National Team',
+    price: 0,
+    tierLabel: 'STARTER',
+    contrastKit: 'FRANCE',
+    base: '#ca8a04',
+    body: '#facc15',
+    collar: '#15803d',
+    stripe: '#15803d',
+    stripeStyle: 'CHEST_HOOP',
+    shortsColor: '#14532d',
+    socksColor: '#fef08a',
+    hairColor: '#78350f',
+    platterFill: 'rgba(202, 138, 4, 0.72)',
+    platterRing: '#fde047',
+    hudPillBg: 'bg-amber-200/95',
+    hudPillBorder: 'border-emerald-700',
+    hudPillText: 'text-emerald-950',
+    avatarBg: 'bg-amber-400',
+    avatarText: 'text-emerald-950',
+    avatarBorder: 'border-emerald-700',
+    badgeBg: '#facc15',
+    badgeText: '#064e3b',
+    badgeBorder: '#15803d',
+    hudBg: '#fef08a',
+    hudText: '#064e3b',
+  }),
+  BRAZIL: buildTeamKitSpec({
+    id: 'BRAZIL',
+    name: 'Brazil',
+    shortName: 'Brazil',
+    clubNickname: 'Seleção Canarinho',
+    category: 'COUNTRY',
+    countryOrLeague: 'CONMEBOL • National Team',
+    price: 6000,
+    tierLabel: 'WORLD CHAMP',
+    contrastKit: 'FRANCE',
+    base: '#eab308',
+    body: '#fde047',
+    collar: '#16a34a',
+    stripe: '#16a34a',
+    stripeStyle: 'CENTER_STRIPE',
+    shortsColor: '#1d4ed8',
+    socksColor: '#ffffff',
+    hairColor: '#0f172a',
+    skinColor: '#fdba74',
+    platterFill: 'rgba(234, 179, 8, 0.72)',
+    platterRing: '#86efac',
+    hudPillBg: 'bg-yellow-200/95',
+    hudPillBorder: 'border-green-600',
+    hudPillText: 'text-green-950',
+    avatarBg: 'bg-yellow-400',
+    avatarText: 'text-blue-950',
+    avatarBorder: 'border-green-600',
+    badgeBg: '#fde047',
+    badgeText: '#14532d',
+    badgeBorder: '#16a34a',
+    hudBg: '#fef9c3',
+    hudText: '#14532d',
+  }),
+  ARGENTINA: buildTeamKitSpec({
+    id: 'ARGENTINA',
+    name: 'Argentina',
+    shortName: 'Argentina',
+    clubNickname: 'La Albiceleste',
+    category: 'COUNTRY',
+    countryOrLeague: 'CONMEBOL • National Team',
+    price: 6000,
+    tierLabel: 'WORLD CHAMP',
+    contrastKit: 'PORTUGAL',
+    base: '#0284c7',
+    body: '#38bdf8',
+    collar: '#ffffff',
+    stripe: '#ffffff',
+    stripeStyle: 'TWIN_STRIPES',
+    shortsColor: '#0f172a',
+    socksColor: '#f8fafc',
+    hairColor: '#0f172a',
+    platterFill: 'rgba(56, 189, 248, 0.72)',
+    platterRing: '#bae6fd',
+    hudPillBg: 'bg-sky-200/95',
+    hudPillBorder: 'border-sky-600',
+    hudPillText: 'text-sky-950',
+    avatarBg: 'bg-sky-400',
+    avatarText: 'text-slate-950',
+    avatarBorder: 'border-white',
+    badgeBg: '#38bdf8',
+    badgeText: '#0f172a',
+    badgeBorder: '#0284c7',
+    hudBg: '#e0f2fe',
+    hudText: '#0c4a6e',
+  }),
+  FRANCE: buildTeamKitSpec({
+    id: 'FRANCE',
+    name: 'France',
+    shortName: 'France',
+    clubNickname: 'Les Bleus',
+    category: 'COUNTRY',
+    countryOrLeague: 'UEFA • National Team',
+    price: 5000,
+    tierLabel: 'ELITE',
+    contrastKit: 'AUSTRALIA',
+    base: '#172554',
+    body: '#1d4ed8',
+    collar: '#ffffff',
+    stripe: '#ef4444',
+    stripeStyle: 'CHEST_HOOP',
+    shortsColor: '#ffffff',
+    socksColor: '#dc2626',
+    hairColor: '#0f172a',
+    platterFill: 'rgba(29, 78, 216, 0.72)',
+    platterRing: '#93c5fd',
+    hudPillBg: 'bg-blue-200/95',
+    hudPillBorder: 'border-red-600',
+    hudPillText: 'text-blue-950',
+    avatarBg: 'bg-blue-700',
+    avatarText: 'text-white',
+    avatarBorder: 'border-red-500',
+    badgeBg: '#1d4ed8',
+    badgeText: '#ffffff',
+    badgeBorder: '#ef4444',
+    hudBg: '#dbeafe',
+    hudText: '#172554',
+  }),
+  ENGLAND: buildTeamKitSpec({
+    id: 'ENGLAND',
+    name: 'England',
+    shortName: 'England',
+    clubNickname: 'Three Lions',
+    category: 'COUNTRY',
+    countryOrLeague: 'UEFA • National Team',
+    price: 4500,
+    tierLabel: 'ELITE',
+    contrastKit: 'SPAIN',
+    base: '#cbd5e1',
+    body: '#f8fafc',
+    collar: '#1e3a8a',
+    stripe: '#dc2626',
+    stripeStyle: 'CENTER_STRIPE',
+    shortsColor: '#1e3a8a',
+    socksColor: '#f8fafc',
+    hairColor: '#92400e',
+    platterFill: 'rgba(226, 232, 240, 0.78)',
+    platterRing: '#ef4444',
+    hudPillBg: 'bg-slate-100/95',
+    hudPillBorder: 'border-red-600',
+    hudPillText: 'text-slate-900',
+    avatarBg: 'bg-white',
+    avatarText: 'text-red-700',
+    avatarBorder: 'border-blue-900',
+    badgeBg: '#f8fafc',
+    badgeText: '#b91c1c',
+    badgeBorder: '#1e3a8a',
+    hudBg: '#f1f5f9',
+    hudText: '#1e3a8a',
+  }),
+  SPAIN: buildTeamKitSpec({
+    id: 'SPAIN',
+    name: 'Spain',
+    shortName: 'Spain',
+    clubNickname: 'La Roja',
+    category: 'COUNTRY',
+    countryOrLeague: 'UEFA • National Team',
+    price: 5000,
+    tierLabel: 'CHAMPIONS',
+    contrastKit: 'ENGLAND',
+    base: '#991b1b',
+    body: '#dc2626',
+    collar: '#facc15',
+    stripe: '#facc15',
+    stripeStyle: 'TWIN_STRIPES',
+    shortsColor: '#1e40af',
+    socksColor: '#dc2626',
+    hairColor: '#1e293b',
+    platterFill: 'rgba(220, 38, 38, 0.72)',
+    platterRing: '#fde047',
+    hudPillBg: 'bg-red-200/95',
+    hudPillBorder: 'border-amber-500',
+    hudPillText: 'text-red-950',
+    avatarBg: 'bg-red-600',
+    avatarText: 'text-amber-300',
+    avatarBorder: 'border-amber-400',
+    badgeBg: '#dc2626',
+    badgeText: '#fef08a',
+    badgeBorder: '#b91c1c',
+    hudBg: '#fee2e2',
+    hudText: '#7f1d1d',
+  }),
+  GERMANY: buildTeamKitSpec({
+    id: 'GERMANY',
+    name: 'Germany',
+    shortName: 'Germany',
+    clubNickname: 'Die Mannschaft',
+    category: 'COUNTRY',
+    countryOrLeague: 'UEFA • National Team',
+    price: 4500,
+    tierLabel: 'ELITE',
+    contrastKit: 'SPAIN',
+    base: '#cbd5e1',
+    body: '#f8fafc',
+    collar: '#0f172a',
+    stripe: '#eab308',
+    stripeStyle: 'SASH',
+    shortsColor: '#0f172a',
+    socksColor: '#f8fafc',
+    hairColor: '#ca8a04',
+    platterFill: 'rgba(248, 250, 252, 0.76)',
+    platterRing: '#facc15',
+    hudPillBg: 'bg-slate-200/95',
+    hudPillBorder: 'border-slate-900',
+    hudPillText: 'text-slate-950',
+    avatarBg: 'bg-slate-100',
+    avatarText: 'text-slate-950',
+    avatarBorder: 'border-amber-500',
+    badgeBg: '#f8fafc',
+    badgeText: '#0f172a',
+    badgeBorder: '#dc2626',
+    hudBg: '#f1f5f9',
+    hudText: '#0f172a',
+  }),
+  ITALY: buildTeamKitSpec({
+    id: 'ITALY',
+    name: 'Italy',
+    shortName: 'Italy',
+    clubNickname: 'Gli Azzurri',
+    category: 'COUNTRY',
+    countryOrLeague: 'UEFA • National Team',
+    price: 4000,
+    tierLabel: 'HERITAGE',
+    contrastKit: 'BRAZIL',
+    base: '#1d4ed8',
+    body: '#2563eb',
+    collar: '#ffffff',
+    stripe: '#16a34a',
+    stripeStyle: 'CENTER_STRIPE',
+    shortsColor: '#ffffff',
+    socksColor: '#2563eb',
+    hairColor: '#0f172a',
+    platterFill: 'rgba(37, 99, 235, 0.72)',
+    platterRing: '#93c5fd',
+    hudPillBg: 'bg-blue-200/95',
+    hudPillBorder: 'border-blue-600',
+    hudPillText: 'text-blue-950',
+    avatarBg: 'bg-blue-600',
+    avatarText: 'text-white',
+    avatarBorder: 'border-emerald-500',
+    badgeBg: '#2563eb',
+    badgeText: '#ffffff',
+    badgeBorder: '#16a34a',
+    hudBg: '#dbeafe',
+    hudText: '#1e3a8a',
+  }),
+  PORTUGAL: buildTeamKitSpec({
+    id: 'PORTUGAL',
+    name: 'Portugal',
+    shortName: 'Portugal',
+    clubNickname: 'A Seleção',
+    category: 'COUNTRY',
+    countryOrLeague: 'UEFA • National Team',
+    price: 4500,
+    tierLabel: 'ELITE',
+    contrastKit: 'ARGENTINA',
+    base: '#7f1d1d',
+    body: '#b91c1c',
+    collar: '#15803d',
+    stripe: '#eab308',
+    stripeStyle: 'SASH',
+    shortsColor: '#14532d',
+    socksColor: '#b91c1c',
+    hairColor: '#0f172a',
+    platterFill: 'rgba(185, 28, 28, 0.72)',
+    platterRing: '#4ade80',
+    hudPillBg: 'bg-red-200/95',
+    hudPillBorder: 'border-emerald-700',
+    hudPillText: 'text-red-950',
+    avatarBg: 'bg-red-700',
+    avatarText: 'text-amber-300',
+    avatarBorder: 'border-emerald-600',
+    badgeBg: '#b91c1c',
+    badgeText: '#fde047',
+    badgeBorder: '#15803d',
+    hudBg: '#fee2e2',
+    hudText: '#7f1d1d',
+  }),
+  NETHERLANDS: buildTeamKitSpec({
+    id: 'NETHERLANDS',
+    name: 'Netherlands',
+    shortName: 'Netherlands',
+    clubNickname: 'Oranje',
+    category: 'COUNTRY',
+    countryOrLeague: 'UEFA • National Team',
+    price: 4000,
+    tierLabel: 'HERITAGE',
+    contrastKit: 'ITALY',
+    base: '#c2410c',
+    body: '#f97316',
+    collar: '#0f172a',
+    stripe: '#ffffff',
+    stripeStyle: 'CENTER_STRIPE',
+    shortsColor: '#f97316',
+    socksColor: '#fb923c',
+    hairColor: '#fde047',
+    platterFill: 'rgba(249, 115, 22, 0.72)',
+    platterRing: '#fdba74',
+    hudPillBg: 'bg-orange-200/95',
+    hudPillBorder: 'border-orange-600',
+    hudPillText: 'text-orange-950',
+    avatarBg: 'bg-orange-500',
+    avatarText: 'text-white',
+    avatarBorder: 'border-slate-900',
+    badgeBg: '#f97316',
+    badgeText: '#ffffff',
+    badgeBorder: '#0f172a',
+    hudBg: '#ffedd5',
+    hudText: '#7c2d12',
+  }),
+  JAPAN: buildTeamKitSpec({
+    id: 'JAPAN',
+    name: 'Japan',
+    shortName: 'Japan',
+    clubNickname: 'Samurai Blue',
+    category: 'COUNTRY',
+    countryOrLeague: 'AFC • National Team',
+    price: 3000,
+    tierLabel: 'CONTENDER',
+    contrastKit: 'AUSTRALIA',
+    base: '#172554',
+    body: '#1e40af',
+    collar: '#ef4444',
+    stripe: '#ffffff',
+    stripeStyle: 'TWIN_STRIPES',
+    shortsColor: '#172554',
+    socksColor: '#1e40af',
+    hairColor: '#0f172a',
+    platterFill: 'rgba(30, 64, 175, 0.72)',
+    platterRing: '#60a5fa',
+    hudPillBg: 'bg-indigo-200/95',
+    hudPillBorder: 'border-red-500',
+    hudPillText: 'text-indigo-950',
+    avatarBg: 'bg-blue-800',
+    avatarText: 'text-white',
+    avatarBorder: 'border-red-500',
+    badgeBg: '#1e40af',
+    badgeText: '#ffffff',
+    badgeBorder: '#ef4444',
+    hudBg: '#dbeafe',
+    hudText: '#1e1b4b',
+  }),
+  CROATIA: buildTeamKitSpec({
+    id: 'CROATIA',
+    name: 'Croatia',
+    shortName: 'Croatia',
+    clubNickname: 'Vatreni',
+    category: 'COUNTRY',
+    countryOrLeague: 'UEFA • National Team',
+    price: 3000,
+    tierLabel: 'CONTENDER',
+    contrastKit: 'BRAZIL',
+    base: '#dc2626',
+    body: '#ef4444',
+    collar: '#2563eb',
+    stripe: '#ffffff',
+    stripeStyle: 'TWIN_STRIPES',
+    shortsColor: '#ffffff',
+    socksColor: '#2563eb',
+    hairColor: '#78350f',
+    platterFill: 'rgba(239, 68, 68, 0.72)',
+    platterRing: '#ffffff',
+    hudPillBg: 'bg-red-100/95',
+    hudPillBorder: 'border-blue-600',
+    hudPillText: 'text-red-950',
+    avatarBg: 'bg-red-500',
+    avatarText: 'text-white',
+    avatarBorder: 'border-blue-600',
+    badgeBg: '#ef4444',
+    badgeText: '#ffffff',
+    badgeBorder: '#2563eb',
+    hudBg: '#fee2e2',
+    hudText: '#1e3a8a',
+  }),
+  MEXICO: buildTeamKitSpec({
+    id: 'MEXICO',
+    name: 'Mexico',
+    shortName: 'Mexico',
+    clubNickname: 'El Tri',
+    category: 'COUNTRY',
+    countryOrLeague: 'CONCACAF • National Team',
+    price: 2500,
+    tierLabel: 'CLASSIC',
+    contrastKit: 'ARGENTINA',
+    base: '#14532d',
+    body: '#16a34a',
+    collar: '#dc2626',
+    stripe: '#ffffff',
+    stripeStyle: 'CHEST_HOOP',
+    shortsColor: '#ffffff',
+    socksColor: '#b91c1c',
+    hairColor: '#0f172a',
+    skinColor: '#fdba74',
+    platterFill: 'rgba(22, 163, 74, 0.72)',
+    platterRing: '#86efac',
+    hudPillBg: 'bg-emerald-200/95',
+    hudPillBorder: 'border-red-600',
+    hudPillText: 'text-emerald-950',
+    avatarBg: 'bg-emerald-600',
+    avatarText: 'text-white',
+    avatarBorder: 'border-red-600',
+    badgeBg: '#16a34a',
+    badgeText: '#ffffff',
+    badgeBorder: '#dc2626',
+    hudBg: '#dcfce7',
+    hudText: '#14532d',
+  }),
+  URUGUAY: buildTeamKitSpec({
+    id: 'URUGUAY',
+    name: 'Uruguay',
+    shortName: 'Uruguay',
+    clubNickname: 'La Celeste',
+    category: 'COUNTRY',
+    countryOrLeague: 'CONMEBOL • National Team',
+    price: 2500,
+    tierLabel: 'CLASSIC',
+    contrastKit: 'PORTUGAL',
+    base: '#0284c7',
+    body: '#60a5fa',
+    collar: '#ffffff',
+    stripe: '#facc15',
+    stripeStyle: 'CENTER_STRIPE',
+    shortsColor: '#0f172a',
+    socksColor: '#0f172a',
+    hairColor: '#0f172a',
+    platterFill: 'rgba(96, 165, 250, 0.72)',
+    platterRing: '#bae6fd',
+    hudPillBg: 'bg-sky-200/95',
+    hudPillBorder: 'border-slate-900',
+    hudPillText: 'text-slate-950',
+    avatarBg: 'bg-sky-400',
+    avatarText: 'text-slate-950',
+    avatarBorder: 'border-slate-900',
+    badgeBg: '#60a5fa',
+    badgeText: '#0f172a',
+    badgeBorder: '#0f172a',
+    hudBg: '#e0f2fe',
+    hudText: '#0f172a',
+  }),
+  NEW_ZEALAND: buildTeamKitSpec({
+    id: 'NEW_ZEALAND',
+    name: 'New Zealand',
+    shortName: 'New Zealand',
+    clubNickname: 'All Whites',
+    category: 'COUNTRY',
+    countryOrLeague: 'OFC • National Team',
+    price: 1500,
+    tierLabel: 'CLASSIC',
+    contrastKit: 'BRISBANE_ROAR',
+    base: '#cbd5e1',
+    body: '#f8fafc',
+    collar: '#0f172a',
+    stripe: '#0f172a',
+    stripeStyle: 'CHEST_HOOP',
+    shortsColor: '#0f172a',
+    socksColor: '#f8fafc',
+    hairColor: '#0f172a',
+    platterFill: 'rgba(241, 245, 249, 0.78)',
+    platterRing: '#94a3b8',
+    hudPillBg: 'bg-slate-100/95',
+    hudPillBorder: 'border-slate-900',
+    hudPillText: 'text-slate-950',
+    avatarBg: 'bg-white',
+    avatarText: 'text-slate-950',
+    avatarBorder: 'border-slate-900',
+    badgeBg: '#f8fafc',
+    badgeText: '#0f172a',
+    badgeBorder: '#0f172a',
+    hudBg: '#f1f5f9',
+    hudText: '#0f172a',
+  }),
+
+  // ==========================================================================
+  // 15 FAMOUS FOOTBALL CLUBS (STARTER: BRISBANE ROAR)
+  // ==========================================================================
+  BRISBANE_ROAR: buildTeamKitSpec({
+    id: 'BRISBANE_ROAR',
+    name: 'Brisbane Roar',
+    shortName: 'Brisbane Roar',
+    clubNickname: 'The Roar',
+    category: 'CLUB',
+    countryOrLeague: 'A-League • Australia',
+    price: 0,
+    tierLabel: 'STARTER',
+    contrastKit: 'MAN_CITY',
+    base: '#c2410c',
+    body: '#f97316',
+    collar: '#0f172a',
+    stripe: '#7f1d1d',
+    stripeStyle: 'CHEST_HOOP',
+    shortsColor: '#0f172a',
+    socksColor: '#f97316',
+    hairColor: '#1e293b',
+    platterFill: 'rgba(234, 88, 12, 0.72)',
+    platterRing: '#fdba74',
+    hudPillBg: 'bg-orange-200/95',
+    hudPillBorder: 'border-slate-900',
+    hudPillText: 'text-slate-950',
+    avatarBg: 'bg-orange-500',
+    avatarText: 'text-white',
+    avatarBorder: 'border-slate-900',
+    badgeBg: '#f97316',
+    badgeText: '#0f172a',
+    badgeBorder: '#0f172a',
+    hudBg: '#ffedd5',
+    hudText: '#431407',
+  }),
+  REAL_MADRID: buildTeamKitSpec({
+    id: 'REAL_MADRID',
+    name: 'Real Madrid',
+    shortName: 'Real Madrid',
+    clubNickname: 'Los Blancos',
+    category: 'CLUB',
+    countryOrLeague: 'La Liga • Spain',
+    price: 5000,
+    tierLabel: 'ROYAL GIANT',
+    contrastKit: 'BARCELONA',
+    base: '#e2e8f0',
+    body: '#ffffff',
+    collar: '#eab308',
+    stripe: '#1e3a8a',
+    stripeStyle: 'TWIN_STRIPES',
+    shortsColor: '#ffffff',
+    socksColor: '#f8fafc',
+    hairColor: '#0f172a',
+    platterFill: 'rgba(248, 250, 252, 0.78)',
+    platterRing: '#facc15',
+    hudPillBg: 'bg-slate-100/95',
+    hudPillBorder: 'border-amber-500',
+    hudPillText: 'text-slate-950',
+    avatarBg: 'bg-white',
+    avatarText: 'text-indigo-950',
+    avatarBorder: 'border-amber-500',
+    badgeBg: '#ffffff',
+    badgeText: '#1e3a8a',
+    badgeBorder: '#eab308',
+    hudBg: '#f8fafc',
+    hudText: '#1e3a8a',
+  }),
+  BARCELONA: buildTeamKitSpec({
+    id: 'BARCELONA',
+    name: 'FC Barcelona',
+    shortName: 'Barcelona',
+    clubNickname: 'Blaugrana',
+    category: 'CLUB',
+    countryOrLeague: 'La Liga • Spain',
+    price: 5000,
+    tierLabel: 'ROYAL GIANT',
+    contrastKit: 'REAL_MADRID',
+    base: '#1e3a8a',
+    body: '#1d4ed8',
+    collar: '#facc15',
+    stripe: '#dc2626',
+    stripeStyle: 'TWIN_STRIPES',
+    shortsColor: '#1e3a8a',
+    socksColor: '#b91c1c',
+    hairColor: '#0f172a',
+    platterFill: 'rgba(29, 78, 216, 0.74)',
+    platterRing: '#f87171',
+    hudPillBg: 'bg-blue-200/95',
+    hudPillBorder: 'border-red-600',
+    hudPillText: 'text-blue-950',
+    avatarBg: 'bg-blue-800',
+    avatarText: 'text-amber-300',
+    avatarBorder: 'border-red-600',
+    badgeBg: '#1d4ed8',
+    badgeText: '#fde047',
+    badgeBorder: '#dc2626',
+    hudBg: '#dbeafe',
+    hudText: '#7f1d1d',
+  }),
+  MAN_CITY: buildTeamKitSpec({
+    id: 'MAN_CITY',
+    name: 'Manchester City',
+    shortName: 'Man City',
+    clubNickname: 'The Cityzens',
+    category: 'CLUB',
+    countryOrLeague: 'Premier League • England',
+    price: 4000,
+    tierLabel: 'CHAMPIONS',
+    contrastKit: 'MAN_UNITED',
+    base: '#0284c7',
+    body: '#38bdf8',
+    collar: '#ffffff',
+    stripe: '#ffffff',
+    stripeStyle: 'CENTER_STRIPE',
+    shortsColor: '#ffffff',
+    socksColor: '#38bdf8',
+    hairColor: '#fde047',
+    platterFill: 'rgba(56, 189, 248, 0.72)',
+    platterRing: '#bae6fd',
+    hudPillBg: 'bg-sky-200/95',
+    hudPillBorder: 'border-sky-600',
+    hudPillText: 'text-sky-950',
+    avatarBg: 'bg-sky-400',
+    avatarText: 'text-white',
+    avatarBorder: 'border-sky-700',
+    badgeBg: '#38bdf8',
+    badgeText: '#082f49',
+    badgeBorder: '#0284c7',
+    hudBg: '#bae6fd',
+    hudText: '#082f49',
+  }),
+  ARSENAL: buildTeamKitSpec({
+    id: 'ARSENAL',
+    name: 'Arsenal FC',
+    shortName: 'Arsenal',
+    clubNickname: 'The Gunners',
+    category: 'CLUB',
+    countryOrLeague: 'Premier League • England',
+    price: 3500,
+    tierLabel: 'GIANTS',
+    contrastKit: 'MAN_CITY',
+    base: '#b91c1c',
+    body: '#ef4444',
+    collar: '#ffffff',
+    stripe: '#ffffff',
+    stripeStyle: 'CHEST_HOOP',
+    shortsColor: '#ffffff',
+    socksColor: '#ef4444',
+    hairColor: '#0f172a',
+    platterFill: 'rgba(239, 68, 68, 0.72)',
+    platterRing: '#fecaca',
+    hudPillBg: 'bg-red-200/95',
+    hudPillBorder: 'border-red-600',
+    hudPillText: 'text-red-950',
+    avatarBg: 'bg-red-600',
+    avatarText: 'text-white',
+    avatarBorder: 'border-white',
+    badgeBg: '#ef4444',
+    badgeText: '#ffffff',
+    badgeBorder: '#991b1b',
+    hudBg: '#fee2e2',
+    hudText: '#7f1d1d',
+  }),
+  LIVERPOOL: buildTeamKitSpec({
+    id: 'LIVERPOOL',
+    name: 'Liverpool FC',
+    shortName: 'Liverpool',
+    clubNickname: 'The Reds',
+    category: 'CLUB',
+    countryOrLeague: 'Premier League • England',
+    price: 4000,
+    tierLabel: 'CHAMPIONS',
+    contrastKit: 'REAL_MADRID',
+    base: '#991b1b',
+    body: '#dc2626',
+    collar: '#fde047',
+    stripe: '#ffffff',
+    stripeStyle: 'TWIN_STRIPES',
+    shortsColor: '#b91c1c',
+    socksColor: '#dc2626',
+    hairColor: '#78350f',
+    platterFill: 'rgba(220, 38, 38, 0.72)',
+    platterRing: '#fde047',
+    hudPillBg: 'bg-red-200/95',
+    hudPillBorder: 'border-amber-400',
+    hudPillText: 'text-red-950',
+    avatarBg: 'bg-red-700',
+    avatarText: 'text-amber-300',
+    avatarBorder: 'border-amber-400',
+    badgeBg: '#dc2626',
+    badgeText: '#fef08a',
+    badgeBorder: '#991b1b',
+    hudBg: '#fee2e2',
+    hudText: '#7f1d1d',
+  }),
+  MAN_UNITED: buildTeamKitSpec({
+    id: 'MAN_UNITED',
+    name: 'Manchester United',
+    shortName: 'Man United',
+    clubNickname: 'Red Devils',
+    category: 'CLUB',
+    countryOrLeague: 'Premier League • England',
+    price: 4000,
+    tierLabel: 'GIANTS',
+    contrastKit: 'MAN_CITY',
+    base: '#9f1239',
+    body: '#e11d48',
+    collar: '#ffffff',
+    stripe: '#0f172a',
+    stripeStyle: 'CENTER_STRIPE',
+    shortsColor: '#0f172a',
+    socksColor: '#0f172a',
+    hairColor: '#0f172a',
+    platterFill: 'rgba(225, 29, 72, 0.72)',
+    platterRing: '#fda4af',
+    hudPillBg: 'bg-rose-200/95',
+    hudPillBorder: 'border-slate-900',
+    hudPillText: 'text-rose-950',
+    avatarBg: 'bg-rose-600',
+    avatarText: 'text-white',
+    avatarBorder: 'border-slate-900',
+    badgeBg: '#e11d48',
+    badgeText: '#ffffff',
+    badgeBorder: '#0f172a',
+    hudBg: '#ffe4e6',
+    hudText: '#4c0519',
+  }),
+  BAYERN_MUNICH: buildTeamKitSpec({
+    id: 'BAYERN_MUNICH',
+    name: 'Bayern Munich',
+    shortName: 'Bayern Munich',
+    clubNickname: 'Die Roten',
+    category: 'CLUB',
+    countryOrLeague: 'Bundesliga • Germany',
+    price: 4500,
+    tierLabel: 'CHAMPIONS',
+    contrastKit: 'DORTMUND',
+    base: '#b91c1c',
+    body: '#dc2626',
+    collar: '#ffffff',
+    stripe: '#ffffff',
+    stripeStyle: 'TWIN_STRIPES',
+    shortsColor: '#b91c1c',
+    socksColor: '#dc2626',
+    hairColor: '#fde047',
+    platterFill: 'rgba(220, 38, 38, 0.72)',
+    platterRing: '#ffffff',
+    hudPillBg: 'bg-red-200/95',
+    hudPillBorder: 'border-red-700',
+    hudPillText: 'text-red-950',
+    avatarBg: 'bg-red-600',
+    avatarText: 'text-white',
+    avatarBorder: 'border-white',
+    badgeBg: '#dc2626',
+    badgeText: '#ffffff',
+    badgeBorder: '#991b1b',
+    hudBg: '#fee2e2',
+    hudText: '#7f1d1d',
+  }),
+  PSG: buildTeamKitSpec({
+    id: 'PSG',
+    name: 'Paris Saint-Germain',
+    shortName: 'PSG',
+    clubNickname: 'Les Parisiens',
+    category: 'CLUB',
+    countryOrLeague: 'Ligue 1 • France',
+    price: 3500,
+    tierLabel: 'GIANTS',
+    contrastKit: 'REAL_MADRID',
+    base: '#0f172a',
+    body: '#1e3a8a',
+    collar: '#ffffff',
+    stripe: '#ef4444',
+    stripeStyle: 'CENTER_STRIPE',
+    shortsColor: '#172554',
+    socksColor: '#1e3a8a',
+    hairColor: '#0f172a',
+    platterFill: 'rgba(30, 58, 138, 0.76)',
+    platterRing: '#f87171',
+    hudPillBg: 'bg-indigo-200/95',
+    hudPillBorder: 'border-red-600',
+    hudPillText: 'text-indigo-950',
+    avatarBg: 'bg-blue-900',
+    avatarText: 'text-white',
+    avatarBorder: 'border-red-500',
+    badgeBg: '#1e3a8a',
+    badgeText: '#ffffff',
+    badgeBorder: '#ef4444',
+    hudBg: '#dbeafe',
+    hudText: '#172554',
+  }),
+  JUVENTUS: buildTeamKitSpec({
+    id: 'JUVENTUS',
+    name: 'Juventus FC',
+    shortName: 'Juventus',
+    clubNickname: 'Bianconeri',
+    category: 'CLUB',
+    countryOrLeague: 'Serie A • Italy',
+    price: 3000,
+    tierLabel: 'GIANTS',
+    contrastKit: 'AC_MILAN',
+    base: '#0f172a',
+    body: '#f8fafc',
+    collar: '#0f172a',
+    stripe: '#0f172a',
+    stripeStyle: 'TWIN_STRIPES',
+    shortsColor: '#0f172a',
+    socksColor: '#f8fafc',
+    hairColor: '#0f172a',
+    platterFill: 'rgba(15, 23, 42, 0.78)',
+    platterRing: '#f8fafc',
+    hudPillBg: 'bg-slate-200/95',
+    hudPillBorder: 'border-slate-900',
+    hudPillText: 'text-slate-950',
+    avatarBg: 'bg-slate-900',
+    avatarText: 'text-white',
+    avatarBorder: 'border-amber-400',
+    badgeBg: '#0f172a',
+    badgeText: '#ffffff',
+    badgeBorder: '#facc15',
+    hudBg: '#e2e8f0',
+    hudText: '#0f172a',
+  }),
+  AC_MILAN: buildTeamKitSpec({
+    id: 'AC_MILAN',
+    name: 'AC Milan',
+    shortName: 'AC Milan',
+    clubNickname: 'Rossoneri',
+    category: 'CLUB',
+    countryOrLeague: 'Serie A • Italy',
+    price: 3500,
+    tierLabel: 'GIANTS',
+    contrastKit: 'INTER_MILAN',
+    base: '#0f172a',
+    body: '#dc2626',
+    collar: '#0f172a',
+    stripe: '#0f172a',
+    stripeStyle: 'TWIN_STRIPES',
+    shortsColor: '#ffffff',
+    socksColor: '#0f172a',
+    hairColor: '#0f172a',
+    platterFill: 'rgba(185, 28, 28, 0.76)',
+    platterRing: '#0f172a',
+    hudPillBg: 'bg-red-200/95',
+    hudPillBorder: 'border-slate-900',
+    hudPillText: 'text-slate-950',
+    avatarBg: 'bg-red-700',
+    avatarText: 'text-white',
+    avatarBorder: 'border-slate-950',
+    badgeBg: '#dc2626',
+    badgeText: '#ffffff',
+    badgeBorder: '#0f172a',
+    hudBg: '#fee2e2',
+    hudText: '#0f172a',
+  }),
+  INTER_MILAN: buildTeamKitSpec({
+    id: 'INTER_MILAN',
+    name: 'Inter Milan',
+    shortName: 'Inter Milan',
+    clubNickname: 'Nerazzurri',
+    category: 'CLUB',
+    countryOrLeague: 'Serie A • Italy',
+    price: 3500,
+    tierLabel: 'GIANTS',
+    contrastKit: 'AC_MILAN',
+    base: '#0f172a',
+    body: '#2563eb',
+    collar: '#0f172a',
+    stripe: '#0f172a',
+    stripeStyle: 'TWIN_STRIPES',
+    shortsColor: '#0f172a',
+    socksColor: '#2563eb',
+    hairColor: '#0f172a',
+    platterFill: 'rgba(37, 99, 235, 0.76)',
+    platterRing: '#60a5fa',
+    hudPillBg: 'bg-blue-200/95',
+    hudPillBorder: 'border-slate-900',
+    hudPillText: 'text-slate-950',
+    avatarBg: 'bg-blue-700',
+    avatarText: 'text-amber-300',
+    avatarBorder: 'border-slate-950',
+    badgeBg: '#2563eb',
+    badgeText: '#ffffff',
+    badgeBorder: '#0f172a',
+    hudBg: '#dbeafe',
+    hudText: '#0f172a',
+  }),
+  DORTMUND: buildTeamKitSpec({
+    id: 'DORTMUND',
+    name: 'Borussia Dortmund',
+    shortName: 'Dortmund',
+    clubNickname: 'Die Borussen',
+    category: 'CLUB',
+    countryOrLeague: 'Bundesliga • Germany',
+    price: 2500,
+    tierLabel: 'CLASSIC',
+    contrastKit: 'BAYERN_MUNICH',
+    base: '#ca8a04',
+    body: '#facc15',
+    collar: '#0f172a',
+    stripe: '#0f172a',
+    stripeStyle: 'TWIN_STRIPES',
+    shortsColor: '#0f172a',
+    socksColor: '#facc15',
+    hairColor: '#0f172a',
+    platterFill: 'rgba(234, 179, 8, 0.76)',
+    platterRing: '#fde047',
+    hudPillBg: 'bg-yellow-200/95',
+    hudPillBorder: 'border-slate-900',
+    hudPillText: 'text-slate-950',
+    avatarBg: 'bg-yellow-400',
+    avatarText: 'text-slate-950',
+    avatarBorder: 'border-slate-900',
+    badgeBg: '#facc15',
+    badgeText: '#0f172a',
+    badgeBorder: '#0f172a',
+    hudBg: '#fef08a',
+    hudText: '#0f172a',
+  }),
+  INTER_MIAMI: buildTeamKitSpec({
+    id: 'INTER_MIAMI',
+    name: 'Inter Miami CF',
+    shortName: 'Inter Miami',
+    clubNickname: 'The Herons',
+    category: 'CLUB',
+    countryOrLeague: 'MLS • USA',
+    price: 2500,
+    tierLabel: 'CLASSIC',
+    contrastKit: 'PSG',
+    base: '#db2777',
+    body: '#f472b6',
+    collar: '#0f172a',
+    stripe: '#0f172a',
+    stripeStyle: 'CENTER_STRIPE',
+    shortsColor: '#f472b6',
+    socksColor: '#f472b6',
+    hairColor: '#0f172a',
+    platterFill: 'rgba(244, 114, 182, 0.74)',
+    platterRing: '#fbcfe8',
+    hudPillBg: 'bg-pink-200/95',
+    hudPillBorder: 'border-slate-900',
+    hudPillText: 'text-slate-950',
+    avatarBg: 'bg-pink-400',
+    avatarText: 'text-slate-950',
+    avatarBorder: 'border-slate-900',
+    badgeBg: '#f472b6',
+    badgeText: '#0f172a',
+    badgeBorder: '#0f172a',
+    hudBg: '#fce7f3',
+    hudText: '#500724',
+  }),
+  BOCA_JUNIORS: buildTeamKitSpec({
+    id: 'BOCA_JUNIORS',
+    name: 'Boca Juniors',
+    shortName: 'Boca Juniors',
+    clubNickname: 'Xeneizes',
+    category: 'CLUB',
+    countryOrLeague: 'Primera División • Argentina',
+    price: 2000,
+    tierLabel: 'CLASSIC',
+    contrastKit: 'REAL_MADRID',
+    base: '#172554',
+    body: '#1e3a8a',
+    collar: '#facc15',
+    stripe: '#facc15',
+    stripeStyle: 'CHEST_HOOP',
+    shortsColor: '#1e3a8a',
+    socksColor: '#facc15',
+    hairColor: '#0f172a',
+    platterFill: 'rgba(30, 58, 138, 0.76)',
+    platterRing: '#facc15',
+    hudPillBg: 'bg-blue-200/95',
+    hudPillBorder: 'border-amber-500',
+    hudPillText: 'text-blue-950',
+    avatarBg: 'bg-blue-900',
+    avatarText: 'text-amber-300',
+    avatarBorder: 'border-amber-400',
+    badgeBg: '#1e3a8a',
+    badgeText: '#facc15',
+    badgeBorder: '#facc15',
+    hudBg: '#dbeafe',
+    hudText: '#172554',
+  }),
+};
+
+export const CLUB_KIT_LIST: TeamKitSpec[] = [
+  TEAM_KITS.BRISBANE_ROAR,
+  TEAM_KITS.REAL_MADRID,
+  TEAM_KITS.BARCELONA,
+  TEAM_KITS.MAN_CITY,
+  TEAM_KITS.ARSENAL,
+  TEAM_KITS.LIVERPOOL,
+  TEAM_KITS.MAN_UNITED,
+  TEAM_KITS.BAYERN_MUNICH,
+  TEAM_KITS.PSG,
+  TEAM_KITS.JUVENTUS,
+  TEAM_KITS.AC_MILAN,
+  TEAM_KITS.INTER_MILAN,
+  TEAM_KITS.DORTMUND,
+  TEAM_KITS.INTER_MIAMI,
+  TEAM_KITS.BOCA_JUNIORS,
+];
+
+export const COUNTRY_KIT_LIST: TeamKitSpec[] = [
+  TEAM_KITS.AUSTRALIA,
+  TEAM_KITS.BRAZIL,
+  TEAM_KITS.ARGENTINA,
+  TEAM_KITS.FRANCE,
+  TEAM_KITS.ENGLAND,
+  TEAM_KITS.SPAIN,
+  TEAM_KITS.GERMANY,
+  TEAM_KITS.ITALY,
+  TEAM_KITS.PORTUGAL,
+  TEAM_KITS.NETHERLANDS,
+  TEAM_KITS.JAPAN,
+  TEAM_KITS.CROATIA,
+  TEAM_KITS.MEXICO,
+  TEAM_KITS.URUGUAY,
+  TEAM_KITS.NEW_ZEALAND,
+];
+
+export const TEAM_KIT_LIST: TeamKitSpec[] = [...COUNTRY_KIT_LIST, ...CLUB_KIT_LIST];
+
+const LEGACY_KIT_FALLBACK: Record<string, KitChoice> = {
+  HOME: 'AUSTRALIA',
+  AWAY: 'BRISBANE_ROAR',
+  EMERALD: 'MEXICO',
+  ROYAL: 'REAL_MADRID',
+  VOLT: 'DORTMUND',
+  STEALTH: 'JUVENTUS',
+};
+
+export function getTeamKitSpec(kit?: KitChoice | string): TeamKitSpec {
+  if (kit && kit in TEAM_KITS) {
+    return TEAM_KITS[kit as KitChoice];
+  }
+  if (kit && kit in LEGACY_KIT_FALLBACK) {
+    return TEAM_KITS[LEGACY_KIT_FALLBACK[kit]];
+  }
+  return TEAM_KITS.AUSTRALIA;
+}
 
 export const TOURNAMENT_ROUNDS = ['Quarter-Final', 'Semi-Final', 'Grand Final'] as const;
 export const TOTAL_TOURNAMENT_GAMES = 3;
@@ -81,9 +1281,11 @@ export interface KickDecision<
 
 /**
  * Returns the contrasting kit for the CPU team based on the player's chosen kit.
+ * Guarantees 100% high-contrast visual separation on every pitch.
  */
 export function getContrastingKit(userKit: KitChoice): KitChoice {
-  return userKit === 'HOME' ? 'AWAY' : 'HOME';
+  const spec = getTeamKitSpec(userKit);
+  return spec.contrastKit;
 }
 
 /**
@@ -1422,8 +2624,8 @@ const STADIUM_GOAL_SLOGANS: Record<
     glowColor: '#ea580c',
   },
   RIO_CLAY: {
-    headlines: ['COPACABANA JOGA BONITO!', 'SAMBA SCREAMER!', 'RIO CARNIVAL MAGIC!', 'SUNSET BEACH BANGER!'],
-    badge: '🌴 COPACABANA SUNSET CLAY',
+    headlines: ['BYRON BAY JOGA BONITO!', 'COASTAL SURF SCREAMER!', 'BYRON BEACH MAGIC!', 'SUNSET SURF BANGER!'],
+    badge: '🌴 BYRON BAY',
     primaryColor: '#fde047',
     secondaryColor: '#2dd4bf',
     glowColor: '#f97316',
@@ -1471,8 +2673,8 @@ const STADIUM_GOAL_SLOGANS: Record<
     glowColor: '#1d4ed8',
   },
   CLASSIC_TURF: {
-    headlines: ['ROYAL PARK SCREAMER!', 'BOTANICAL BANGER!', 'OLYMPIC STADIUM CLASS!', 'PURE ARCADE MAGIC!'],
-    badge: '⚽ ROYAL BOTANICAL ARENA',
+    headlines: ['CLUNES PARK SCREAMER!', 'BOTANICAL BANGER!', 'CLUNES ARENA CLASS!', 'PURE ARCADE MAGIC!'],
+    badge: '⚽ CLUNES ARENA',
     primaryColor: '#34d399',
     secondaryColor: '#fde047',
     glowColor: '#059669',
@@ -1855,11 +3057,11 @@ export interface PokieMachineConfig {
 export const POKIE_MACHINES: Record<PokieMachineId, PokieMachineConfig> = {
   CHAMPIONS_GOLD: {
     id: 'CHAMPIONS_GOLD',
-    name: 'Champions Cathedral',
-    shortName: 'Champions Gold',
+    name: 'Suffolk Tavern',
+    shortName: 'Suffolk Tavern',
     stadiumName: 'Champions Cathedral',
     pitchThemeId: 'TURF_CHAMPIONS',
-    tagline: 'ROYAL EMERALD & GOLD ARENA',
+    tagline: 'SUFFOLK TAVERN VIP LOUNGE',
     baseJackpot10: 500,
     jackpotMultiplier: 50,
     allowedBets: [10, 100],
@@ -3003,8 +4205,8 @@ export interface ShopStadiumItem {
 export const SHOP_STADIUM_ITEMS: readonly ShopStadiumItem[] = [
   {
     id: 'CLASSIC_TURF',
-    name: 'Sunlit Turf',
-    subtitle: 'Royal Botanical Park • Starter Arena',
+    name: 'Clunes',
+    subtitle: 'Clunes Heritage Park • Starter Arena',
     price: 0,
     tierLabel: 'STARTER',
     accentHex: '#22c55e',
@@ -3021,8 +4223,8 @@ export const SHOP_STADIUM_ITEMS: readonly ShopStadiumItem[] = [
   },
   {
     id: 'RIO_CLAY',
-    name: 'Copacabana Sunset Clay',
-    subtitle: 'Rio Beach Carnival Court',
+    name: 'Byron Bay',
+    subtitle: 'Byron Bay Coastal Beach Court',
     price: 600,
     tierLabel: 'BEACH',
     accentHex: '#f97316',
@@ -3108,8 +4310,8 @@ export interface ShopPokieItem {
 export const SHOP_POKIE_ITEMS: readonly ShopPokieItem[] = [
   {
     id: 'CHAMPIONS_GOLD',
-    name: 'Champions Cathedral Pokie',
-    subtitle: 'Royal Emerald & Gold • Starter Machine',
+    name: 'Suffolk Tavern',
+    subtitle: 'Suffolk Tavern VIP Lounge • Starter Machine',
     price: 0,
     tierLabel: 'STARTER',
     baseJackpotLabel: '$500 / $5,000',
@@ -3271,6 +4473,95 @@ export function purchaseShopPokieMachine(
     newBalance,
     unlockedItems: Array.from(currentSet),
     message: `🎰 UNLOCKED ${item.name.toUpperCase()} FOR $${item.price.toLocaleString()}!`,
+  };
+}
+
+export interface ShopKitItem {
+  id: KitChoice;
+  name: string;
+  shortName: string;
+  clubNickname: string;
+  category: KitCategory;
+  subtitle: string;
+  price: number;
+  tierLabel: string;
+  bodyHex: string;
+  collarHex: string;
+  stripeHex: string;
+  shortsHex: string;
+}
+
+export const SHOP_KIT_ITEMS: readonly ShopKitItem[] = TEAM_KIT_LIST.map((kit) => ({
+  id: kit.id,
+  name: kit.name,
+  shortName: kit.shortName,
+  clubNickname: kit.clubNickname,
+  category: kit.category,
+  subtitle: `${kit.clubNickname} • ${kit.countryOrLeague}`,
+  price: kit.price,
+  tierLabel: kit.tierLabel,
+  bodyHex: kit.body,
+  collarHex: kit.collar,
+  stripeHex: kit.stripe,
+  shortsHex: kit.shortsColor,
+}));
+
+export function purchaseShopKit(
+  kitId: KitChoice,
+  currentBalance: number,
+  unlockedKits: readonly KitChoice[]
+): ShopPurchaseResult<KitChoice> {
+  const safeBal = Math.max(0, Math.floor(Number.isFinite(currentBalance) ? currentBalance : 0));
+  const currentSet = new Set<KitChoice>(DEFAULT_UNLOCKED_KITS);
+  if (Array.isArray(unlockedKits)) {
+    for (const k of unlockedKits) {
+      if (k in TEAM_KITS) currentSet.add(k);
+    }
+  }
+  const item = SHOP_KIT_ITEMS.find((k) => k.id === kitId);
+  if (!item) {
+    return {
+      success: false,
+      alreadyUnlocked: false,
+      insufficientFunds: false,
+      price: 0,
+      newBalance: safeBal,
+      unlockedItems: Array.from(currentSet),
+      message: 'INVALID TEAM KIT',
+    };
+  }
+  if (currentSet.has(kitId)) {
+    return {
+      success: false,
+      alreadyUnlocked: true,
+      insufficientFunds: false,
+      price: item.price,
+      newBalance: safeBal,
+      unlockedItems: Array.from(currentSet),
+      message: `${item.name.toUpperCase()} KIT IS ALREADY UNLOCKED!`,
+    };
+  }
+  if (safeBal < item.price) {
+    return {
+      success: false,
+      alreadyUnlocked: false,
+      insufficientFunds: true,
+      price: item.price,
+      newBalance: safeBal,
+      unlockedItems: Array.from(currentSet),
+      message: `NEED $${item.price.toLocaleString()} TO UNLOCK ${item.name.toUpperCase()} KIT (YOU HAVE $${safeBal.toLocaleString()})`,
+    };
+  }
+  currentSet.add(kitId);
+  const newBalance = safeBal - item.price;
+  return {
+    success: true,
+    alreadyUnlocked: false,
+    insufficientFunds: false,
+    price: item.price,
+    newBalance,
+    unlockedItems: Array.from(currentSet),
+    message: `👕 UNLOCKED ${item.name.toUpperCase()} KIT FOR $${item.price.toLocaleString()}!`,
   };
 }
 
@@ -3663,6 +4954,8 @@ export interface DefaultPlayerProfileState {
   selectedTournamentTier: TournamentTierId;
   unlockedStadiums: PitchThemeId[];
   unlockedPokieMachines: PokieMachineId[];
+  unlockedKits: KitChoice[];
+  selectedKitId: KitChoice;
   stadiumShuffleEnabled: boolean;
   selectedStadiumId: PitchThemeId;
 }
@@ -3685,6 +4978,8 @@ export function createDefaultPlayerProfile(): DefaultPlayerProfileState {
     selectedTournamentTier: 'CUP_100',
     unlockedStadiums: [...DEFAULT_UNLOCKED_STADIUMS],
     unlockedPokieMachines: [...DEFAULT_UNLOCKED_POKIES],
+    unlockedKits: [...DEFAULT_UNLOCKED_KITS],
+    selectedKitId: 'AUSTRALIA',
     stadiumShuffleEnabled: false,
     selectedStadiumId: 'CLASSIC_TURF',
   };
@@ -4607,6 +5902,60 @@ export const STADIUM_SURROUNDINGS_DIORAMAS: Record<PitchThemeId, StadiumSurround
 
 export function getStadiumSurroundingsDiorama(themeId: PitchThemeId): StadiumSurroundingsDiorama {
   return STADIUM_SURROUNDINGS_DIORAMAS[themeId] || STADIUM_SURROUNDINGS_DIORAMAS.CLASSIC_TURF;
+}
+
+/**
+ * Determines whether the player is allowed to spin the Pokie reels.
+ * When a Spin-to-Win / Jackpot Goal Challenge is pending (`hasPendingJackpotChallenge === true`),
+ * spinning again is strictly locked until the player plays the qualifier match.
+ */
+export function canSpinPokieReels(
+  isSlotSpinning: boolean,
+  hasActiveHoldAndSpin: boolean,
+  hasPendingJackpotChallenge: boolean
+): boolean {
+  if (isSlotSpinning || hasActiveHoldAndSpin || hasPendingJackpotChallenge) {
+    return false;
+  }
+  return true;
+}
+
+/**
+ * Generates crystal-clear UI copy when a player hits 3+ Bonus Orbs or 3x Grand Cups,
+ * explicitly instructing them: "WIN GAME TO ENTER JACKPOT SPIN TO WIN".
+ */
+export function getJackpotChallengePromptCopy(
+  machineName: string,
+  jackpotPool: number,
+  challengeType: JackpotChallengeType
+): {
+  statusBannerText: string;
+  statusBanner: string;
+  headline: string;
+  description: string;
+  subtext: string;
+  ctaButtonText: string;
+  buttonLabel: string;
+  lockBadgeText: string;
+} {
+  const isHoldAndSpin = challengeType === 'HOLD_AND_SPIN';
+  const statusBannerText = isHoldAndSpin
+    ? '🌐 3+ BONUS ORBS HIT! WIN GAME TO ENTER JACKPOT SPIN TO WIN!'
+    : '👑 3X GRAND CUPS HIT! WIN GAME TO ENTER JACKPOT SPIN TO WIN!';
+  const description = isHoldAndSpin
+    ? `You landed 3+ Bonus Orbs on ${machineName}! Reels are locked — WIN GAME TO ENTER JACKPOT SPIN TO WIN! Score 1 goal in this 30s sudden-death game to enter the $${jackpotPool} bonus feature!`
+    : `You lined up 3x Grand Cups on ${machineName}! Reels are locked — WIN GAME TO ENTER JACKPOT SPIN TO WIN! Score 1 goal in this 30s sudden-death game to claim the $${jackpotPool} Grand Jackpot!`;
+  const ctaButtonText = '⚽ WIN GAME TO ENTER JACKPOT SPIN TO WIN';
+  return {
+    statusBannerText,
+    statusBanner: statusBannerText,
+    headline: '👑 WIN GAME TO ENTER JACKPOT SPIN TO WIN!',
+    description,
+    subtext: description,
+    ctaButtonText,
+    buttonLabel: ctaButtonText,
+    lockBadgeText: '🔒 REELS LOCKED • QUALIFIER READY',
+  };
 }
 
 

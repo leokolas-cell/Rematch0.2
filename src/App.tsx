@@ -11,6 +11,14 @@ import {
   GameMode,
   KitChoice,
   ControlGuideTab,
+  TEAM_KITS,
+  TEAM_KIT_LIST,
+  CLUB_KIT_LIST,
+  COUNTRY_KIT_LIST,
+  DEFAULT_UNLOCKED_KITS,
+  SHOP_KIT_ITEMS,
+  purchaseShopKit,
+  getTeamKitSpec,
   getContrastingKit,
   getFlowPassBoost,
   computeTackleReach,
@@ -57,6 +65,8 @@ import {
   JACKPOT_CHALLENGE_DURATION_SECONDS,
   createJackpotChallengeState,
   evaluateJackpotChallengeOutcome,
+  canSpinPokieReels,
+  getJackpotChallengePromptCopy,
   DEFAULT_UNLOCKED_STADIUMS,
   DEFAULT_UNLOCKED_POKIES,
   SHOP_STADIUM_ITEMS,
@@ -83,6 +93,7 @@ import {
   type PokieSymbolId,
   type PokieEvaluationResult,
   type GoalCelebrationSpec,
+  type KitCategory,
 } from './game/rules';
 import {
   auth,
@@ -507,8 +518,8 @@ export default function App() {
 
     // Offscreen static 16-bit pixel stadium complex, park trees, stone concourse, floodlight towers, bleachers, turf & chalk line cache
     // Eliminates hundreds of per-frame fillRect calls for locked 60-144Hz butter-smooth performance
-    const CACHE_PAD_X = 1100;
-    const CACHE_PAD_Y = 1480;
+    const CACHE_PAD_X = 1280;
+    const CACHE_PAD_Y = 1220;
     const pitchCacheCanvas = document.createElement('canvas');
     pitchCacheCanvas.width = PITCH.width + CACHE_PAD_X * 2;
     pitchCacheCanvas.height = PITCH.height + CACHE_PAD_Y * 2;
@@ -2594,8 +2605,488 @@ export default function App() {
       drawCornerFloodlightTower(pitchCacheCtx, -102, h + 98, 1, -1, px);
       drawCornerFloodlightTower(pitchCacheCtx, w + 102, h + 98, -1, -1, px);
 
+      // 3. Deep-Perimeter World Panorama & Outer Architectural Ring (Covers y = -320..-1640 & y = h+300..h+1640, x = -340..-1240 & w+340..w+1240)
+      // Ensures portrait phones on the loading/splash screen & opening menu have zero blank border around any of the 10 stadiums!
+      {
+        // 3A. Universal Outer Stadium Promenade Ring & Ceremonial Lamp Posts (Frames the stadium complex cleanly on all 4 sides)
+        const ringPadCol =
+          selectedPitchTheme === 'COSMIC_SPACE'
+            ? '#1e1b4b'
+            : selectedPitchTheme === 'TWILIGHT_SYNTH'
+              ? '#2e1065'
+              : selectedPitchTheme === 'VOLCANO_FORGE'
+                ? '#292524'
+                : selectedPitchTheme === 'ARCTIC_ICE'
+                  ? '#cbd5e1'
+                  : selectedPitchTheme === 'RIO_CLAY'
+                    ? '#fde68a'
+                    : selectedPitchTheme === 'URBAN_CONCRETE'
+                      ? '#334155'
+                      : '#d6d3d1';
+        const ringTrimCol = bowlSpec.accentHome;
+        // North & South Outer Esplanade Walkways
+        fillPxRect(pitchCacheCtx, -360, -356, w + 720, 32, outline, px);
+        fillPxRect(pitchCacheCtx, -356, -352, w + 712, 24, ringPadCol, px);
+        fillPxRect(pitchCacheCtx, -352, -342, w + 704, 4, ringTrimCol, px);
 
-      // 4. Clipped Chamfered Pitch Turf, Bespoke Mowing Patterns, Center Circle Emblems & Chalk Markings
+        fillPxRect(pitchCacheCtx, -360, h + 318, w + 720, 32, outline, px);
+        fillPxRect(pitchCacheCtx, -356, h + 322, w + 712, 24, ringPadCol, px);
+        fillPxRect(pitchCacheCtx, -352, h + 332, w + 704, 4, bowlSpec.accentAway, px);
+
+        // Ceremonial Banner Pylons & Warm Bollard Lights along North & South Esplanades
+        for (let bx = -300; bx <= w + 300; bx += 180) {
+          fillPxRect(pitchCacheCtx, bx - 6, -364, 12, 20, outline, px);
+          fillPxRect(pitchCacheCtx, bx - 4, -360, 8, 12, bx % 360 === 0 ? bowlSpec.accentHome : '#fde047', px);
+          fillPxRect(pitchCacheCtx, bx - 6, h + 336, 12, 20, outline, px);
+          fillPxRect(pitchCacheCtx, bx - 4, h + 340, 8, 12, bx % 360 === 0 ? bowlSpec.accentAway : '#fde047', px);
+        }
+
+        // 3B. Theme-Specific Deep North (y = -370..-1640), Deep South (y = h+356..h+1640), Deep West (x = -370..-1240) & Deep East (x = w+370..w+1240) Vistas
+        if (selectedPitchTheme === 'COSMIC_SPACE') {
+          // Deep Space Nebula Bands, Ringed Gas Giant, Orbital Solar Wings, Asteroid Mining Outpost & Fleet Hangar
+          fillPxRect(pitchCacheCtx, -CACHE_PAD_X, -CACHE_PAD_Y, w + CACHE_PAD_X * 2, CACHE_PAD_Y - 340, '#020617', px);
+          fillPxRect(pitchCacheCtx, -CACHE_PAD_X, h + 340, w + CACHE_PAD_X * 2, CACHE_PAD_Y - 340, '#020617', px);
+          fillPxRect(pitchCacheCtx, -CACHE_PAD_X, -340, CACHE_PAD_X - 340, h + 680, '#020617', px);
+          fillPxRect(pitchCacheCtx, w + 340, -340, CACHE_PAD_X - 340, h + 680, '#020617', px);
+          for (let i = 0; i < 240; i++) {
+            const sx = -CACHE_PAD_X + 40 + ((i * 293) % (w + CACHE_PAD_X * 2 - 80));
+            const sy = -CACHE_PAD_Y + 40 + ((i * 421) % (h + CACHE_PAD_Y * 2 - 80));
+            if (sx > -340 && sx < w + 340 && sy > -340 && sy < h + 340) continue;
+            const starCol = i % 5 === 0 ? '#38bdf8' : i % 4 === 0 ? '#f472b6' : i % 3 === 0 ? '#fde047' : '#ffffff';
+            fillPxRect(pitchCacheCtx, sx, sy, i % 7 === 0 ? 6 : 3, i % 7 === 0 ? 6 : 3, starCol, px);
+          }
+          // North Nebula Clouds & Giant Ringed Planet (y = -680..-1380)
+          fillPxRect(pitchCacheCtx, -CACHE_PAD_X, -780, w + CACHE_PAD_X * 2, 180, 'rgba(56, 189, 248, 0.12)', px);
+          fillPxRect(pitchCacheCtx, -CACHE_PAD_X, -1240, w + CACHE_PAD_X * 2, 220, 'rgba(232, 121, 249, 0.12)', px);
+          // Giant Ringed Saturn-like Gas Planet at North-Center (x = w * 0.5, y = -760)
+          fillPxRect(pitchCacheCtx, w * 0.5 - 260, -778, 520, 36, '#38bdf8', px);
+          fillPxRect(pitchCacheCtx, w * 0.5 - 220, -770, 440, 20, '#e0f2fe', px);
+          fillPxRect(pitchCacheCtx, w * 0.5 - 125, -885, 250, 250, outline, px);
+          fillPxRect(pitchCacheCtx, w * 0.5 - 118, -878, 236, 236, '#4c1d95', px);
+          fillPxRect(pitchCacheCtx, w * 0.5 - 118, -820, 236, 38, '#7c3aed', px);
+          fillPxRect(pitchCacheCtx, w * 0.5 - 118, -750, 236, 28, '#c084fc', px);
+          fillPxRect(pitchCacheCtx, w * 0.5 - 160, -764, 320, 12, '#fde047', px);
+          // North Orbital Solar Wing Arrays (x = -120..360 and w-360..w+120, y = -540 & -1120)
+          for (const sy of [-540, -1120]) {
+            for (const sx of [-180, w - 180]) {
+              fillPxRect(pitchCacheCtx, sx - 160, sy - 42, 320, 84, outline, px);
+              fillPxRect(pitchCacheCtx, sx - 152, sy - 34, 304, 68, '#0284c7', px);
+              for (let gx = -132; gx <= 128; gx += 52) {
+                fillPxRect(pitchCacheCtx, sx + gx, sy - 34, 4, 68, '#38bdf8', px);
+              }
+              fillPxRect(pitchCacheCtx, sx - 152, sy - 3, 304, 6, '#bae6fd', px);
+            }
+          }
+          // South Asteroid Belt Mining Outpost & Orbital Warp Gate Ring (y = h + 460 .. h + 1480)
+          fillPxRect(pitchCacheCtx, -760, h + 520, w + 1520, 190, 'rgba(99, 102, 241, 0.12)', px);
+          for (let a = 0; a < 18; a++) {
+            const ax = -540 + a * 160;
+            const ay = h + 460 + ((a * 137) % 720);
+            const ar = 28 + (a % 3) * 16;
+            fillPxRect(pitchCacheCtx, ax - ar, ay - ar, ar * 2, ar * 2, outline, px);
+            fillPxRect(pitchCacheCtx, ax - ar + 4, ay - ar + 4, ar * 2 - 8, ar * 2 - 8, '#334155', px);
+            fillPxRect(pitchCacheCtx, ax - 8, ay - 8, 16, 16, a % 2 === 0 ? '#38bdf8' : '#a855f7', px);
+          }
+          // South Giant Hyper-Gate Ring & Carrier Dock (x = w * 0.5, y = h + 820)
+          fillPxRect(pitchCacheCtx, w * 0.5 - 240, h + 690, 480, 260, outline, px);
+          fillPxRect(pitchCacheCtx, w * 0.5 - 230, h + 700, 460, 240, '#1e293b', px);
+          fillPxRect(pitchCacheCtx, w * 0.5 - 190, h + 735, 380, 170, '#020617', px);
+          fillPxRect(pitchCacheCtx, w * 0.5 - 180, h + 745, 360, 150, 'rgba(56, 189, 248, 0.24)', px);
+          for (let wx = -150; wx <= 150; wx += 60) {
+            fillPxRect(pitchCacheCtx, w * 0.5 + wx - 10, h + 694, 20, 10, '#22d3ee', px);
+            fillPxRect(pitchCacheCtx, w * 0.5 + wx - 10, h + 936, 20, 10, '#f472b6', px);
+          }
+        } else if (selectedPitchTheme === 'URBAN_CONCRETE') {
+          // Deep Urban Street Grid, Red-Brick Tenement Blocks, Rooftop Water Towers, Neon Highway & Suspension Bridge
+          fillPxRect(pitchCacheCtx, -CACHE_PAD_X, -CACHE_PAD_Y, w + CACHE_PAD_X * 2, CACHE_PAD_Y - 340, '#1e293b', px);
+          fillPxRect(pitchCacheCtx, -CACHE_PAD_X, h + 340, w + CACHE_PAD_X * 2, CACHE_PAD_Y - 340, '#1e293b', px);
+          fillPxRect(pitchCacheCtx, -CACHE_PAD_X, -340, CACHE_PAD_X - 340, h + 680, '#1e293b', px);
+          fillPxRect(pitchCacheCtx, w + 340, -340, CACHE_PAD_X - 340, h + 680, '#1e293b', px);
+          // North Crosstown 4-Lane Boulevard (y = -460) & Tenement Row (y = -540..-860)
+          fillPxRect(pitchCacheCtx, -CACHE_PAD_X, -490, w + CACHE_PAD_X * 2, 110, '#0f172a', px);
+          for (let lx = -1200; lx < w + 1200; lx += 96) {
+            fillPxRect(pitchCacheCtx, lx, -438, 48, 6, '#facc15', px);
+          }
+          for (let bx = -1160; bx <= w + 1000; bx += 220) {
+            const bCol = bx % 440 === 0 ? '#7c2d12' : bx % 3 === 0 ? '#334155' : '#475569';
+            fillPxRect(pitchCacheCtx, bx, -840, 196, 320, outline, px);
+            fillPxRect(pitchCacheCtx, bx + 6, -834, 184, 308, bCol, px);
+            fillPxRect(pitchCacheCtx, bx + 16, -820, 164, 24, '#0f172a', px);
+            for (let wy = -770; wy <= -570; wy += 48) {
+              for (let wx = bx + 22; wx <= bx + 150; wx += 38) {
+                const lit = (wx + wy) % 3 !== 0;
+                fillPxRect(pitchCacheCtx, wx, wy, 22, 28, lit ? '#fef08a' : '#1e293b', px);
+              }
+            }
+            // Rooftop Wooden Water Tank & Neon Billboard
+            fillPxRect(pitchCacheCtx, bx + 32, -896, 48, 56, outline, px);
+            fillPxRect(pitchCacheCtx, bx + 36, -890, 40, 46, '#9a3412', px);
+            fillPxRect(pitchCacheCtx, bx + 102, -888, 76, 42, outline, px);
+            fillPxRect(pitchCacheCtx, bx + 106, -884, 68, 34, bx % 440 === 0 ? '#ec4899' : '#06b6d4', px);
+          }
+          // Far-North Illuminated Art-Deco Skyscraper Skyline (y = -920..-1580)
+          for (let sx = -840; sx <= w + 720; sx += 260) {
+            const sh = 460 + ((sx * 17) % 180);
+            fillPxRect(pitchCacheCtx, sx, -860 - sh, 220, sh, outline, px);
+            fillPxRect(pitchCacheCtx, sx + 6, -854 - sh, 208, sh - 12, '#0f172a', px);
+            for (let wy = -880 - sh + 50; wy < -900; wy += 42) {
+              for (let wx = sx + 24; wx < sx + 188; wx += 36) {
+                fillPxRect(pitchCacheCtx, wx, wy, 18, 22, (wx * wy) % 5 === 0 ? '#38bdf8' : '#fde047', px);
+              }
+            }
+          }
+          // South Industrial Rail Yard, Graffiti Container Stacks & Suspension Bridge Harbor (y = h + 380 .. h + 1580)
+          for (let ry = h + 410; ry <= h + 530; ry += 60) {
+            fillPxRect(pitchCacheCtx, -CACHE_PAD_X, ry, w + CACHE_PAD_X * 2, 16, '#475569', px);
+            for (let tx = -900; tx < w + 900; tx += 36) {
+              fillPxRect(pitchCacheCtx, tx, ry - 4, 12, 24, '#78350f', px);
+            }
+          }
+          // Colorful Shipping Container Stacks & Street Basketball Courts (y = h + 590 .. h + 860)
+          const contColors = ['#ef4444', '#3b82f6', '#eab308', '#10b981', '#a855f7'];
+          for (let cx = -680; cx <= w + 560; cx += 210) {
+            const cCol = contColors[Math.abs(Math.floor(cx / 210)) % contColors.length];
+            fillPxRect(pitchCacheCtx, cx, h + 600, 176, 84, outline, px);
+            fillPxRect(pitchCacheCtx, cx + 6, h + 606, 164, 72, cCol, px);
+            fillPxRect(pitchCacheCtx, cx + 18, h + 696, 176, 84, outline, px);
+            fillPxRect(pitchCacheCtx, cx + 24, h + 702, 164, 72, contColors[(Math.abs(Math.floor(cx / 210)) + 2) % contColors.length], px);
+          }
+          // Deep South River Harbor & Suspension Bridge (y = h + 860 .. h + 1620)
+          fillPxRect(pitchCacheCtx, -CACHE_PAD_X, h + 860, w + CACHE_PAD_X * 2, 780, '#0c4a6e', px);
+          fillPxRect(pitchCacheCtx, -CACHE_PAD_X, h + 860, w + CACHE_PAD_X * 2, 24, '#64748b', px);
+          fillPxRect(pitchCacheCtx, w * 0.22 - 36, h + 920, 72, 420, outline, px);
+          fillPxRect(pitchCacheCtx, w * 0.22 - 28, h + 928, 56, 404, '#b91c1c', px);
+          fillPxRect(pitchCacheCtx, w * 0.78 - 36, h + 920, 72, 420, outline, px);
+          fillPxRect(pitchCacheCtx, w * 0.78 - 28, h + 928, 56, 404, '#b91c1c', px);
+          fillPxRect(pitchCacheCtx, -CACHE_PAD_X, h + 1090, w + CACHE_PAD_X * 2, 44, '#334155', px);
+        } else if (selectedPitchTheme === 'TURF_SAKURA') {
+          // Deep Kyoto Imperial Gardens, Torii Procession, 5-Tier Pagoda, Mt. Fuji Horizon & Lotus Mirror Lake
+          fillPxRect(pitchCacheCtx, -CACHE_PAD_X, -CACHE_PAD_Y, w + CACHE_PAD_X * 2, CACHE_PAD_Y - 340, '#86efac', px);
+          fillPxRect(pitchCacheCtx, -CACHE_PAD_X, h + 340, w + CACHE_PAD_X * 2, CACHE_PAD_Y - 340, '#86efac', px);
+          fillPxRect(pitchCacheCtx, -CACHE_PAD_X, -340, CACHE_PAD_X - 340, h + 680, '#86efac', px);
+          fillPxRect(pitchCacheCtx, w + 340, -340, CACHE_PAD_X - 340, h + 680, '#86efac', px);
+          // Far-North Snow-Capped Mt. Fuji & Sunset Sky Band (y = -1020..-1640)
+          fillPxRect(pitchCacheCtx, -CACHE_PAD_X, -1640, w + CACHE_PAD_X * 2, 580, '#fce7f3', px);
+          fillPxRect(pitchCacheCtx, -CACHE_PAD_X, -1420, w + CACHE_PAD_X * 2, 180, '#fbcfe8', px);
+          // Mt. Fuji Stepped Volcanic Cone (x = w * 0.5, y = -1060..-1520)
+          for (let step = 0; step < 14; step++) {
+            const sw = 980 - step * 58;
+            const sy = -1060 - step * 32;
+            const isSnow = step >= 9;
+            fillPxRect(pitchCacheCtx, w * 0.5 - sw * 0.5 - 4, sy - 4, sw + 8, 38, outline, px);
+            fillPxRect(pitchCacheCtx, w * 0.5 - sw * 0.5, sy, sw, 34, isSnow ? '#ffffff' : '#3b82f6', px);
+          }
+          // North Vermilion Torii Gate Avenue & 5-Tier Hokan-ji Pagoda (y = -420..-980)
+          fillPxRect(pitchCacheCtx, w * 0.5 - 56, -980, 112, 620, '#d6d3d1', px);
+          for (let ty = -430; ty >= -910; ty -= 120) {
+            fillPxRect(pitchCacheCtx, w * 0.5 - 92, ty - 28, 184, 16, outline, px);
+            fillPxRect(pitchCacheCtx, w * 0.5 - 88, ty - 24, 176, 10, '#dc2626', px);
+            fillPxRect(pitchCacheCtx, w * 0.5 - 64, ty - 12, 14, 36, '#dc2626', px);
+            fillPxRect(pitchCacheCtx, w * 0.5 + 50, ty - 12, 14, 36, '#dc2626', px);
+          }
+          // East & West 5-Tier Timber Pagodas (x = w * 0.18 & w * 0.82, y = -680)
+          for (const pxCenter of [w * 0.18, w * 0.82]) {
+            for (let tier = 0; tier < 5; tier++) {
+              const tw = 190 - tier * 26;
+              const ty = -520 - tier * 54;
+              fillPxRect(pitchCacheCtx, pxCenter - tw * 0.5, ty, tw, 22, outline, px);
+              fillPxRect(pitchCacheCtx, pxCenter - tw * 0.5 + 4, ty + 4, tw - 8, 14, '#991b1b', px);
+              fillPxRect(pitchCacheCtx, pxCenter - tw * 0.35, ty + 22, tw * 0.7, 32, '#78350f', px);
+            }
+          }
+          // Lush Sakura Cherry Blossom Groves Across North & South Parklands
+          for (let tx = -720; tx <= w + 720; tx += 155) {
+            if (Math.abs(tx - w * 0.5) > 130) {
+              drawPixelTree(pitchCacheCtx, tx, -460 - ((tx * 19) % 180), 2, 1, px);
+              drawPixelTree(pitchCacheCtx, tx + 45, -780 - ((tx * 31) % 180), 2, 0, px);
+            }
+            drawPixelTree(pitchCacheCtx, tx, h + 440 + ((tx * 23) % 160), 2, 1, px);
+            drawPixelTree(pitchCacheCtx, tx + 50, h + 980 + ((tx * 29) % 240), 2, 0, px);
+          }
+          // South Jade Mirror Lotus Lake & Vermilion Drum Bridges (y = h + 580 .. h + 920)
+          fillPxRect(pitchCacheCtx, -580, h + 590, w + 1160, 290, outline, px);
+          fillPxRect(pitchCacheCtx, -572, h + 598, w + 1144, 274, '#0d9488', px);
+          fillPxRect(pitchCacheCtx, -556, h + 614, w + 1112, 242, '#14b8a6', px);
+          for (const bx of [w * 0.28, w * 0.72]) {
+            fillPxRect(pitchCacheCtx, bx - 54, h + 582, 108, 306, outline, px);
+            fillPxRect(pitchCacheCtx, bx - 46, h + 590, 92, 290, '#dc2626', px);
+            fillPxRect(pitchCacheCtx, bx - 34, h + 590, 68, 290, '#fca5a5', px);
+          }
+          for (let lx = -420; lx <= w + 420; lx += 140) {
+            fillPxRect(pitchCacheCtx, lx, h + 680 + ((lx * 13) % 120), 24, 18, '#4ade80', px);
+            fillPxRect(pitchCacheCtx, lx + 6, h + 684 + ((lx * 13) % 120), 12, 10, '#fbcfe8', px);
+          }
+        } else if (selectedPitchTheme === 'TURF_AUTUMN') {
+          // Deep Autumn Harvest Valley, Covered Timber Bridge, Twin Dutch Windmills, Apple Orchards & Pumpkin Fairgrounds
+          fillPxRect(pitchCacheCtx, -CACHE_PAD_X, -CACHE_PAD_Y, w + CACHE_PAD_X * 2, CACHE_PAD_Y - 340, '#d97706', px);
+          fillPxRect(pitchCacheCtx, -CACHE_PAD_X, h + 340, w + CACHE_PAD_X * 2, CACHE_PAD_Y - 340, '#d97706', px);
+          fillPxRect(pitchCacheCtx, -CACHE_PAD_X, -340, CACHE_PAD_X - 340, h + 680, '#d97706', px);
+          fillPxRect(pitchCacheCtx, w + 340, -340, CACHE_PAD_X - 340, h + 680, '#d97706', px);
+          // North Winding Sapphire Harvest Creek & Red Covered Bridge (y = -580..-710)
+          fillPxRect(pitchCacheCtx, -CACHE_PAD_X, -690, w + CACHE_PAD_X * 2, 110, outline, px);
+          fillPxRect(pitchCacheCtx, -CACHE_PAD_X, -682, w + CACHE_PAD_X * 2, 94, '#0284c7', px);
+          fillPxRect(pitchCacheCtx, -CACHE_PAD_X, -666, w + CACHE_PAD_X * 2, 62, '#38bdf8', px);
+          // Covered Wooden Bridge at w * 0.5
+          fillPxRect(pitchCacheCtx, w * 0.5 - 96, -714, 192, 158, outline, px);
+          fillPxRect(pitchCacheCtx, w * 0.5 - 88, -706, 176, 142, '#991b1b', px);
+          fillPxRect(pitchCacheCtx, w * 0.5 - 72, -694, 144, 118, '#b91c1c', px);
+          // Twin Dutch Harvest Windmills & Stone Silos (x = w * 0.22 & w * 0.78, y = -940)
+          for (const wx of [w * 0.22, w * 0.78]) {
+            fillPxRect(pitchCacheCtx, wx - 56, -1040, 112, 180, outline, px);
+            fillPxRect(pitchCacheCtx, wx - 48, -1032, 96, 164, '#fef3c7', px);
+            fillPxRect(pitchCacheCtx, wx - 64, -1068, 128, 42, '#78350f', px);
+            // Windmill Sails
+            fillPxRect(pitchCacheCtx, wx - 130, -988, 260, 16, outline, px);
+            fillPxRect(pitchCacheCtx, wx - 126, -984, 252, 8, '#fde68a', px);
+            fillPxRect(pitchCacheCtx, wx - 8, -1110, 16, 260, outline, px);
+            fillPxRect(pitchCacheCtx, wx - 4, -1106, 8, 252, '#fde68a', px);
+          }
+          // North & South Autumn Maple/Ginkgo Groves & Golden Hay Bales
+          for (let tx = -760; tx <= w + 760; tx += 150) {
+            drawPixelTree(pitchCacheCtx, tx, -440 - ((tx * 17) % 110), 2, 0, px);
+            drawPixelTree(pitchCacheCtx, tx + 55, -840 - ((tx * 29) % 340), 2, 1, px);
+            drawPixelTree(pitchCacheCtx, tx, h + 430 + ((tx * 19) % 140), 2, 1, px);
+            drawPixelTree(pitchCacheCtx, tx + 45, h + 860 + ((tx * 31) % 380), 2, 0, px);
+          }
+          // South Harvest Fairground Barn, Haystack Maze & Pumpkin Patch (y = h + 560 .. h + 920)
+          fillPxRect(pitchCacheCtx, w * 0.5 - 160, h + 580, 320, 160, outline, px);
+          fillPxRect(pitchCacheCtx, w * 0.5 - 152, h + 588, 304, 144, '#991b1b', px);
+          fillPxRect(pitchCacheCtx, w * 0.5 - 136, h + 604, 272, 112, '#dc2626', px);
+          fillPxRect(pitchCacheCtx, w * 0.5 - 48, h + 640, 96, 84, '#fef3c7', px);
+          for (let pxIdx = -480; pxIdx <= w + 480; pxIdx += 90) {
+            fillPxRect(pitchCacheCtx, pxIdx, h + 790 + ((pxIdx * 13) % 90), 22, 18, outline, px);
+            fillPxRect(pitchCacheCtx, pxIdx + 3, h + 793 + ((pxIdx * 13) % 90), 16, 12, '#f97316', px);
+          }
+        } else if (selectedPitchTheme === 'TURF_CHAMPIONS') {
+          // Deep Champions Cathedral Royal Esplanade, Reflecting Pools, Triumphal Arch & Superyacht Marina
+          fillPxRect(pitchCacheCtx, -CACHE_PAD_X, -CACHE_PAD_Y, w + CACHE_PAD_X * 2, CACHE_PAD_Y - 340, '#1e293b', px);
+          fillPxRect(pitchCacheCtx, -CACHE_PAD_X, h + 340, w + CACHE_PAD_X * 2, CACHE_PAD_Y - 340, '#1e293b', px);
+          fillPxRect(pitchCacheCtx, -CACHE_PAD_X, -340, CACHE_PAD_X - 340, h + 680, '#1e293b', px);
+          fillPxRect(pitchCacheCtx, w + 340, -340, CACHE_PAD_X - 340, h + 680, '#1e293b', px);
+          // North Royal Marble Esplanade & Twin Illuminated Reflecting Pools (y = -420..-880)
+          fillPxRect(pitchCacheCtx, -460, -920, w + 920, 540, outline, px);
+          fillPxRect(pitchCacheCtx, -452, -912, w + 904, 524, '#334155', px);
+          for (const poolX of [w * 0.22, w * 0.78]) {
+            fillPxRect(pitchCacheCtx, poolX - 180, -820, 360, 340, outline, px);
+            fillPxRect(pitchCacheCtx, poolX - 172, -812, 344, 324, '#0284c7', px);
+            fillPxRect(pitchCacheCtx, poolX - 156, -796, 312, 292, '#38bdf8', px);
+            fillPxRect(pitchCacheCtx, poolX - 24, -664, 48, 48, '#fde047', px);
+          }
+          // North Center Grand Triumphal Arch & Hall of Legends Golden Dome (x = w * 0.5, y = -760..-1180)
+          fillPxRect(pitchCacheCtx, w * 0.5 - 170, -1080, 340, 260, outline, px);
+          fillPxRect(pitchCacheCtx, w * 0.5 - 162, -1072, 324, 244, '#e2e8f0', px);
+          fillPxRect(pitchCacheCtx, w * 0.5 - 96, -1180, 192, 110, outline, px);
+          fillPxRect(pitchCacheCtx, w * 0.5 - 88, -1172, 176, 96, '#facc15', px);
+          fillPxRect(pitchCacheCtx, w * 0.5 - 64, -960, 128, 140, '#0f172a', px);
+          // South Champions Fan Festival Stage, Helipad & Royal Marina Superyachts (y = h + 420 .. h + 1560)
+          fillPxRect(pitchCacheCtx, -460, h + 400, w + 920, 360, outline, px);
+          fillPxRect(pitchCacheCtx, -452, h + 408, w + 904, 344, '#334155', px);
+          // VIP Helipad Circle at x = w * 0.22, y = h + 580
+          fillPxRect(pitchCacheCtx, w * 0.22 - 84, h + 496, 168, 168, outline, px);
+          fillPxRect(pitchCacheCtx, w * 0.22 - 76, h + 504, 152, 152, '#475569', px);
+          fillPxRect(pitchCacheCtx, w * 0.22 - 36, h + 540, 16, 80, '#fde047', px);
+          fillPxRect(pitchCacheCtx, w * 0.22 + 20, h + 540, 16, 80, '#fde047', px);
+          fillPxRect(pitchCacheCtx, w * 0.22 - 36, h + 572, 72, 16, '#fde047', px);
+          // South Royal Harbor & Superyachts (y = h + 790 .. h + 1580)
+          fillPxRect(pitchCacheCtx, -CACHE_PAD_X, h + 790, w + CACHE_PAD_X * 2, 820, '#0369a1', px);
+          for (const yx of [w * 0.25, w * 0.55, w * 0.85]) {
+            fillPxRect(pitchCacheCtx, yx - 110, h + 920, 220, 68, outline, px);
+            fillPxRect(pitchCacheCtx, yx - 102, h + 928, 204, 52, '#f8fafc', px);
+            fillPxRect(pitchCacheCtx, yx - 64, h + 938, 128, 32, '#38bdf8', px);
+          }
+        } else if (selectedPitchTheme === 'RIO_CLAY') {
+          // Deep Byron Bay Coastal Headland, Lighthouse Terraces, Golden Surf Beach & Pacific Ocean
+          fillPxRect(pitchCacheCtx, -CACHE_PAD_X, -CACHE_PAD_Y, w + CACHE_PAD_X * 2, CACHE_PAD_Y - 340, '#15803d', px);
+          fillPxRect(pitchCacheCtx, -CACHE_PAD_X, -340, CACHE_PAD_X - 340, h + 680, '#fde047', px);
+          fillPxRect(pitchCacheCtx, w + 340, -340, CACHE_PAD_X - 340, h + 680, '#fde047', px);
+          // Colorful Stepped Coastal Villas & Tropical Palms across North Hills (y = -420..-1180)
+          const rioColors = ['#f97316', '#38bdf8', '#facc15', '#ec4899', '#4ade80', '#a855f7'];
+          for (let hy = -440; hy >= -1120; hy -= 110) {
+            for (let hx = -1160; hx <= w + 1080; hx += 135) {
+              const col = rioColors[Math.abs(Math.floor((hx + hy) / 95)) % rioColors.length];
+              fillPxRect(pitchCacheCtx, hx, hy - 74, 112, 74, outline, px);
+              fillPxRect(pitchCacheCtx, hx + 4, hy - 70, 104, 66, col, px);
+              fillPxRect(pitchCacheCtx, hx + 18, hy - 52, 24, 24, '#fef08a', px);
+              fillPxRect(pitchCacheCtx, hx + 64, hy - 52, 24, 24, '#1e293b', px);
+            }
+          }
+          // Far-North Sugarloaf Granite Peak & Sunset Horizon (y = -1140..-1640)
+          fillPxRect(pitchCacheCtx, -CACHE_PAD_X, -1640, w + CACHE_PAD_X * 2, 480, '#fb923c', px);
+          fillPxRect(pitchCacheCtx, w * 0.5 - 280, -1480, 560, 360, outline, px);
+          fillPxRect(pitchCacheCtx, w * 0.5 - 270, -1470, 540, 340, '#166534', px);
+          // South Golden Copacabana Beach, Turquoise Atlantic Ocean, Catamarans & Tropical Islands (y = h + 350 .. h + 1640)
+          fillPxRect(pitchCacheCtx, -CACHE_PAD_X, h + 350, w + CACHE_PAD_X * 2, 210, '#fde047', px);
+          const umbrellaCols = ['#ef4444', '#3b82f6', '#10b981', '#ec4899', '#f97316'];
+          for (let ux = -640; ux <= w + 640; ux += 140) {
+            const uCol = umbrellaCols[Math.abs(Math.floor(ux / 140)) % umbrellaCols.length];
+            fillPxRect(pitchCacheCtx, ux - 28, h + 410, 56, 56, outline, px);
+            fillPxRect(pitchCacheCtx, ux - 24, h + 414, 48, 48, uCol, px);
+          }
+          fillPxRect(pitchCacheCtx, -CACHE_PAD_X, h + 560, w + CACHE_PAD_X * 2, 1080, '#0284c7', px);
+          fillPxRect(pitchCacheCtx, -CACHE_PAD_X, h + 560, w + CACHE_PAD_X * 2, 64, '#38bdf8', px);
+          fillPxRect(pitchCacheCtx, -CACHE_PAD_X, h + 624, w + CACHE_PAD_X * 2, 84, '#0ea5e9', px);
+          // Tropical Green Volcanic Atolls in Deep South Ocean (y = h + 920)
+          for (const ix of [w * 0.22, w * 0.78]) {
+            fillPxRect(pitchCacheCtx, ix - 180, h + 880, 360, 170, '#fde047', px);
+            fillPxRect(pitchCacheCtx, ix - 150, h + 900, 300, 130, '#16a34a', px);
+            drawPixelTree(pitchCacheCtx, ix - 50, h + 950, 2, 1, px);
+            drawPixelTree(pitchCacheCtx, ix + 50, h + 950, 2, 0, px);
+          }
+        } else if (selectedPitchTheme === 'TWILIGHT_SYNTH') {
+          // Deep Outrun Magenta Perspective Grid, Wireframe Cyber Mountains, Segmented Sunset Sun & Cyber-Arcology
+          fillPxRect(pitchCacheCtx, -CACHE_PAD_X, -CACHE_PAD_Y, w + CACHE_PAD_X * 2, CACHE_PAD_Y - 340, '#1e1b4b', px);
+          fillPxRect(pitchCacheCtx, -CACHE_PAD_X, h + 340, w + CACHE_PAD_X * 2, CACHE_PAD_Y - 340, '#1e1b4b', px);
+          fillPxRect(pitchCacheCtx, -CACHE_PAD_X, -340, CACHE_PAD_X - 340, h + 680, '#1e1b4b', px);
+          fillPxRect(pitchCacheCtx, w + 340, -340, CACHE_PAD_X - 340, h + 680, '#1e1b4b', px);
+          // Horizontal & Perspective Magenta Neon Grid Lines Across North & South Outrun Horizons
+          for (let gy = -400; gy >= -1580; gy -= 95) {
+            fillPxRect(pitchCacheCtx, -CACHE_PAD_X, gy, w + CACHE_PAD_X * 2, 4, 'rgba(244, 114, 182, 0.36)', px);
+          }
+          for (let gy = h + 400; gy <= h + 1580; gy += 95) {
+            fillPxRect(pitchCacheCtx, -CACHE_PAD_X, gy, w + CACHE_PAD_X * 2, 4, 'rgba(34, 211, 238, 0.36)', px);
+          }
+          for (let gx = -960; gx <= w + 960; gx += 160) {
+            fillPxRect(pitchCacheCtx, gx, -1580, 4, 1220, 'rgba(244, 114, 182, 0.22)', px);
+            fillPxRect(pitchCacheCtx, gx, h + 360, 4, 1220, 'rgba(34, 211, 238, 0.22)', px);
+          }
+          // Giant Segmented Outrun Sunset Orb & Cyber Peaks at North Horizon (x = w * 0.5, y = -940)
+          fillPxRect(pitchCacheCtx, w * 0.5 - 220, -1180, 440, 440, outline, px);
+          fillPxRect(pitchCacheCtx, w * 0.5 - 210, -1170, 420, 420, '#f43f5e', px);
+          fillPxRect(pitchCacheCtx, w * 0.5 - 210, -1170, 420, 160, '#facc15', px);
+          fillPxRect(pitchCacheCtx, w * 0.5 - 210, -1010, 420, 120, '#fb923c', px);
+          for (let sy = -940; sy <= -780; sy += 36) {
+            fillPxRect(pitchCacheCtx, w * 0.5 - 214, sy, 428, 12, '#1e1b4b', px);
+          }
+          // South Neon Cyber-Arcade Plaza & Holographic Arcology Towers (y = h + 520 .. h + 1380)
+          for (let tx = -560; tx <= w + 560; tx += 280) {
+            fillPxRect(pitchCacheCtx, tx - 90, h + 560, 180, 420, outline, px);
+            fillPxRect(pitchCacheCtx, tx - 82, h + 568, 164, 404, '#0f172a', px);
+            fillPxRect(pitchCacheCtx, tx - 70, h + 584, 140, 18, '#22d3ee', px);
+            fillPxRect(pitchCacheCtx, tx - 70, h + 624, 140, 18, '#f472b6', px);
+          }
+        } else if (selectedPitchTheme === 'ARCTIC_ICE') {
+          // Deep Glacial Mountain Range, Nordic Ice Palace, Aurora Borealis Sky & Frozen Iceberg Bay
+          fillPxRect(pitchCacheCtx, -CACHE_PAD_X, -CACHE_PAD_Y, w + CACHE_PAD_X * 2, CACHE_PAD_Y - 340, '#e2e8f0', px);
+          fillPxRect(pitchCacheCtx, -CACHE_PAD_X, h + 340, w + CACHE_PAD_X * 2, CACHE_PAD_Y - 340, '#0284c7', px);
+          fillPxRect(pitchCacheCtx, -CACHE_PAD_X, -340, CACHE_PAD_X - 340, h + 680, '#e2e8f0', px);
+          fillPxRect(pitchCacheCtx, w + 340, -340, CACHE_PAD_X - 340, h + 680, '#e2e8f0', px);
+          // Far-North Starry Polar Night Sky & Aurora Borealis Curtains (y = -980..-1640)
+          fillPxRect(pitchCacheCtx, -CACHE_PAD_X, -1640, w + CACHE_PAD_X * 2, 680, '#0f172a', px);
+          fillPxRect(pitchCacheCtx, -CACHE_PAD_X, -1420, w + CACHE_PAD_X * 2, 90, 'rgba(45, 212, 191, 0.34)', px);
+          fillPxRect(pitchCacheCtx, -CACHE_PAD_X, -1240, w + CACHE_PAD_X * 2, 80, 'rgba(168, 85, 247, 0.30)', px);
+          // Jagged Blue-White Glacier Peaks & Nordic Ice Palace Fortress (y = -480..-1020)
+          for (let mx = -760; mx <= w + 760; mx += 260) {
+            fillPxRect(pitchCacheCtx, mx - 120, -960, 240, 440, outline, px);
+            fillPxRect(pitchCacheCtx, mx - 112, -952, 224, 424, '#bae6fd', px);
+            fillPxRect(pitchCacheCtx, mx - 76, -952, 152, 220, '#ffffff', px);
+          }
+          // Center Crystal Ice Palace Spires (x = w * 0.5, y = -880)
+          fillPxRect(pitchCacheCtx, w * 0.5 - 160, -880, 320, 380, outline, px);
+          fillPxRect(pitchCacheCtx, w * 0.5 - 152, -872, 304, 364, '#38bdf8', px);
+          fillPxRect(pitchCacheCtx, w * 0.5 - 110, -830, 220, 280, '#e0f2fe', px);
+          // South Glacial Sea, Floating Icebergs & Polar Expedition Icebreaker Ship (y = h + 420 .. h + 1560)
+          for (let ix = -620; ix <= w + 620; ix += 290) {
+            fillPxRect(pitchCacheCtx, ix - 95, h + 480 + ((ix * 17) % 340), 190, 110, outline, px);
+            fillPxRect(pitchCacheCtx, ix - 87, h + 488 + ((ix * 17) % 340), 174, 94, '#f8fafc', px);
+            fillPxRect(pitchCacheCtx, ix - 65, h + 504 + ((ix * 17) % 340), 130, 62, '#bae6fd', px);
+          }
+          // Red Polar Icebreaker Ship at x = w * 0.5, y = h + 920
+          fillPxRect(pitchCacheCtx, w * 0.5 - 150, h + 880, 300, 88, outline, px);
+          fillPxRect(pitchCacheCtx, w * 0.5 - 142, h + 888, 284, 72, '#dc2626', px);
+          fillPxRect(pitchCacheCtx, w * 0.5 - 70, h + 900, 140, 48, '#f8fafc', px);
+        } else if (selectedPitchTheme === 'VOLCANO_FORGE') {
+          // Deep Obsidian Caldera, Molten Lava Rivers, Dwarven Blast Furnaces & Dragon-Forge Citadels
+          fillPxRect(pitchCacheCtx, -CACHE_PAD_X, -CACHE_PAD_Y, w + CACHE_PAD_X * 2, CACHE_PAD_Y - 340, '#1c1917', px);
+          fillPxRect(pitchCacheCtx, -CACHE_PAD_X, h + 340, w + CACHE_PAD_X * 2, CACHE_PAD_Y - 340, '#1c1917', px);
+          fillPxRect(pitchCacheCtx, -CACHE_PAD_X, -340, CACHE_PAD_X - 340, h + 680, '#1c1917', px);
+          fillPxRect(pitchCacheCtx, w + 340, -340, CACHE_PAD_X - 340, h + 680, '#1c1917', px);
+          // Cascading Molten Magma Rivers & Glowing Lava Lakes Across North & South Caldera
+          for (const ly of [-560, -980, -1380, h + 520, h + 920, h + 1320]) {
+            fillPxRect(pitchCacheCtx, -CACHE_PAD_X, ly - 48, w + CACHE_PAD_X * 2, 96, outline, px);
+            fillPxRect(pitchCacheCtx, -CACHE_PAD_X, ly - 40, w + CACHE_PAD_X * 2, 80, '#dc2626', px);
+            fillPxRect(pitchCacheCtx, -CACHE_PAD_X, ly - 24, w + CACHE_PAD_X * 2, 48, '#f97316', px);
+            fillPxRect(pitchCacheCtx, -CACHE_PAD_X, ly - 10, w + CACHE_PAD_X * 2, 20, '#fde047', px);
+          }
+          // Basalt Stone Bridges & Dwarven Smelting Citadels Spanning the Lava Rivers
+          for (const bx of [w * 0.2, w * 0.5, w * 0.8]) {
+            fillPxRect(pitchCacheCtx, bx - 90, -1460, 180, 1080, outline, px);
+            fillPxRect(pitchCacheCtx, bx - 80, -1450, 160, 1060, '#44403c', px);
+            fillPxRect(pitchCacheCtx, bx - 48, -820, 96, 96, '#fde047', px);
+            fillPxRect(pitchCacheCtx, bx - 90, h + 380, 180, 1080, outline, px);
+            fillPxRect(pitchCacheCtx, bx - 80, h + 390, 160, 1060, '#44403c', px);
+            fillPxRect(pitchCacheCtx, bx - 48, h + 720, 96, 96, '#f97316', px);
+          }
+        } else {
+          // CLASSIC_TURF (Clunes): Hinterland Parkland Terraces, Serpentine Swan Lake, Georgian Academy Manor & Community Cricket/Practice Park
+          fillPxRect(pitchCacheCtx, -CACHE_PAD_X, -CACHE_PAD_Y, w + CACHE_PAD_X * 2, CACHE_PAD_Y - 340, '#4ade80', px);
+          fillPxRect(pitchCacheCtx, -CACHE_PAD_X, h + 340, w + CACHE_PAD_X * 2, CACHE_PAD_Y - 340, '#4ade80', px);
+          fillPxRect(pitchCacheCtx, -CACHE_PAD_X, -340, CACHE_PAD_X - 340, h + 680, '#4ade80', px);
+          fillPxRect(pitchCacheCtx, w + 340, -340, CACHE_PAD_X - 340, h + 680, '#4ade80', px);
+          // Alternating Royal Parkland Mowed Lawn Bands Across Deep North, South, West & East Vistas
+          for (let py = -440; py >= -1600; py -= 180) {
+            fillPxRect(pitchCacheCtx, -CACHE_PAD_X, py - 90, w + CACHE_PAD_X * 2, 90, 'rgba(34, 197, 94, 0.32)', px);
+          }
+          for (let py = h + 420; py <= h + 1600; py += 180) {
+            fillPxRect(pitchCacheCtx, -CACHE_PAD_X, py, w + CACHE_PAD_X * 2, 90, 'rgba(34, 197, 94, 0.32)', px);
+          }
+          for (let py = -340; py <= h + 340; py += 180) {
+            fillPxRect(pitchCacheCtx, -CACHE_PAD_X, py, CACHE_PAD_X - 340, 90, 'rgba(34, 197, 94, 0.28)', px);
+            fillPxRect(pitchCacheCtx, w + 340, py, CACHE_PAD_X - 340, 90, 'rgba(34, 197, 94, 0.28)', px);
+          }
+          // North Serpentine Swan Lake & Stone Footbridge (y = -520..-780)
+          fillPxRect(pitchCacheCtx, -480, -780, w + 960, 240, outline, px);
+          fillPxRect(pitchCacheCtx, -472, -772, w + 944, 224, '#0284c7', px);
+          fillPxRect(pitchCacheCtx, -456, -756, w + 912, 192, '#38bdf8', px);
+          // Arched Stone Footbridge at x = w * 0.5
+          fillPxRect(pitchCacheCtx, w * 0.5 - 68, -792, 136, 264, outline, px);
+          fillPxRect(pitchCacheCtx, w * 0.5 - 60, -784, 120, 248, '#e7e5e4', px);
+          fillPxRect(pitchCacheCtx, w * 0.5 - 44, -784, 88, 248, '#d6d3d1', px);
+          // Georgian Red-Brick Club Academy Manor & Clocktower (x = w * 0.5, y = -860..-1120)
+          fillPxRect(pitchCacheCtx, w * 0.5 - 240, -1100, 480, 190, outline, px);
+          fillPxRect(pitchCacheCtx, w * 0.5 - 232, -1092, 464, 174, '#9a3412', px);
+          fillPxRect(pitchCacheCtx, w * 0.5 - 216, -1076, 432, 48, '#334155', px);
+          fillPxRect(pitchCacheCtx, w * 0.5 - 56, -1160, 112, 240, outline, px);
+          fillPxRect(pitchCacheCtx, w * 0.5 - 48, -1152, 96, 224, '#b45309', px);
+          fillPxRect(pitchCacheCtx, w * 0.5 - 24, -1124, 48, 48, '#fef08a', px);
+          // South Heritage Station Plaza, Supporters Beer Garden & Community Youth Pitches (y = h + 420 .. h + 1480)
+          fillPxRect(pitchCacheCtx, w * 0.5 - 220, h + 410, 440, 130, outline, px);
+          fillPxRect(pitchCacheCtx, w * 0.5 - 212, h + 418, 424, 114, '#e7e5e4', px);
+          fillPxRect(pitchCacheCtx, w * 0.5 - 180, h + 434, 360, 82, '#78350f', px);
+          // South Community Youth Soccer & Cricket Greens (x = w * 0.22 & w * 0.78, y = h + 640 .. h + 960)
+          for (const gx of [w * 0.22, w * 0.78]) {
+            fillPxRect(pitchCacheCtx, gx - 210, h + 620, 420, 260, outline, px);
+            fillPxRect(pitchCacheCtx, gx - 202, h + 628, 404, 244, '#22c55e', px);
+            fillPxRect(pitchCacheCtx, gx - 190, h + 640, 380, 220, '#4ade80', px);
+            fillPxRect(pitchCacheCtx, gx - 4, h + 640, 8, 220, '#ffffff', px);
+          }
+          // Lush Oak & Cypress Groves Across Deep North, South, West & East Parklands
+          for (let tx = -1180; tx <= w + 1180; tx += 160) {
+            drawPixelTree(pitchCacheCtx, tx, -430 - ((Math.abs(tx) * 13) % 70), 2, 0, px);
+            drawPixelTree(pitchCacheCtx, tx + 55, -1220 - ((Math.abs(tx) * 29) % 320), 2, 1, px);
+            drawPixelTree(pitchCacheCtx, tx, h + 940 + ((Math.abs(tx) * 19) % 520), 2, 0, px);
+          }
+        }
+
+        // 3C. Deep West (x = -380..-1220) & Deep East (x = w+380..w+1220) Flanking Architectural Plazas, Pavilions & Park Groves
+        for (const sideX of [-520, -760, -1000, -1180, w + 520, w + 760, w + 1000, w + 1180]) {
+          for (let sy = -960; sy <= h + 960; sy += 210) {
+            if (selectedPitchTheme === 'COSMIC_SPACE' || selectedPitchTheme === 'TWILIGHT_SYNTH') {
+              fillPxRect(pitchCacheCtx, sideX - 54, sy - 54, 108, 108, outline, px);
+              fillPxRect(pitchCacheCtx, sideX - 46, sy - 46, 92, 92, '#1e293b', px);
+              fillPxRect(pitchCacheCtx, sideX - 24, sy - 24, 48, 48, bowlSpec.accentHome, px);
+            } else if (selectedPitchTheme === 'URBAN_CONCRETE' || selectedPitchTheme === 'VOLCANO_FORGE') {
+              fillPxRect(pitchCacheCtx, sideX - 64, sy - 64, 128, 128, outline, px);
+              fillPxRect(pitchCacheCtx, sideX - 56, sy - 56, 112, 112, '#334155', px);
+              fillPxRect(pitchCacheCtx, sideX - 36, sy - 36, 72, 72, bowlSpec.accentAway, px);
+            } else {
+              drawPixelTree(pitchCacheCtx, sideX, sy, 2, Math.abs(Math.floor(sy / 210)) % 2, px);
+            }
+          }
+        }
+      }
+
+      // 4. Clipped Chamfered Pitch Turf, Clean Mowing Patterns, Center Circle Emblems & Crisp Chalk Markings
+      // (Engineered with zero thin/diagonal full-pitch strokes so camera movement never produces shimmering or glitchy lines!)
       pitchCacheCtx.save();
       pitchCacheCtx.beginPath();
       pitchCacheCtx.moveTo(c, 0);
@@ -2612,55 +3103,35 @@ export default function App() {
       const stripeCount = GRAPHICS_CONFIG.pitch.stripeCount;
       const stripeW = w / stripeCount;
       for (let i = 0; i < stripeCount; i++) {
-        const sx = i * stripeW;
+        const sx = Math.floor(i * stripeW);
+        const nextSx = Math.ceil((i + 1) * stripeW);
         const isLight = i % 2 === 0;
         pitchCacheCtx.fillStyle = isLight
           ? GRAPHICS_CONFIG.pitch.grassLight
           : GRAPHICS_CONFIG.pitch.grassDark;
-        pitchCacheCtx.fillRect(sx, 0, stripeW + 1, h);
-
-        pitchCacheCtx.fillStyle = isLight
-          ? GRAPHICS_CONFIG.pitch.ditherDark
-          : GRAPHICS_CONFIG.pitch.ditherLight;
-        for (let dy = 12; dy < h - 12; dy += px * 6) {
-          pitchCacheCtx.fillRect(Math.round(sx), dy, px, px * 2);
-          pitchCacheCtx.fillRect(Math.round(sx + px * 2), dy + px * 3, px, px * 2);
-        }
+        pitchCacheCtx.fillRect(sx, 0, nextSx - sx + 1, h);
       }
 
-      // Theme-Specific Bespoke Turf Pattern Overlay & Center Circle Art
+      // Theme-Specific Clean Wide Turf Mowing Bands & Center Circle Emblem Art (Zero thin/diagonal full-pitch lines!)
+      const rowBandH = h / 6;
+      pitchCacheCtx.fillStyle = 'rgba(255, 255, 255, 0.05)';
+      for (let r = 0; r < 6; r += 2) {
+        pitchCacheCtx.fillRect(0, Math.round(r * rowBandH), w, Math.round(rowBandH));
+      }
+
       if (selectedPitchTheme === 'CLASSIC_TURF') {
-        // Wembley Checkerboard Cross-Mowing Horizontal Bands + Royal Double Laurel Ring Emblem
-        pitchCacheCtx.fillStyle = 'rgba(255, 255, 255, 0.08)';
-        const rowH = h / 8;
-        for (let r = 0; r < 8; r += 2) {
-          pitchCacheCtx.fillRect(0, r * rowH, w, rowH);
-        }
-        pitchCacheCtx.strokeStyle = 'rgba(255, 255, 255, 0.36)';
-        pitchCacheCtx.lineWidth = 4;
+        pitchCacheCtx.strokeStyle = 'rgba(255, 255, 255, 0.34)';
+        pitchCacheCtx.lineWidth = 5;
         pitchCacheCtx.beginPath();
-        pitchCacheCtx.arc(w * 0.5, h * 0.5, 64, 0, Math.PI * 2);
+        pitchCacheCtx.arc(w * 0.5, h * 0.5, 66, 0, Math.PI * 2);
         pitchCacheCtx.stroke();
         pitchCacheCtx.strokeStyle = 'rgba(254, 240, 138, 0.32)';
-        pitchCacheCtx.lineWidth = 2.5;
+        pitchCacheCtx.lineWidth = 3.5;
         pitchCacheCtx.beginPath();
         pitchCacheCtx.arc(w * 0.5, h * 0.5, 42, 0, Math.PI * 2);
         pitchCacheCtx.stroke();
       } else if (selectedPitchTheme === 'TURF_AUTUMN') {
-        // Diagonal Argyle Harvest Lawn Mowing + Double Inlaid Golden Maple Diamond Center Emblem
-        pitchCacheCtx.strokeStyle = 'rgba(254, 240, 138, 0.24)';
-        pitchCacheCtx.lineWidth = 4;
-        for (let d = -h; d < w + h; d += 150) {
-          pitchCacheCtx.beginPath();
-          pitchCacheCtx.moveTo(d, 0);
-          pitchCacheCtx.lineTo(d + h, h);
-          pitchCacheCtx.stroke();
-          pitchCacheCtx.beginPath();
-          pitchCacheCtx.moveTo(d + h, 0);
-          pitchCacheCtx.lineTo(d, h);
-          pitchCacheCtx.stroke();
-        }
-        pitchCacheCtx.strokeStyle = 'rgba(254, 249, 195, 0.58)';
+        pitchCacheCtx.strokeStyle = 'rgba(254, 249, 195, 0.52)';
         pitchCacheCtx.lineWidth = 5;
         pitchCacheCtx.beginPath();
         pitchCacheCtx.moveTo(w * 0.5, h * 0.5 - 74);
@@ -2670,19 +3141,14 @@ export default function App() {
         pitchCacheCtx.closePath();
         pitchCacheCtx.stroke();
         pitchCacheCtx.strokeStyle = 'rgba(251, 146, 60, 0.42)';
-        pitchCacheCtx.lineWidth = 3;
+        pitchCacheCtx.lineWidth = 3.5;
         pitchCacheCtx.beginPath();
-        pitchCacheCtx.moveTo(w * 0.5, h * 0.5 - 46);
-        pitchCacheCtx.lineTo(w * 0.5 + 46, h * 0.5);
-        pitchCacheCtx.lineTo(w * 0.5, h * 0.5 + 46);
-        pitchCacheCtx.lineTo(w * 0.5 - 46, h * 0.5);
-        pitchCacheCtx.closePath();
+        pitchCacheCtx.arc(w * 0.5, h * 0.5, 46, 0, Math.PI * 2);
         pitchCacheCtx.stroke();
       } else if (selectedPitchTheme === 'TURF_SAKURA') {
-        // Concentric Zen Garden Radial Mowing Circles + 5-Petal Pink Sakura Blossom & Golden Stamen Center Crest
         pitchCacheCtx.strokeStyle = 'rgba(255, 255, 255, 0.22)';
         pitchCacheCtx.lineWidth = 6;
-        for (const rad of [95, 220, 345, 470]) {
+        for (const rad of [88, 215]) {
           pitchCacheCtx.beginPath();
           pitchCacheCtx.arc(w * 0.5, h * 0.5, rad, 0, Math.PI * 2);
           pitchCacheCtx.stroke();
@@ -2695,23 +3161,13 @@ export default function App() {
           fillPxRect(pitchCacheCtx, pxCenter - 6, pyCenter - 6, 12, 12, 'rgba(244, 114, 182, 0.45)', px);
         }
       } else if (selectedPitchTheme === 'TURF_CHAMPIONS') {
-        // Championship V-Chevron Mowing Bands + Ornate 8-Point Golden Starball Center Crest
-        pitchCacheCtx.strokeStyle = 'rgba(255, 255, 255, 0.16)';
-        pitchCacheCtx.lineWidth = 14;
-        for (let cx = 120; cx < w; cx += 180) {
-          pitchCacheCtx.beginPath();
-          pitchCacheCtx.moveTo(cx - 60, 0);
-          pitchCacheCtx.lineTo(cx, h * 0.5);
-          pitchCacheCtx.lineTo(cx - 60, h);
-          pitchCacheCtx.stroke();
-        }
-        pitchCacheCtx.strokeStyle = 'rgba(254, 240, 138, 0.58)';
-        pitchCacheCtx.lineWidth = 4;
+        pitchCacheCtx.strokeStyle = 'rgba(254, 240, 138, 0.56)';
+        pitchCacheCtx.lineWidth = 5;
         pitchCacheCtx.beginPath();
         pitchCacheCtx.arc(w * 0.5, h * 0.5, 68, 0, Math.PI * 2);
         pitchCacheCtx.stroke();
         pitchCacheCtx.strokeStyle = 'rgba(255, 255, 255, 0.35)';
-        pitchCacheCtx.lineWidth = 2.5;
+        pitchCacheCtx.lineWidth = 3.5;
         pitchCacheCtx.beginPath();
         pitchCacheCtx.arc(w * 0.5, h * 0.5, 42, 0, Math.PI * 2);
         pitchCacheCtx.stroke();
@@ -2728,47 +3184,20 @@ export default function App() {
           );
         }
       } else if (selectedPitchTheme === 'COSMIC_SPACE') {
-        // Glowing Constellation Grid Nodes & Twin Intersecting Orbital Center Rings
-        pitchCacheCtx.strokeStyle = 'rgba(56, 189, 248, 0.16)';
-        pitchCacheCtx.lineWidth = 2;
-        for (let gy = stripeW; gy < h; gy += stripeW) {
-          pitchCacheCtx.beginPath();
-          pitchCacheCtx.moveTo(0, gy);
-          pitchCacheCtx.lineTo(w, gy);
-          pitchCacheCtx.stroke();
-        }
         pitchCacheCtx.strokeStyle = 'rgba(192, 132, 252, 0.38)';
-        pitchCacheCtx.lineWidth = 4;
+        pitchCacheCtx.lineWidth = 4.5;
         pitchCacheCtx.beginPath();
         pitchCacheCtx.ellipse(w * 0.5, h * 0.5, 92, 38, -0.35, 0, Math.PI * 2);
         pitchCacheCtx.stroke();
         pitchCacheCtx.strokeStyle = 'rgba(56, 189, 248, 0.34)';
-        pitchCacheCtx.lineWidth = 3;
+        pitchCacheCtx.lineWidth = 3.5;
         pitchCacheCtx.beginPath();
         pitchCacheCtx.ellipse(w * 0.5, h * 0.5, 92, 38, 0.35, 0, Math.PI * 2);
         pitchCacheCtx.stroke();
       } else if (selectedPitchTheme === 'URBAN_CONCRETE') {
-        // Street Asphalt Expansion Joints & Double-Diamond Stencil Center Crest
-        pitchCacheCtx.strokeStyle = 'rgba(51, 65, 85, 0.34)';
-        pitchCacheCtx.lineWidth = 2;
-        for (let gy = 140; gy < h; gy += 140) {
-          pitchCacheCtx.beginPath();
-          pitchCacheCtx.moveTo(0, gy);
-          pitchCacheCtx.lineTo(w, gy);
-          pitchCacheCtx.stroke();
-        }
-        fillPxRect(pitchCacheCtx, w * 0.5 - 42, h * 0.5 - 42, 84, 84, 'rgba(250, 204, 21, 0.22)', px);
-        fillPxRect(pitchCacheCtx, w * 0.5 - 24, h * 0.5 - 24, 48, 48, 'rgba(56, 189, 248, 0.22)', px);
+        fillPxRect(pitchCacheCtx, w * 0.5 - 44, h * 0.5 - 44, 88, 88, 'rgba(250, 204, 21, 0.22)', px);
+        fillPxRect(pitchCacheCtx, w * 0.5 - 24, h * 0.5 - 24, 48, 48, 'rgba(56, 189, 248, 0.24)', px);
       } else if (selectedPitchTheme === 'RIO_CLAY') {
-        // Diamond-Cut Clay Grooming Lines & 8-Ray Copacabana Sunburst Center Ring
-        pitchCacheCtx.strokeStyle = 'rgba(254, 243, 199, 0.18)';
-        pitchCacheCtx.lineWidth = 3;
-        for (let d = -h; d < w + h; d += 120) {
-          pitchCacheCtx.beginPath();
-          pitchCacheCtx.moveTo(d, 0);
-          pitchCacheCtx.lineTo(d + h, h);
-          pitchCacheCtx.stroke();
-        }
         pitchCacheCtx.strokeStyle = 'rgba(254, 240, 138, 0.45)';
         pitchCacheCtx.lineWidth = 5;
         pitchCacheCtx.beginPath();
@@ -2787,56 +3216,25 @@ export default function App() {
           );
         }
       } else if (selectedPitchTheme === 'TWILIGHT_SYNTH') {
-        // Neon Cyber-Circuit Grid Traces & Concentric Outrun Center Sun
-        pitchCacheCtx.strokeStyle = 'rgba(244, 114, 182, 0.22)';
-        pitchCacheCtx.lineWidth = 2;
-        for (let gy = 110; gy < h; gy += 110) {
-          pitchCacheCtx.beginPath();
-          pitchCacheCtx.moveTo(0, gy);
-          pitchCacheCtx.lineTo(w, gy);
-          pitchCacheCtx.stroke();
-        }
         fillPxRect(pitchCacheCtx, w * 0.5 - 48, h * 0.5 - 48, 96, 96, 'rgba(244, 114, 182, 0.22)', px);
         fillPxRect(pitchCacheCtx, w * 0.5 - 32, h * 0.5 - 32, 64, 64, 'rgba(34, 211, 238, 0.24)', px);
         pitchCacheCtx.strokeStyle = 'rgba(232, 121, 249, 0.42)';
-        pitchCacheCtx.lineWidth = 3;
-        pitchCacheCtx.strokeRect(w * 0.5 - 68, h * 0.5 - 68, 136, 136);
-      } else if (selectedPitchTheme === 'ARCTIC_ICE') {
-        // Crystalline Diagonal Ice Sheen Streaks & 8-Point Snowflake Center Crystal
-        pitchCacheCtx.fillStyle = 'rgba(255, 255, 255, 0.26)';
-        for (let d = -h; d < w; d += 220) {
-          pitchCacheCtx.beginPath();
-          pitchCacheCtx.moveTo(d, 0);
-          pitchCacheCtx.lineTo(d + 55, 0);
-          pitchCacheCtx.lineTo(d + h + 55, h);
-          pitchCacheCtx.lineTo(d + h, h);
-          pitchCacheCtx.closePath();
-          pitchCacheCtx.fill();
-        }
-        pitchCacheCtx.strokeStyle = 'rgba(255, 255, 255, 0.75)';
         pitchCacheCtx.lineWidth = 4;
-        for (let a = 0; a < 4; a++) {
-          const ang = (a * Math.PI) / 4;
-          pitchCacheCtx.beginPath();
-          pitchCacheCtx.moveTo(w * 0.5 - Math.cos(ang) * 68, h * 0.5 - Math.sin(ang) * 68);
-          pitchCacheCtx.lineTo(w * 0.5 + Math.cos(ang) * 68, h * 0.5 + Math.sin(ang) * 68);
-          pitchCacheCtx.stroke();
-        }
+        pitchCacheCtx.beginPath();
+        pitchCacheCtx.arc(w * 0.5, h * 0.5, 74, 0, Math.PI * 2);
+        pitchCacheCtx.stroke();
+      } else if (selectedPitchTheme === 'ARCTIC_ICE') {
+        pitchCacheCtx.strokeStyle = 'rgba(255, 255, 255, 0.72)';
+        pitchCacheCtx.lineWidth = 4.5;
+        pitchCacheCtx.beginPath();
+        pitchCacheCtx.arc(w * 0.5, h * 0.5, 68, 0, Math.PI * 2);
+        pitchCacheCtx.stroke();
         pitchCacheCtx.strokeStyle = 'rgba(186, 230, 253, 0.65)';
-        pitchCacheCtx.lineWidth = 3;
+        pitchCacheCtx.lineWidth = 3.5;
         pitchCacheCtx.beginPath();
         pitchCacheCtx.arc(w * 0.5, h * 0.5, 42, 0, Math.PI * 2);
         pitchCacheCtx.stroke();
       } else if (selectedPitchTheme === 'VOLCANO_FORGE') {
-        // Obsidian Basalt Geometric Tiles & Molten Forge Gear-Rune Center Ring
-        pitchCacheCtx.strokeStyle = 'rgba(249, 115, 22, 0.22)';
-        pitchCacheCtx.lineWidth = 2;
-        for (let gy = 140; gy < h; gy += 140) {
-          pitchCacheCtx.beginPath();
-          pitchCacheCtx.moveTo(0, gy);
-          pitchCacheCtx.lineTo(w, gy);
-          pitchCacheCtx.stroke();
-        }
         pitchCacheCtx.strokeStyle = 'rgba(239, 68, 68, 0.48)';
         pitchCacheCtx.lineWidth = 6;
         pitchCacheCtx.beginPath();
@@ -2858,36 +3256,29 @@ export default function App() {
       }
 
       // Hand-crafted pixel grass/surface tufts scattered across the turf
-      for (let i = 0; i < 64; i++) {
-        const tx = snapPx(95 + ((i * 197) % (w - 190)), px);
-        const ty = snapPx(75 + ((i * 313) % (h - 150)), px);
+      for (let i = 0; i < 42; i++) {
+        const tx = snapPx(110 + ((i * 197) % (w - 220)), px);
+        const ty = snapPx(85 + ((i * 313) % (h - 170)), px);
         const tuftCol =
           i % 2 === 0 ? GRAPHICS_CONFIG.pitch.tuftLight : GRAPHICS_CONFIG.pitch.tuftDark;
         fillPxRect(pitchCacheCtx, tx, ty, px, px * 2, tuftCol, px);
         fillPxRect(pitchCacheCtx, tx + px * 2, ty - px, px, px * 3, tuftCol, px);
-        fillPxRect(pitchCacheCtx, tx + px * 4, ty, px, px * 2, tuftCol, px);
       }
 
-      // Crisp 16-bit stepped pixel chalk lines
+      // Bold, Anti-Flicker Pitch Chalk Markings (9px solid lines + smooth arcs so camera zoom/pan never shimmers)
       const lineCol = GRAPHICS_CONFIG.pitch.chalkLine;
-      const lineW = px * 2;
+      const lineW = px * 3;
 
-      fillPxRect(pitchCacheCtx, w / 2 - lineW * 0.5, 0, lineW, h, lineCol, px);
+      fillPxRect(pitchCacheCtx, Math.round(w / 2 - lineW * 0.5), 0, lineW, h, lineCol, px);
 
       const circleR = 152;
-      for (let i = 0; i < 76; i++) {
-        const a = (i * Math.PI * 2) / 76;
-        fillPxRect(
-          pitchCacheCtx,
-          w / 2 + Math.cos(a) * circleR - px,
-          h / 2 + Math.sin(a) * circleR - px,
-          px * 2,
-          px * 2,
-          lineCol,
-          px
-        );
-      }
-      fillPxRect(pitchCacheCtx, w / 2 - 8, h / 2 - 8, 16, 16, lineCol, px);
+      pitchCacheCtx.strokeStyle = lineCol;
+      pitchCacheCtx.lineWidth = lineW;
+      pitchCacheCtx.beginPath();
+      pitchCacheCtx.arc(w / 2, h / 2, circleR, 0, Math.PI * 2);
+      pitchCacheCtx.stroke();
+
+      fillPxRect(pitchCacheCtx, w / 2 - 9, h / 2 - 9, 18, 18, lineCol, px);
 
       fillPxRect(pitchCacheCtx, 0, boxTop, PITCH.boxWidth, lineW, lineCol, px);
       fillPxRect(pitchCacheCtx, 0, boxTop + PITCH.boxHeight - lineW, PITCH.boxWidth, lineW, lineCol, px);
@@ -2897,28 +3288,13 @@ export default function App() {
       fillPxRect(pitchCacheCtx, w - PITCH.boxWidth, boxTop + PITCH.boxHeight - lineW, PITCH.boxWidth, lineW, lineCol, px);
       fillPxRect(pitchCacheCtx, w - PITCH.boxWidth, boxTop, lineW, PITCH.boxHeight, lineCol, px);
 
-      for (let i = -14; i <= 14; i++) {
-        const aLeft = (i / 14) * Math.PI * 0.38;
-        fillPxRect(
-          pitchCacheCtx,
-          PITCH.boxWidth + Math.cos(aLeft) * 95 - px,
-          h / 2 + Math.sin(aLeft) * 95 - px,
-          px * 2,
-          px * 2,
-          lineCol,
-          px
-        );
-        const aRight = Math.PI + (i / 14) * Math.PI * 0.38;
-        fillPxRect(
-          pitchCacheCtx,
-          w - PITCH.boxWidth + Math.cos(aRight) * 95 - px,
-          h / 2 + Math.sin(aRight) * 95 - px,
-          px * 2,
-          px * 2,
-          lineCol,
-          px
-        );
-      }
+      pitchCacheCtx.beginPath();
+      pitchCacheCtx.arc(PITCH.boxWidth, h / 2, 95, -Math.PI * 0.38, Math.PI * 0.38);
+      pitchCacheCtx.stroke();
+
+      pitchCacheCtx.beginPath();
+      pitchCacheCtx.arc(w - PITCH.boxWidth, h / 2, 95, Math.PI - Math.PI * 0.38, Math.PI + Math.PI * 0.38);
+      pitchCacheCtx.stroke();
 
       pitchCacheCtx.restore();
       pitchCacheCtx.restore();
@@ -3126,7 +3502,7 @@ export default function App() {
     syncBodyStateAttr('SPLASH');
 
     let currentGameMode: GameMode = 'CASUAL';
-    let userKitChoice: KitChoice = 'HOME';
+    let userKitChoice: KitChoice = 'AUSTRALIA';
     let tournamentRound = 0; // 0 = Quarter-Final (Game 1), 1 = Semi-Final (Game 2), 2 = Grand Final (Game 3)
 
     // User Profile State (Name + Preset Icon or Camera Photo + Ranked Progression + Balance + Pokie Jackpots + Shop Unlocks)
@@ -3143,6 +3519,8 @@ export default function App() {
       machineJackpots: Record<PokieMachineId, number>;
       unlockedStadiums: PitchThemeId[];
       unlockedPokies: PokieMachineId[];
+      unlockedKits: KitChoice[];
+      selectedKitId: KitChoice;
     }
 
     const PRESET_ICONS: { id: string; label: string; html: string }[] = [
@@ -3179,6 +3557,8 @@ export default function App() {
       },
       unlockedStadiums: [...DEFAULT_UNLOCKED_STADIUMS],
       unlockedPokies: [...DEFAULT_UNLOCKED_POKIES],
+      unlockedKits: [...DEFAULT_UNLOCKED_KITS],
+      selectedKitId: 'AUSTRALIA',
     };
 
     try {
@@ -3198,6 +3578,23 @@ export default function App() {
             ? (parsed.unlockedPokies.filter((id: unknown) => typeof id === 'string' && validPokieIds.has(id)) as PokieMachineId[])
             : [];
           if (!savedPokies.includes('CHAMPIONS_GOLD')) savedPokies.unshift('CHAMPIONS_GOLD');
+
+          const validKitIds = new Set<string>(TEAM_KIT_LIST.map((k) => k.id));
+          const savedKits = Array.isArray(parsed.unlockedKits)
+            ? (parsed.unlockedKits.filter((id: unknown) => typeof id === 'string' && validKitIds.has(id)) as KitChoice[])
+            : [];
+          for (const starterKit of DEFAULT_UNLOCKED_KITS) {
+            if (!savedKits.includes(starterKit)) {
+              savedKits.unshift(starterKit);
+            }
+          }
+          const savedSelectedKit: KitChoice =
+            typeof parsed.selectedKitId === 'string' &&
+            validKitIds.has(parsed.selectedKitId) &&
+            savedKits.includes(parsed.selectedKitId as KitChoice)
+              ? (parsed.selectedKitId as KitChoice)
+              : 'AUSTRALIA';
+          userKitChoice = savedSelectedKit;
 
           userProfile = {
             name: parsed.name.trim().slice(0, 16) || 'Player',
@@ -3235,6 +3632,8 @@ export default function App() {
             },
             unlockedStadiums: savedStadiums,
             unlockedPokies: savedPokies,
+            unlockedKits: savedKits,
+            selectedKitId: savedSelectedKit,
           };
         }
       }
@@ -3263,16 +3662,15 @@ export default function App() {
 
     let activeCameraStream: MediaStream | null = null;
 
-    function getProfileAvatarInnerHtml(prof: UserProfile, youIsHome: boolean): string {
+    function getProfileAvatarInnerHtml(prof: UserProfile): string {
       if (prof.iconType === 'photo' && prof.photoDataUrl) {
         return `<img src="${prof.photoDataUrl}" alt="${prof.name}" class="w-full h-full object-cover" />`;
       }
       const preset = PRESET_ICONS.find((p) => p.id === prof.presetIcon) || PRESET_ICONS[0];
-      const stripeClass = youIsHome ? 'bg-amber-300' : 'bg-rose-900';
-      const badgeClass = youIsHome ? 'bg-sky-700 text-white' : 'bg-rose-900 text-white';
+      const kitSpec = getTeamKitSpec(userKitChoice);
       return `
-        <div class="w-full h-1.5 ${stripeClass} absolute top-1/2 -translate-y-1/2"></div>
-        <span class="relative z-10 ${badgeClass} px-1.5 py-0.5 rounded text-[11px] font-mono-num flex items-center justify-center">${preset.html}</span>
+        <div class="w-full h-1.5 absolute top-1/2 -translate-y-1/2" style="background-color:${kitSpec.stripe}"></div>
+        <span class="relative z-10 px-1.5 py-0.5 rounded text-[11px] font-mono-num flex items-center justify-center text-white" style="background-color:${kitSpec.base}">${preset.html}</span>
       `;
     }
 
@@ -3543,7 +3941,7 @@ export default function App() {
           ? Math.floor(userProfile.jackpotPool)
           : BASE_JACKPOT_POOL;
 
-      const youIsHome = userKitChoice === 'HOME';
+      const youKitSpec = getTeamKitSpec(userKitChoice);
       const rankInfo = getUserRankInfo(userProfile.rankedWins);
 
       const menuNameEl = document.getElementById('menuProfileNameText');
@@ -3600,11 +3998,11 @@ export default function App() {
       }
 
       if (mmYouAvatar) {
-        mmYouAvatar.className = youIsHome
-          ? 'w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-sky-400 border-[3px] text-slate-900 font-black text-xs flex flex-col items-center justify-center mb-2 relative overflow-hidden transition-colors shrink-0'
-          : 'w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-rose-400 border-[3px] text-white font-black text-xs flex flex-col items-center justify-center mb-2 relative overflow-hidden transition-colors shrink-0';
+        mmYouAvatar.className =
+          'w-14 h-14 sm:w-16 sm:h-16 rounded-2xl border-[3px] text-white font-black text-xs flex flex-col items-center justify-center mb-2 relative overflow-hidden transition-colors shrink-0';
+        mmYouAvatar.style.backgroundColor = youKitSpec.body;
         applyRankOutlineStyle(mmYouAvatar);
-        mmYouAvatar.innerHTML = getProfileAvatarInnerHtml(userProfile, youIsHome);
+        mmYouAvatar.innerHTML = getProfileAvatarInnerHtml(userProfile);
       }
       if (mmYouTitle) {
         mmYouTitle.innerText = userProfile.name;
@@ -3763,20 +4161,74 @@ export default function App() {
     }
 
     function syncKitAndModeUI() {
-      const cpuKit = getContrastingKit(userKitChoice);
-      const youIsHome = userKitChoice === 'HOME';
+      const youKitSpec = getTeamKitSpec(userKitChoice);
+      const cpuKitId = getContrastingKit(userKitChoice);
+      const cpuKitSpec = getTeamKitSpec(cpuKitId);
       const rankInfo = getUserRankInfo(userProfile.rankedWins);
 
-      // 1. Update Home Menu Kit Toggle Buttons
-      const kitHomeBtn = document.getElementById('kitHomeBtn');
-      const kitAwayBtn = document.getElementById('kitAwayBtn');
-      if (kitHomeBtn && kitAwayBtn) {
-        kitHomeBtn.className = youIsHome
-          ? 'kit-btn min-h-[44px] py-2.5 px-3.5 sm:px-4 rounded-xl text-xs sm:text-sm font-black transition-all cursor-pointer bg-sky-400 text-slate-900 border-2 border-slate-900 shadow-[0_3px_0_#0f172a] flex items-center justify-center gap-2'
-          : 'kit-btn min-h-[44px] py-2.5 px-3.5 sm:px-4 rounded-xl text-xs sm:text-sm font-extrabold transition-all cursor-pointer bg-slate-100 text-slate-600 hover:text-slate-900 border-2 border-slate-300 flex items-center justify-center gap-2';
-        kitAwayBtn.className = !youIsHome
-          ? 'kit-btn min-h-[44px] py-2.5 px-3.5 sm:px-4 rounded-xl text-xs sm:text-sm font-black transition-all cursor-pointer bg-rose-400 text-white border-2 border-slate-900 shadow-[0_3px_0_#0f172a] flex items-center justify-center gap-2'
-          : 'kit-btn min-h-[44px] py-2.5 px-3.5 sm:px-4 rounded-xl text-xs sm:text-sm font-extrabold transition-all cursor-pointer bg-slate-100 text-slate-600 hover:text-slate-900 border-2 border-slate-300 flex items-center justify-center gap-2';
+      // 1. Update Home Menu Uncluttered Active Team Kit Bar & Live Matchup Preview Badge
+      const activeKitNameEl = document.getElementById('activeKitNameText');
+      const activeKitSubEl = document.getElementById('activeKitSubtitleText');
+      const activeKitCategoryPillEl = document.getElementById('activeKitCategoryPill');
+      const activeKitUnlockedCountEl = document.getElementById('activeKitUnlockedCountText');
+      const activeKitSwatchBodyEl = document.getElementById('activeKitSwatchBody');
+      const activeKitSwatchCollarEl = document.getElementById('activeKitSwatchCollar');
+      const activeKitSwatchStripeEl = document.getElementById('activeKitSwatchStripe');
+      const activeKitCardEl = document.getElementById('activeKitSummaryCard');
+
+      if (activeKitNameEl) {
+        activeKitNameEl.innerText = youKitSpec.name;
+        activeKitNameEl.style.color = youKitSpec.hudText;
+      }
+      if (activeKitSubEl) {
+        activeKitSubEl.innerText = youKitSpec.subtitle || `${youKitSpec.clubNickname} • ${youKitSpec.countryOrLeague}`;
+        activeKitSubEl.style.color = youKitSpec.hudText;
+      }
+      if (activeKitCategoryPillEl) {
+        activeKitCategoryPillEl.innerText = youKitSpec.category === 'COUNTRY' ? 'NATIONAL TEAM' : 'FAMOUS CLUB';
+        activeKitCategoryPillEl.style.backgroundColor = youKitSpec.badgeBg;
+        activeKitCategoryPillEl.style.color = youKitSpec.badgeText;
+        activeKitCategoryPillEl.style.borderColor = youKitSpec.badgeBorder;
+      }
+      if (activeKitUnlockedCountEl) {
+        const ownedCount = userProfile.unlockedKits ? userProfile.unlockedKits.length : DEFAULT_UNLOCKED_KITS.length;
+        activeKitUnlockedCountEl.innerText = `${ownedCount}/${TEAM_KIT_LIST.length} KITS OWNED`;
+      }
+      if (activeKitSwatchBodyEl) {
+        activeKitSwatchBodyEl.style.backgroundColor = youKitSpec.body;
+      }
+      if (activeKitSwatchCollarEl) {
+        activeKitSwatchCollarEl.style.backgroundColor = youKitSpec.collar;
+      }
+      if (activeKitSwatchStripeEl) {
+        activeKitSwatchStripeEl.style.backgroundColor = youKitSpec.stripe;
+      }
+      if (activeKitCardEl) {
+        activeKitCardEl.style.backgroundColor = youKitSpec.hudBg;
+      }
+
+      const kitMatchupBadge = document.getElementById('kitMatchupPreviewBadge');
+      if (kitMatchupBadge) {
+        kitMatchupBadge.innerText = `${youKitSpec.name.toUpperCase()} KIT EQUIPPED`;
+        kitMatchupBadge.style.backgroundColor = youKitSpec.hudBg;
+        kitMatchupBadge.style.color = youKitSpec.hudText;
+        kitMatchupBadge.style.borderColor = youKitSpec.badgeBorder;
+      }
+
+      // Update Home Menu Player Avatar Jersey Preview
+      const mmYouAvatar = document.getElementById('mmYouAvatar');
+      const mmYouStripe = document.getElementById('mmYouStripe');
+      const mmYouNumber = document.getElementById('mmYouNumber');
+      if (mmYouAvatar) {
+        mmYouAvatar.style.backgroundColor = youKitSpec.body;
+        mmYouAvatar.style.borderColor = youKitSpec.collar;
+      }
+      if (mmYouStripe) {
+        mmYouStripe.style.backgroundColor = youKitSpec.stripe;
+      }
+      if (mmYouNumber) {
+        mmYouNumber.style.backgroundColor = youKitSpec.base;
+        mmYouNumber.style.color = '#ffffff';
       }
 
       // 2. Update Player Card in Home Menu (Rank shown on BOTH Ranked & Tournament; hidden on Casual)
@@ -3788,12 +4240,11 @@ export default function App() {
 
       if (mmYouPill) {
         if (currentGameMode === 'CASUAL') {
-          mmYouPill.className = youIsHome
-            ? 'inline-flex items-center space-x-1.5 mt-1 px-2.5 py-0.5 rounded-full bg-sky-100 text-[11px] font-extrabold text-sky-800'
-            : 'inline-flex items-center space-x-1.5 mt-1 px-2.5 py-0.5 rounded-full bg-rose-100 text-[11px] font-extrabold text-rose-800';
-          mmYouPill.style.backgroundColor = '';
-          mmYouPill.style.color = '';
-          mmYouPill.style.borderColor = '';
+          mmYouPill.className =
+            'inline-flex items-center space-x-1.5 mt-1 px-2.5 py-0.5 rounded-full border text-[10px] sm:text-[11px] font-extrabold max-w-full';
+          mmYouPill.style.backgroundColor = youKitSpec.badgeBg;
+          mmYouPill.style.color = youKitSpec.badgeText;
+          mmYouPill.style.borderColor = youKitSpec.badgeBorder;
         } else {
           mmYouPill.className =
             'inline-flex items-center space-x-1.5 mt-1 px-2.5 py-0.5 rounded-full border text-[11px] font-black';
@@ -3803,35 +4254,29 @@ export default function App() {
         }
       }
       if (mmYouDot) {
-        if (currentGameMode === 'CASUAL') {
-          mmYouDot.className = youIsHome ? 'w-2 h-2 rounded-full bg-sky-500' : 'w-2 h-2 rounded-full bg-rose-500';
-          mmYouDot.style.backgroundColor = '';
-        } else {
-          mmYouDot.className = 'w-2 h-2 rounded-full';
-          mmYouDot.style.backgroundColor = rankInfo.borderHex;
-        }
+        mmYouDot.className = 'w-2 h-2 rounded-full shrink-0';
+        mmYouDot.style.backgroundColor =
+          currentGameMode === 'CASUAL' ? youKitSpec.body : rankInfo.borderHex;
       }
       if (mmYouMeta) {
         mmYouMeta.innerText =
-          currentGameMode === 'CASUAL'
-            ? youIsHome
-              ? 'Home Kit (Sky)'
-              : 'Away Kit (Coral)'
-            : rankInfo.name;
+          currentGameMode === 'CASUAL' ? youKitSpec.name : rankInfo.name;
       }
 
       // 3. Update Top HUD Scoreboard Pills so HUD matches chosen kit & contrasting CPU kit
       const hudYouPill = document.getElementById('hudYouPill');
       const hudAiPill = document.getElementById('hudAiPill');
       if (hudYouPill) {
-        hudYouPill.className = youIsHome
-          ? 'flex items-center space-x-1.5 sm:space-x-2 bg-sky-500 text-white px-2 py-0.5 sm:px-3 sm:py-1 rounded-lg sm:rounded-xl border-2 border-slate-900 shadow-xs transition-colors'
-          : 'flex items-center space-x-1.5 sm:space-x-2 bg-rose-500 text-white px-2 py-0.5 sm:px-3 sm:py-1 rounded-lg sm:rounded-xl border-2 border-slate-900 shadow-xs transition-colors';
+        hudYouPill.className =
+          'flex items-center space-x-1.5 sm:space-x-2 px-2 py-0.5 sm:px-3 sm:py-1 rounded-lg sm:rounded-xl border-2 border-slate-900 shadow-xs transition-colors';
+        hudYouPill.style.backgroundColor = youKitSpec.hudBg;
+        hudYouPill.style.color = youKitSpec.hudText;
       }
       if (hudAiPill) {
-        hudAiPill.className = cpuKit === 'AWAY'
-          ? 'flex items-center space-x-1.5 sm:space-x-2 bg-rose-500 text-white px-2 py-0.5 sm:px-3 sm:py-1 rounded-lg sm:rounded-xl border-2 border-slate-900 shadow-xs transition-colors'
-          : 'flex items-center space-x-1.5 sm:space-x-2 bg-sky-500 text-white px-2 py-0.5 sm:px-3 sm:py-1 rounded-lg sm:rounded-xl border-2 border-slate-900 shadow-xs transition-colors';
+        hudAiPill.className =
+          'flex items-center space-x-1.5 sm:space-x-2 px-2 py-0.5 sm:px-3 sm:py-1 rounded-lg sm:rounded-xl border-2 border-slate-900 shadow-xs transition-colors';
+        hudAiPill.style.backgroundColor = cpuKitSpec.hudBg;
+        hudAiPill.style.color = cpuKitSpec.hudText;
       }
 
       // 4. Update Tournament or Jackpot Challenge HUD Badge & Ensure Bracket Initialized
@@ -3865,7 +4310,7 @@ export default function App() {
       hasMatchedOpponent = false;
       syncKitAndModeUI();
 
-      const cpuWearsAway = getContrastingKit(userKitChoice) === 'AWAY';
+      const cpuKitSpec = getTeamKitSpec(getContrastingKit(userKitChoice));
       const card = document.getElementById('matchmakingCard');
       const statusLabel = document.getElementById('mmStatusLabel');
       const statusIcon = document.getElementById('mmStatusIcon');
@@ -3885,7 +4330,7 @@ export default function App() {
 
       const activeTourneyTier = TOURNAMENT_TIERS[selectedTournamentTier] || TOURNAMENT_TIERS.CUP_100;
 
-      if (card) card.className = 'sm:col-span-5 w-full p-4 sm:p-5 rounded-3xl bg-white border-3 border-slate-900 shadow-[0_6px_0_#0f172a] text-left transition-all duration-300 relative overflow-hidden flex flex-col justify-between';
+      if (card) card.className = 'sm:col-span-6 sm:h-[296px] w-full p-4 sm:p-5 rounded-3xl bg-white border-3 border-slate-900 shadow-[0_6px_0_#0f172a] text-left transition-colors duration-300 relative overflow-hidden flex flex-col justify-between';
       if (statusLabel) statusLabel.className = 'flex items-center space-x-2 text-slate-800 transition-colors';
       if (statusIcon) statusIcon.className = 'fa-solid fa-trophy text-amber-500 text-xs';
       if (statusText) {
@@ -3898,27 +4343,31 @@ export default function App() {
       }
       if (searchTimer) searchTimer.classList.add('hidden');
       if (oppCard) {
-        oppCard.className = cpuWearsAway
-          ? 'bg-gradient-to-b from-rose-50 to-white rounded-2xl p-3.5 sm:p-4 border-2 border-dashed border-rose-300 flex flex-col items-center justify-center text-center transition-all duration-300 min-w-0'
-          : 'bg-gradient-to-b from-sky-50 to-white rounded-2xl p-3.5 sm:p-4 border-2 border-dashed border-sky-300 flex flex-col items-center justify-center text-center transition-all duration-300 min-w-0';
+        oppCard.className =
+          'rounded-2xl p-3.5 sm:p-4 border-2 border-dashed flex flex-col items-center justify-center text-center transition-all duration-300 min-w-0';
+        oppCard.style.backgroundColor = cpuKitSpec.hudBg;
+        oppCard.style.borderColor = cpuKitSpec.badgeBorder;
       }
       if (mmName) {
         mmName.innerText = 'Open Slot';
-        mmName.className = cpuWearsAway
-          ? 'text-xs sm:text-sm font-black text-rose-500 truncate max-w-full px-1'
-          : 'text-xs sm:text-sm font-black text-sky-600 truncate max-w-full px-1';
+        mmName.className = 'text-xs sm:text-sm font-black truncate max-w-full px-1';
+        mmName.style.color = cpuKitSpec.hudText;
       }
       if (mmAvatar) {
         mmAvatar.innerHTML = '<i class="fa-solid fa-user-astronaut text-base"></i>';
-        mmAvatar.className = cpuWearsAway
-          ? 'w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-rose-100/80 border-2 border-dashed border-rose-300 text-rose-500 font-black text-base flex items-center justify-center mb-2 relative transition-all duration-300 shrink-0'
-          : 'w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-sky-100/80 border-2 border-dashed border-sky-300 text-sky-600 font-black text-base flex items-center justify-center mb-2 relative transition-all duration-300 shrink-0';
+        mmAvatar.className =
+          'w-14 h-14 sm:w-16 sm:h-16 rounded-2xl border-2 border-dashed font-black text-base flex items-center justify-center mb-2 relative transition-all duration-300 shrink-0';
+        mmAvatar.style.backgroundColor = '#ffffff';
+        mmAvatar.style.borderColor = cpuKitSpec.badgeBorder;
+        mmAvatar.style.color = cpuKitSpec.hudText;
       }
       if (mmPingPill) {
-        mmPingPill.innerHTML = `<span class="truncate">${cpuWearsAway ? 'Away Kit (Coral)' : 'Home Kit (Sky)'}</span>`;
-        mmPingPill.className = cpuWearsAway
-          ? 'inline-flex items-center space-x-1 mt-1 px-2.5 py-0.5 rounded-full bg-rose-100 text-[10px] sm:text-[11px] font-extrabold text-rose-800 max-w-full'
-          : 'inline-flex items-center space-x-1 mt-1 px-2.5 py-0.5 rounded-full bg-sky-100 text-[10px] sm:text-[11px] font-extrabold text-sky-800 max-w-full';
+        mmPingPill.innerHTML = `<span class="truncate">${cpuKitSpec.name}</span>`;
+        mmPingPill.className =
+          'inline-flex items-center space-x-1 mt-1 px-2.5 py-0.5 rounded-full border text-[10px] sm:text-[11px] font-extrabold max-w-full';
+        mmPingPill.style.backgroundColor = '#ffffff';
+        mmPingPill.style.color = cpuKitSpec.hudText;
+        mmPingPill.style.borderColor = cpuKitSpec.badgeBorder;
       }
       if (vsBadge) vsBadge.className = 'w-9 h-9 sm:w-10 sm:h-10 rounded-2xl bg-amber-300 text-slate-900 text-xs font-black flex items-center justify-center shadow-[0_3px_0_#0f172a] border-2 border-slate-900 absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-10 transition-all duration-300';
       if (progressWrap) progressWrap.classList.add('hidden');
@@ -3947,7 +4396,7 @@ export default function App() {
 
     function syncOpponentUi() {
       syncKitAndModeUI();
-      const cpuWearsAway = getContrastingKit(userKitChoice) === 'AWAY';
+      const cpuKitSpec = getTeamKitSpec(getContrastingKit(userKitChoice));
       const tagHud = document.getElementById('opponentTagHud');
       const mmName = document.getElementById('mmOpponentName');
       const mmAvatar = document.getElementById('mmOpponentAvatar');
@@ -3960,32 +4409,33 @@ export default function App() {
       if (!hasMatchedOpponent) return;
 
       if (oppCard) {
-        oppCard.className = cpuWearsAway
-          ? 'bg-gradient-to-b from-rose-100 to-rose-50 rounded-2xl p-4 border-2 border-slate-900 shadow-[0_3px_0_#0f172a] flex flex-col items-center justify-center text-center transition-all duration-300 mm-pop'
-          : 'bg-gradient-to-b from-sky-100 to-sky-50 rounded-2xl p-4 border-2 border-slate-900 shadow-[0_3px_0_#0f172a] flex flex-col items-center justify-center text-center transition-all duration-300 mm-pop';
+        oppCard.className =
+          'rounded-2xl p-4 border-2 border-slate-900 shadow-[0_3px_0_#0f172a] flex flex-col items-center justify-center text-center transition-all duration-300 mm-pop';
+        oppCard.style.backgroundColor = cpuKitSpec.badgeBg;
+        oppCard.style.borderColor = '#0f172a';
       }
       if (mmName) {
         mmName.innerText = currentOpponent.tag;
         mmName.className = 'text-sm font-black text-slate-900 truncate max-w-[140px]';
+        mmName.style.color = '';
       }
       if (mmPingPill) {
-        // Show rank ONLY in Ranked and Tournament modes; on Casual mode show kit only
         const oppBadgeLabel =
           currentGameMode === 'CASUAL'
-            ? cpuWearsAway
-              ? 'Away Kit (Coral)'
-              : 'Home Kit (Sky)'
+            ? cpuKitSpec.name
             : currentOpponent.rank;
         mmPingPill.innerHTML = `<span>${oppBadgeLabel}</span>`;
-        mmPingPill.className = cpuWearsAway
-          ? 'inline-flex items-center space-x-1 mt-1 px-2.5 py-0.5 rounded-full bg-white border border-rose-200 text-[11px] font-extrabold text-rose-700'
-          : 'inline-flex items-center space-x-1 mt-1 px-2.5 py-0.5 rounded-full bg-white border border-sky-200 text-[11px] font-extrabold text-sky-700';
+        mmPingPill.className =
+          'inline-flex items-center space-x-1 mt-1 px-2.5 py-0.5 rounded-full bg-white border text-[11px] font-extrabold';
+        mmPingPill.style.color = cpuKitSpec.badgeText;
+        mmPingPill.style.borderColor = cpuKitSpec.badgeBorder;
       }
       if (mmAvatar) {
         mmAvatar.innerText = currentOpponent.initials;
-        mmAvatar.className = cpuWearsAway
-          ? 'w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-rose-500 border-2 border-slate-900 text-white font-black text-base flex items-center justify-center shadow-[0_3px_0_#0f172a] mb-2'
-          : 'w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-sky-500 border-2 border-slate-900 text-white font-black text-base flex items-center justify-center shadow-[0_3px_0_#0f172a] mb-2';
+        mmAvatar.className =
+          'w-14 h-14 sm:w-16 sm:h-16 rounded-2xl border-2 border-slate-900 font-black text-base flex items-center justify-center shadow-[0_3px_0_#0f172a] mb-2';
+        mmAvatar.style.backgroundColor = cpuKitSpec.hudBg;
+        mmAvatar.style.color = cpuKitSpec.hudText;
       }
     }
 
@@ -4425,9 +4875,25 @@ export default function App() {
         const scaleY = h / (PITCH.height + 580);
         viewScale = Math.max(0.18, Math.min(scaleX, scaleY));
       }
+      if (gameState === 'SPLASH' || gameState === 'MENU') {
+        cam.zoom = w < h ? 1.32 : 1.06;
+      }
       syncBodyStateAttr(gameState);
       syncLandscapeLockOverlay();
       updateMouseWorldCoords();
+      if (typeof drawPitch === 'function' && ctx) {
+        ctx.fillStyle = GRAPHICS_CONFIG.palette.apron.base;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.save();
+        const effScale = viewScale * cam.zoom;
+        ctx.translate(canvas.width * 0.5, canvas.height * 0.5 + canvasOffsetY);
+        ctx.scale(effScale, effScale);
+        ctx.translate(-cam.x, -cam.y);
+        drawPitch();
+        if (typeof drawTacticalOverlays === 'function') drawTacticalOverlays();
+        if (typeof drawEntities === 'function') drawEntities();
+        ctx.restore();
+      }
     }
 
     window.addEventListener('resize', resizeCanvas);
@@ -5533,7 +5999,7 @@ export default function App() {
         }
         if (leftCol) {
           leftCol.className =
-            'sm:col-span-7 glass-modal rounded-3xl p-4 sm:p-5 flex flex-col justify-between gap-3.5';
+            'sm:col-span-6 sm:h-[296px] glass-modal rounded-3xl p-4 sm:p-5 flex flex-col justify-between gap-3 overflow-hidden';
         }
         if (bottomBar) {
           bottomBar.className = 'glass-modal rounded-3xl p-3.5 sm:p-4 flex flex-col items-center space-y-2';
@@ -6706,7 +7172,7 @@ export default function App() {
       const superFlowActive = flowCombo >= PASSES_FOR_FLOW_BOOST;
       const px = GRAPHICS_CONFIG.pixelPipeline.pixelSize;
 
-      // 1. Blit pre-rendered static 16-bit pixel stadium complex, trees, concourse, floodlight towers, bleachers, turf & chalk lines in a single call
+      // 1. Blit pre-rendered static stadium complex, perimeter vistas, bleachers, turf & chalk lines
       ctx.drawImage(pitchCacheCanvas, -CACHE_PAD_X, -CACHE_PAD_Y);
 
       if (selectedPitchTheme === 'COSMIC_SPACE') {
@@ -7224,16 +7690,18 @@ export default function App() {
         ctx.fillRect(fx - 4, fy - 4, 4, 3);
 
         // Supporter Scarves & Waving Team Flags
+        const homeFlagCol = getTeamKitSpec(userKitChoice).body;
+        const awayFlagCol = getTeamKitSpec(getContrastingKit(userKitChoice)).body;
         if (fan.prop === 'FLAG') {
           const waveX = Math.round(Math.sin(matchTick * 0.16 + fan.phase) * 5);
           ctx.fillStyle = '#f8fafc';
           ctx.fillRect(fx + 5, fy - 16, 2, 14);
-          ctx.fillStyle = fan.isHome ? '#38bdf8' : '#fb7185';
+          ctx.fillStyle = fan.isHome ? homeFlagCol : awayFlagCol;
           ctx.fillRect(fx + 7, fy - 16 + (waveX > 0 ? 1 : 0), 9 + Math.abs(waveX) * 0.5, 6);
           ctx.fillStyle = '#fde047';
           ctx.fillRect(fx + 9, fy - 14 + (waveX > 0 ? 1 : 0), 4, 2);
         } else if (fan.prop === 'SCARF' && isExcited) {
-          ctx.fillStyle = fan.isHome ? '#38bdf8' : '#fb7185';
+          ctx.fillStyle = fan.isHome ? homeFlagCol : awayFlagCol;
           ctx.fillRect(fx - 7, fy - 12, 14, 3);
           ctx.fillStyle = '#ffffff';
           ctx.fillRect(fx - 3, fy - 12, 6, 3);
@@ -7467,15 +7935,12 @@ export default function App() {
             ctx.stroke();
           }
         } else if (stadiumFx.effectStyle === 'SYNTH_LASER_SCAN') {
-          // Twilight Synthwave: Sweeping Magenta & Cyan Laser Scanlines across Pitch
-          const scanOffset = (goalElapsed * 9) % (w * 0.5);
+          // Twilight Synthwave: Expanding Concentric Magenta & Cyan Outrun Pulse Ring in Center Circle
+          const synthR = 55 + ((goalElapsed * 2.4) % 95);
           ctx.strokeStyle = '#f472b6';
-          ctx.lineWidth = 3;
+          ctx.lineWidth = 4;
           ctx.beginPath();
-          ctx.moveTo(w * 0.5 - scanOffset, 0);
-          ctx.lineTo(w * 0.5 - scanOffset, h);
-          ctx.moveTo(w * 0.5 + scanOffset, 0);
-          ctx.lineTo(w * 0.5 + scanOffset, h);
+          ctx.arc(w * 0.5, h * 0.5, synthR, 0, Math.PI * 2);
           ctx.stroke();
         } else if (stadiumFx.effectStyle === 'ARCTIC_CRYSTAL_BURST') {
           // Glacier Frost Arena: Expanding 8-Point Crystalline Frost Star in Center Circle
@@ -7510,22 +7975,6 @@ export default function App() {
       if (!ctx || gameState !== 'PLAYING') return;
 
       const youPlayers = players.filter((p) => p.team === 'YOU');
-      if (youPlayers.length === 3 && isTeamInPossession('YOU')) {
-        ctx.save();
-        ctx.strokeStyle =
-          flowCombo >= PASSES_FOR_FLOW_BOOST
-            ? 'rgba(250, 204, 21, 0.24)'
-            : 'rgba(255, 255, 255, 0.22)';
-        ctx.lineWidth = 2.5;
-        ctx.setLineDash([8, 8]);
-        ctx.beginPath();
-        ctx.moveTo(youPlayers[0].x, youPlayers[0].y);
-        ctx.lineTo(youPlayers[1].x, youPlayers[1].y);
-        ctx.lineTo(youPlayers[2].x, youPlayers[2].y);
-        ctx.closePath();
-        ctx.stroke();
-        ctx.restore();
-      }
 
       // Clean Modern Non-Pixel Vector Teammate Runner Path & Through-Ball Meeting Ring
       for (const p of youPlayers) {
@@ -7661,12 +8110,12 @@ export default function App() {
         ctx.restore();
       }
 
-      // 2. Pixel Sprint Afterimages (respecting Home/Away kit selection)
+      // 2. Pixel Sprint Afterimages (respecting 6-kit selection)
       for (const ai of afterimages) {
         ctx.save();
         ctx.globalAlpha = Math.max(0, ai.alpha * 0.72);
         const aiKit = ai.team === 'YOU' ? userKitChoice : getContrastingKit(userKitChoice);
-        ctx.fillStyle = aiKit === 'HOME' ? '#38bdf8' : '#fb7185';
+        ctx.fillStyle = getTeamKitSpec(aiKit).body;
         ctx.fillRect(
           Math.round(ai.x - ai.radius * 0.65),
           Math.round(ai.y - ai.radius * 0.65),
@@ -7809,10 +8258,11 @@ export default function App() {
       let targetZoom = 1.0;
 
       if (isIdleMenuState) {
-        // Gentle scenic stadium pan while in Splash or Home Menu so the pitch never looks like a frozen old match
-        targetCamX = PITCH.width * 0.5 + Math.sin(matchTick * 0.008) * 110;
-        targetCamY = PITCH.height * 0.5 + Math.cos(matchTick * 0.006) * 45;
-        targetZoom = 1.0;
+        // Gentle scenic stadium pan while in Splash or Home Menu; on portrait phone ratio, zoom in slightly (1.32x) so the stadium & deep North/South vistas fill the screen with rich detail
+        const isPortraitIdle = canvas ? canvas.width < canvas.height : false;
+        targetCamX = PITCH.width * 0.5 + Math.sin(matchTick * 0.008) * (isPortraitIdle ? 95 : 110);
+        targetCamY = PITCH.height * 0.5 + Math.cos(matchTick * 0.006) * (isPortraitIdle ? 65 : 45);
+        targetZoom = isPortraitIdle ? 1.32 : 1.06;
       } else {
         const rawFocusX = ball.x * 0.62 + (controlledPlayer ? controlledPlayer.x * 0.38 : PITCH.width * 0.19);
         const focusY = ball.y * 0.62 + (controlledPlayer ? controlledPlayer.y * 0.38 : PITCH.height * 0.19);
@@ -7830,9 +8280,10 @@ export default function App() {
           }
         }
 
-        const baseGameplayZoom = isPortrait ? 0.94 : isCompactPhoneLandscape ? 1.04 : 1.0;
-        const panFactorX = isPortrait ? 0.95 : isCompactPhoneLandscape ? 0.42 : isMobOrTab ? 0.24 : 0.14;
-        const panFactorY = isPortrait ? 0.34 : isCompactPhoneLandscape ? 0.36 : isMobOrTab ? 0.20 : 0.12;
+        // Mobile Gameplay Camera Zoom: zoomed in closer on mobile (both Portrait & Landscape) so players, ball & pitch action are easy to see
+        const baseGameplayZoom = isPortrait ? 1.24 : isCompactPhoneLandscape ? 1.22 : isMobOrTab ? 1.16 : 1.0;
+        const panFactorX = isPortrait ? 0.96 : isCompactPhoneLandscape ? 0.58 : isMobOrTab ? 0.44 : 0.14;
+        const panFactorY = isPortrait ? 0.48 : isCompactPhoneLandscape ? 0.48 : isMobOrTab ? 0.36 : 0.12;
         const rawCamX = PITCH.width * 0.5 + (focusX - PITCH.width * 0.5) * panFactorX;
         const rawCamY = PITCH.height * 0.5 + (focusY - PITCH.height * 0.5) * panFactorY;
 
@@ -7843,10 +8294,10 @@ export default function App() {
           const minCamX = Math.min(PITCH.width * 0.5, worldLeftEdge + halfVisW);
           const maxCamX = Math.max(PITCH.width * 0.5, worldRightEdge - halfVisW);
           targetCamX = Math.max(minCamX, Math.min(maxCamX, rawCamX));
-          targetCamY = Math.max(PITCH.height * 0.22, Math.min(PITCH.height * 0.78, rawCamY));
+          targetCamY = Math.max(PITCH.height * 0.20, Math.min(PITCH.height * 0.80, rawCamY));
         } else {
-          const clampMarginX = isCompactPhoneLandscape ? 0.24 : isMobOrTab ? 0.32 : 0.22;
-          const clampMarginY = isCompactPhoneLandscape ? 0.28 : isMobOrTab ? 0.34 : 0.28;
+          const clampMarginX = isCompactPhoneLandscape ? 0.16 : isMobOrTab ? 0.20 : 0.22;
+          const clampMarginY = isCompactPhoneLandscape ? 0.18 : isMobOrTab ? 0.22 : 0.28;
           targetCamX = Math.max(PITCH.width * clampMarginX, Math.min(PITCH.width * (1 - clampMarginX), rawCamX));
           targetCamY = Math.max(PITCH.height * clampMarginY, Math.min(PITCH.height * (1 - clampMarginY), rawCamY));
         }
@@ -8606,8 +9057,8 @@ export default function App() {
       const vsOppName = document.getElementById('vsOverlayOppName');
       const vsOppRankPill = document.getElementById('vsOverlayOppRank');
 
-      const youIsHome = userKitChoice === 'HOME';
-      const cpuWearsAway = getContrastingKit(userKitChoice) === 'AWAY';
+      const youKitSpec = getTeamKitSpec(userKitChoice);
+      const cpuKitSpec = getTeamKitSpec(getContrastingKit(userKitChoice));
       const rankInfo = getUserRankInfo(userProfile.rankedWins);
       const activeTheme = PITCH_THEMES.find((t) => t.id === selectedPitchTheme) || PITCH_THEMES[0];
       const showRank = currentGameMode !== 'CASUAL';
@@ -8625,11 +9076,11 @@ export default function App() {
       }
       if (vsYouName) vsYouName.innerText = userProfile.name;
       if (vsYouAvatar) {
-        vsYouAvatar.className = youIsHome
-          ? 'w-16 h-16 sm:w-20 sm:h-20 rounded-3xl bg-sky-400 border-[3px] text-slate-900 font-black text-lg flex flex-col items-center justify-center mb-2 relative overflow-hidden'
-          : 'w-16 h-16 sm:w-20 sm:h-20 rounded-3xl bg-rose-400 border-[3px] text-white font-black text-lg flex flex-col items-center justify-center mb-2 relative overflow-hidden';
+        vsYouAvatar.className =
+          'w-16 h-16 sm:w-20 sm:h-20 rounded-3xl border-[3px] text-white font-black text-lg flex flex-col items-center justify-center mb-2 relative overflow-hidden';
+        vsYouAvatar.style.backgroundColor = youKitSpec.body;
         applyRankOutlineStyle(vsYouAvatar);
-        vsYouAvatar.innerHTML = getProfileAvatarInnerHtml(userProfile, youIsHome);
+        vsYouAvatar.innerHTML = getProfileAvatarInnerHtml(userProfile);
       }
       if (vsYouRankPill) {
         if (showRank) {
@@ -8646,9 +9097,10 @@ export default function App() {
       if (vsOppName) vsOppName.innerText = currentOpponent.tag;
       if (vsOppAvatar) {
         vsOppAvatar.innerText = currentOpponent.initials;
-        vsOppAvatar.className = cpuWearsAway
-          ? 'w-16 h-16 sm:w-20 sm:h-20 rounded-3xl bg-rose-500 border-[3px] border-slate-900 text-white font-black text-lg sm:text-xl flex items-center justify-center shadow-[0_4px_0_#0f172a] mb-2'
-          : 'w-16 h-16 sm:w-20 sm:h-20 rounded-3xl bg-sky-500 border-[3px] border-slate-900 text-white font-black text-lg sm:text-xl flex items-center justify-center shadow-[0_4px_0_#0f172a] mb-2';
+        vsOppAvatar.className =
+          'w-16 h-16 sm:w-20 sm:h-20 rounded-3xl border-[3px] border-slate-900 font-black text-lg sm:text-xl flex items-center justify-center shadow-[0_4px_0_#0f172a] mb-2';
+        vsOppAvatar.style.backgroundColor = cpuKitSpec.hudBg;
+        vsOppAvatar.style.color = cpuKitSpec.hudText;
       }
       if (vsOppRankPill) {
         if (showRank) {
@@ -8790,7 +9242,7 @@ export default function App() {
       const stageMsg = searchStages[Math.min(step, searchStages.length - 1)];
       const candidatePlayer = OCEANIA_PLAYERS[(step * 3 + tournamentRound) % OCEANIA_PLAYERS.length];
 
-      if (card) card.className = 'sm:col-span-5 w-full p-4 sm:p-5 rounded-3xl bg-sky-50 border-3 border-slate-900 shadow-[0_6px_0_#0f172a] text-left transition-all duration-300 relative overflow-hidden flex flex-col justify-between';
+      if (card) card.className = 'sm:col-span-6 sm:h-[296px] w-full p-4 sm:p-5 rounded-3xl bg-sky-50 border-3 border-slate-900 shadow-[0_6px_0_#0f172a] text-left transition-colors duration-300 relative overflow-hidden flex flex-col justify-between';
       if (mmStatusLabel) mmStatusLabel.className = 'flex items-center space-x-2 text-sky-800';
       if (mmStatusText) mmStatusText.innerText = stageMsg;
       if (mmStatusIcon) mmStatusIcon.className = 'fa-solid fa-satellite-dish fa-spin text-sky-600 text-xs';
@@ -8942,7 +9394,7 @@ export default function App() {
           const progressBar = document.getElementById('mmProgressBar');
           const startIcon = document.getElementById('startBtnIcon');
 
-          if (card) card.className = 'sm:col-span-5 w-full p-4 sm:p-5 rounded-3xl bg-emerald-50 border-3 border-slate-900 shadow-[0_6px_0_#0f172a] text-left transition-all duration-300 relative overflow-hidden flex flex-col justify-between';
+          if (card) card.className = 'sm:col-span-6 sm:h-[296px] w-full p-4 sm:p-5 rounded-3xl bg-emerald-50 border-3 border-slate-900 shadow-[0_6px_0_#0f172a] text-left transition-colors duration-300 relative overflow-hidden flex flex-col justify-between';
           if (mmStatusLabel) mmStatusLabel.className = 'flex items-center space-x-2 text-emerald-800';
           if (mmStatusText) mmStatusText.innerText = `Opponent Matched • ${currentOpponent.tag}`;
           if (mmStatusIcon) mmStatusIcon.className = 'fa-solid fa-circle-check text-emerald-600 text-xs';
@@ -9192,7 +9644,10 @@ export default function App() {
         },
         unlockedStadiums: [...freshProfile.unlockedStadiums],
         unlockedPokies: [...freshProfile.unlockedPokieMachines],
+        unlockedKits: [...freshProfile.unlockedKits],
+        selectedKitId: freshProfile.selectedKitId,
       };
+      userKitChoice = freshProfile.selectedKitId;
       pendingAvatarDataUrl = null;
       homeMenuStadiumId = 'CLASSIC_TURF';
       preferredArenaMode = 'RANDOM';
@@ -9867,7 +10322,9 @@ export default function App() {
     }
 
     function showPokieLobbyScreen() {
-      if (isSlotSpinning || isHoldSpinStepAnimating || activeHoldAndSpinSession) return;
+      if (!canSpinPokieReels(isSlotSpinning, Boolean(activeHoldAndSpinSession), Boolean(pendingJackpotChallenge)) || isHoldSpinStepAnimating) {
+        return;
+      }
       pokieModalScreen = 'LOBBY';
       const lobbyScreen = document.getElementById('pokieLobbyScreen');
       const cabinetScreen = document.getElementById('pokieCabinetScreen');
@@ -9891,7 +10348,9 @@ export default function App() {
     }
 
     function selectPokieMachine(machineId: PokieMachineId) {
-      if (isSlotSpinning || isHoldSpinStepAnimating || activeHoldAndSpinSession) return;
+      if (!canSpinPokieReels(isSlotSpinning, Boolean(activeHoldAndSpinSession), Boolean(pendingJackpotChallenge)) || isHoldSpinStepAnimating) {
+        return;
+      }
       if (!POKIE_MACHINES[machineId]) return;
       const machine = POKIE_MACHINES[machineId];
       const isUnlocked =
@@ -9923,7 +10382,9 @@ export default function App() {
     }
 
     function selectPokieBet(betAmount: PokieBetAmount) {
-      if (isSlotSpinning || isHoldSpinStepAnimating || activeHoldAndSpinSession) return;
+      if (!canSpinPokieReels(isSlotSpinning, Boolean(activeHoldAndSpinSession), Boolean(pendingJackpotChallenge)) || isHoldSpinStepAnimating) {
+        return;
+      }
       const machine = POKIE_MACHINES[selectedPokieMachine] || POKIE_MACHINES.CHAMPIONS_GOLD;
       if (!machine.allowedBets.includes(betAmount)) return;
       sound.init();
@@ -10092,39 +10553,41 @@ export default function App() {
         triggerPositions
       );
 
+      const promptCopy = getJackpotChallengePromptCopy(
+        pendingJackpotChallenge.stadiumName,
+        jackpotAmount,
+        challengeType
+      );
+
       const promptWrap = document.getElementById('jackpotChallengePromptWrap');
       const bubbleTitle = document.getElementById('jackpotBubbleTitle');
       const bubbleText = document.getElementById('jackpotBubbleText');
       const bubbleStadiumPill = document.getElementById('jackpotBubbleStadiumPill');
       const launchBtnLabel = document.getElementById('launchJackpotMatchBtnLabel');
 
-      const isHoldSpinGate = challengeType === 'HOLD_AND_SPIN';
+      // Lock & hide the regular Spin button so the user cannot accidentally spin again before playing the qualifier game!
+      if (slotSpinBtn) {
+        slotSpinBtn.disabled = true;
+        slotSpinBtn.classList.add('hidden');
+      }
 
       if (bubbleTitle) {
-        bubbleTitle.innerText = isHoldSpinGate
-          ? `👑 HOLD & SPIN ("SPIN TO WIN") HIT!`
-          : `🎰 YOU HIT THE $${jackpotAmount.toLocaleString()} JACKPOT!`;
+        bubbleTitle.innerText = promptCopy.headline;
       }
       if (bubbleText) {
-        bubbleText.innerText = isHoldSpinGate
-          ? `"You hit the Hold & Spin Jackpot Screen! Score 1 GOAL in 30 seconds at ${pendingJackpotChallenge.stadiumName} to enter the Spin to Win screen! If you concede or run out of time, you lose the Bonus!"`
-          : `"You won the Jackpot! Score 1 GOAL in 30 seconds at ${pendingJackpotChallenge.stadiumName} to claim $${jackpotAmount.toLocaleString()}! Concede a goal or run out of time and you lose the Jackpot!"`;
+        bubbleText.innerText = promptCopy.subtext;
       }
       if (bubbleStadiumPill) {
-        bubbleStadiumPill.innerText = `🏟️ ${pendingJackpotChallenge.stadiumName.toUpperCase()} • 30s SUDDEN DEATH`;
+        bubbleStadiumPill.innerText = `🏟️ ${pendingJackpotChallenge.stadiumName.toUpperCase()} • 30s QUALIFIER`;
       }
       if (launchBtnLabel) {
-        launchBtnLabel.innerText = isHoldSpinGate
-          ? `⚽ PLAY 30s MATCH TO ENTER SPIN TO WIN`
-          : `⚽ PLAY 30s JACKPOT MATCH ($${jackpotAmount.toLocaleString()})`;
+        launchBtnLabel.innerText = promptCopy.buttonLabel;
       }
       if (promptWrap) {
         promptWrap.classList.remove('hidden');
       }
       if (slotStatusBanner) {
-        slotStatusBanner.innerText = isHoldSpinGate
-          ? `💬 BONUS SCREEN HIT! SCORE A GOAL IN 30s AT ${pendingJackpotChallenge.stadiumName.toUpperCase()} TO ENTER SPIN TO WIN!`
-          : `💬 JACKPOT HIT! SCORE A GOAL IN 30s AT ${pendingJackpotChallenge.stadiumName.toUpperCase()} TO WIN $${jackpotAmount.toLocaleString()}!`;
+        slotStatusBanner.innerText = promptCopy.statusBanner;
         slotStatusBanner.className =
           'p-2 rounded-2xl bg-gradient-to-r from-amber-300 via-yellow-200 to-emerald-300 border-2 border-slate-900 text-slate-950 font-black text-[10px] sm:text-[11px] uppercase tracking-wide text-center mb-2 shadow-[0_3px_0_#0f172a]';
       }
@@ -10148,6 +10611,10 @@ export default function App() {
       pendingJackpotChallenge = null;
       activeJackpotChallenge = { ...challenge, active: true };
 
+      if (slotSpinBtn) {
+        slotSpinBtn.disabled = false;
+        slotSpinBtn.classList.remove('hidden');
+      }
       const promptWrap = document.getElementById('jackpotChallengePromptWrap');
       if (promptWrap) promptWrap.classList.add('hidden');
       closeSlotMachineModal();
@@ -10348,6 +10815,10 @@ export default function App() {
       isHoldSpinStepAnimating = false;
       const promptWrap = document.getElementById('jackpotChallengePromptWrap');
       if (promptWrap) promptWrap.classList.add('hidden');
+      if (slotSpinBtn) {
+        slotSpinBtn.disabled = false;
+        slotSpinBtn.classList.remove('hidden');
+      }
       if (slotHoldAndSpinScreen) slotHoldAndSpinScreen.classList.add('hidden');
       if (slotMainGameScreen) slotMainGameScreen.classList.remove('hidden');
 
@@ -10367,6 +10838,7 @@ export default function App() {
         saveUserProfileToStorage();
       }
       activeHoldAndSpinSession = null;
+      pendingJackpotChallenge = null;
       const promptWrap = document.getElementById('jackpotChallengePromptWrap');
       if (promptWrap) promptWrap.classList.add('hidden');
       clearSlotTimers();
@@ -10378,6 +10850,7 @@ export default function App() {
       }
       if (slotSpinBtn) {
         slotSpinBtn.disabled = false;
+        slotSpinBtn.classList.remove('hidden');
       }
       if (slotSpinBtnLabel) {
         slotSpinBtnLabel.innerText = `SPIN REELS • $${selectedPokieBet}`;
@@ -10387,7 +10860,9 @@ export default function App() {
 
     function handleSpinSlotMachine(forcedStops?: [number, number, number]) {
       sound.init();
-      if (isSlotSpinning || activeHoldAndSpinSession) return null;
+      if (!canSpinPokieReels(isSlotSpinning, Boolean(activeHoldAndSpinSession), Boolean(pendingJackpotChallenge))) {
+        return null;
+      }
 
       userProfile.balance = Number.isFinite(userProfile.balance)
         ? Math.max(0, Math.floor(userProfile.balance))
@@ -10654,7 +11129,206 @@ export default function App() {
     // =========================================================================
     // CLUB SHOP MODAL (UNLOCK STADIUMS $0–$100k & POKIE MACHINES $0–$80k)
     // =========================================================================
-    let activeShopTab: 'POKIES' | 'STADIUMS' = 'POKIES';
+    let activeShopTab: 'POKIES' | 'STADIUMS' | 'KITS' = 'POKIES';
+    let activeKitModalFilter: 'ALL' | 'COUNTRY' | 'CLUB' | 'OWNED' = 'ALL';
+
+    function syncKitSelectorModalUI() {
+      const balEl = document.getElementById('kitModalBalanceText');
+      if (balEl) balEl.innerText = `$${userProfile.balance.toLocaleString()}`;
+      const ownedSet = new Set<KitChoice>(userProfile.unlockedKits || DEFAULT_UNLOCKED_KITS);
+
+      const filterBtns: { id: string; filter: 'ALL' | 'COUNTRY' | 'CLUB' | 'OWNED'; activeBg: string }[] = [
+        { id: 'kitFilterAllBtn', filter: 'ALL', activeBg: 'bg-amber-300' },
+        { id: 'kitFilterCountriesBtn', filter: 'COUNTRY', activeBg: 'bg-emerald-300' },
+        { id: 'kitFilterClubsBtn', filter: 'CLUB', activeBg: 'bg-sky-300' },
+        { id: 'kitFilterOwnedBtn', filter: 'OWNED', activeBg: 'bg-purple-300' },
+      ];
+      for (const fb of filterBtns) {
+        const el = document.getElementById(fb.id);
+        if (!el) continue;
+        const isActive = activeKitModalFilter === fb.filter;
+        el.className = isActive
+          ? `py-2 px-3 rounded-xl text-xs font-black ${fb.activeBg} text-slate-950 border-2 border-slate-900 shadow-[0_2px_0_#0f172a] cursor-pointer flex items-center justify-center gap-1.5`
+          : 'py-2 px-3 rounded-xl text-xs font-extrabold bg-white text-slate-600 hover:text-slate-900 border border-slate-300 cursor-pointer flex items-center justify-center gap-1.5';
+      }
+
+      const ownedCountBadge = document.getElementById('kitFilterOwnedCount');
+      if (ownedCountBadge) {
+        ownedCountBadge.innerText = `(${ownedSet.size}/${TEAM_KIT_LIST.length})`;
+      }
+
+      for (const kit of TEAM_KIT_LIST) {
+        const cardEl = document.getElementById(`kitModalCard_${kit.id}`);
+        const statusEl = document.getElementById(`kitModalStatus_${kit.id}`);
+        const actionBtn = document.getElementById(`kitModalActionBtn_${kit.id}`) as HTMLButtonElement | null;
+        const isOwned = ownedSet.has(kit.id);
+        const isEquipped = userKitChoice === kit.id;
+        const canAfford = userProfile.balance >= kit.price;
+
+        if (cardEl) {
+          const matchesFilter =
+            activeKitModalFilter === 'ALL' ||
+            (activeKitModalFilter === 'COUNTRY' && kit.category === 'COUNTRY') ||
+            (activeKitModalFilter === 'CLUB' && kit.category === 'CLUB') ||
+            (activeKitModalFilter === 'OWNED' && isOwned);
+          cardEl.classList.toggle('hidden', !matchesFilter);
+          cardEl.className = matchesFilter
+            ? isEquipped
+              ? 'p-3 rounded-2xl border-[3px] border-slate-900 shadow-[0_4px_0_#0f172a] flex flex-col justify-between gap-2.5 transition-all'
+              : 'p-3 rounded-2xl bg-white border-2 border-slate-900 shadow-[0_3px_0_#0f172a] flex flex-col justify-between gap-2.5 transition-all'
+            : 'hidden';
+          if (matchesFilter) {
+            cardEl.style.backgroundColor = isEquipped ? kit.hudBg : '#ffffff';
+          }
+        }
+
+        if (statusEl) {
+          if (isEquipped) {
+            statusEl.innerText = 'EQUIPPED ✓';
+            statusEl.className =
+              'px-2 py-0.5 rounded-full bg-slate-900 text-amber-300 text-[9px] font-black uppercase tracking-wider shrink-0';
+          } else if (isOwned) {
+            statusEl.innerText = kit.price === 0 ? 'STARTER KIT' : 'OWNED';
+            statusEl.className =
+              'px-2 py-0.5 rounded-full bg-emerald-200 border border-slate-900 text-emerald-950 text-[9px] font-black uppercase tracking-wider shrink-0';
+          } else {
+            statusEl.innerText = `🔒 $${kit.price.toLocaleString()}`;
+            statusEl.className =
+              'px-2 py-0.5 rounded-full bg-slate-200 border border-slate-400 text-slate-700 text-[9px] font-black uppercase tracking-wider shrink-0';
+          }
+        }
+
+        if (actionBtn) {
+          if (isEquipped) {
+            actionBtn.disabled = false;
+            actionBtn.innerText = 'ACTIVE TEAM KIT ✓';
+            actionBtn.className =
+              'w-full py-2 px-3 rounded-xl bg-slate-900 text-amber-300 border-2 border-slate-900 font-black text-xs uppercase tracking-wider cursor-pointer';
+          } else if (isOwned) {
+            actionBtn.disabled = false;
+            actionBtn.innerText = 'SELECT & EQUIP KIT';
+            actionBtn.className =
+              'btn-clean w-full py-2 px-3 rounded-xl bg-emerald-400 hover:bg-emerald-300 text-slate-950 border-2 border-slate-900 font-black text-xs uppercase tracking-wider shadow-[0_2px_0_#0f172a] cursor-pointer';
+          } else {
+            actionBtn.disabled = false;
+            actionBtn.innerText = `UNLOCK & EQUIP • $${kit.price.toLocaleString()}`;
+            actionBtn.className = canAfford
+              ? 'btn-clean w-full py-2 px-3 rounded-xl bg-amber-300 hover:bg-amber-200 text-slate-950 border-2 border-slate-900 font-black text-xs uppercase tracking-wider shadow-[0_2px_0_#0f172a] cursor-pointer'
+              : 'btn-clean w-full py-2 px-3 rounded-xl bg-slate-200 text-slate-600 border-2 border-slate-400 font-black text-xs uppercase tracking-wider cursor-pointer';
+          }
+        }
+      }
+    }
+
+    function openKitSelectorModal(initialFilter?: 'ALL' | 'COUNTRY' | 'CLUB' | 'OWNED') {
+      sound.init();
+      sound.playUiClick();
+      if (initialFilter) activeKitModalFilter = initialFilter;
+      const banner = document.getElementById('kitModalFeedbackBanner');
+      if (banner) banner.classList.add('hidden');
+      syncKitSelectorModalUI();
+      const modal = document.getElementById('kitSelectorModal');
+      if (modal) modal.classList.remove('hidden');
+    }
+
+    function closeKitSelectorModal() {
+      sound.init();
+      sound.playUiBack();
+      const modal = document.getElementById('kitSelectorModal');
+      if (modal) modal.classList.add('hidden');
+      syncKitAndModeUI();
+    }
+
+    function selectOrBuyKit(kitId: KitChoice) {
+      sound.init();
+      const ownedSet = new Set<KitChoice>(userProfile.unlockedKits || DEFAULT_UNLOCKED_KITS);
+      const kitBanner = document.getElementById('kitModalFeedbackBanner');
+      const shopBanner = document.getElementById('clubShopFeedbackBanner');
+
+      if (ownedSet.has(kitId)) {
+        userKitChoice = kitId;
+        userProfile.selectedKitId = kitId;
+        saveUserProfileToStorage();
+        sound.playUiSelect();
+        if (gameState === 'MENU' && !isSearchingMatch && !hasMatchedOpponent) {
+          setMatchmakingIdleUI();
+        } else {
+          syncOpponentUi();
+        }
+        syncKitSelectorModalUI();
+        syncClubShopUI();
+        const spec = getTeamKitSpec(kitId);
+        if (kitBanner) {
+          kitBanner.innerText = `⚽ ${spec.name.toUpperCase()} KIT EQUIPPED!`;
+          kitBanner.className =
+            'p-2.5 rounded-xl bg-emerald-200 border-2 border-slate-900 text-emerald-950 font-black text-xs uppercase tracking-wide text-center mb-3 shadow-[0_2px_0_#0f172a]';
+          kitBanner.classList.remove('hidden');
+        }
+        if (shopBanner) {
+          shopBanner.innerText = `⚽ ${spec.name.toUpperCase()} KIT EQUIPPED!`;
+          shopBanner.className =
+            'p-2.5 rounded-xl bg-emerald-200 border-2 border-slate-900 text-emerald-950 font-black text-xs uppercase tracking-wide text-center mb-2.5 shadow-[0_2px_0_#0f172a]';
+          shopBanner.classList.remove('hidden');
+        }
+        return { success: true, equipped: true, kitId };
+      }
+
+      const res = purchaseShopKit(kitId, userProfile.balance, userProfile.unlockedKits);
+      if (res.success) {
+        sound.playSlotWin('BIG');
+        userProfile.balance = res.newBalance;
+        userProfile.unlockedKits = res.unlockedItems;
+        userKitChoice = kitId;
+        userProfile.selectedKitId = kitId;
+        saveUserProfileToStorage();
+        if (gameState === 'MENU' && !isSearchingMatch && !hasMatchedOpponent) {
+          setMatchmakingIdleUI();
+        } else {
+          syncOpponentUi();
+        }
+        syncUserProfileUI();
+        syncClubShopUI();
+        syncKitSelectorModalUI();
+      } else {
+        sound.playUiBack();
+      }
+
+      const msgClass = res.success
+        ? 'p-2.5 rounded-xl bg-emerald-200 border-2 border-slate-900 text-emerald-950 font-black text-xs uppercase tracking-wide text-center mb-3 shadow-[0_2px_0_#0f172a]'
+        : 'p-2.5 rounded-xl bg-rose-200 border-2 border-slate-900 text-rose-950 font-black text-xs uppercase tracking-wide text-center mb-3 shadow-[0_2px_0_#0f172a]';
+      if (kitBanner) {
+        kitBanner.innerText = res.message;
+        kitBanner.className = msgClass;
+        kitBanner.classList.remove('hidden');
+      }
+      if (shopBanner) {
+        shopBanner.innerText = res.message;
+        shopBanner.className = msgClass;
+        shopBanner.classList.remove('hidden');
+      }
+      return res;
+    }
+
+    function cycleOwnedKit(step: number) {
+      sound.init();
+      sound.playUiSelect();
+      const owned =
+        userProfile.unlockedKits && userProfile.unlockedKits.length > 0
+          ? userProfile.unlockedKits
+          : [...DEFAULT_UNLOCKED_KITS];
+      const idx = Math.max(0, owned.indexOf(userKitChoice));
+      const nextKit = owned[(idx + step + owned.length) % owned.length] || 'AUSTRALIA';
+      userKitChoice = nextKit;
+      userProfile.selectedKitId = nextKit;
+      saveUserProfileToStorage();
+      if (gameState === 'MENU' && !isSearchingMatch && !hasMatchedOpponent) {
+        setMatchmakingIdleUI();
+      } else {
+        syncOpponentUi();
+      }
+      syncKitSelectorModalUI();
+      syncClubShopUI();
+    }
 
     function syncClubShopUI() {
       const balEl = document.getElementById('clubShopBalanceText');
@@ -10662,20 +11336,28 @@ export default function App() {
 
       const tabPokiesBtn = document.getElementById('shopTabPokiesBtn');
       const tabStadiumsBtn = document.getElementById('shopTabStadiumsBtn');
+      const tabKitsBtn = document.getElementById('shopTabKitsBtn');
       const pokiesGrid = document.getElementById('shopPokiesSection');
       const stadiumsGrid = document.getElementById('shopStadiumsSection');
+      const kitsGrid = document.getElementById('shopKitsSection');
 
-      if (tabPokiesBtn && tabStadiumsBtn) {
-        const isPokies = activeShopTab === 'POKIES';
-        tabPokiesBtn.className = isPokies
-          ? 'py-2 px-4 rounded-xl text-xs font-black bg-amber-300 text-slate-950 border-2 border-slate-900 shadow-[0_2px_0_#0f172a] cursor-pointer flex items-center justify-center gap-1.5'
-          : 'py-2 px-4 rounded-xl text-xs font-extrabold bg-white text-slate-600 hover:text-slate-900 border border-slate-300 cursor-pointer flex items-center justify-center gap-1.5';
-        tabStadiumsBtn.className = !isPokies
-          ? 'py-2 px-4 rounded-xl text-xs font-black bg-emerald-300 text-slate-950 border-2 border-slate-900 shadow-[0_2px_0_#0f172a] cursor-pointer flex items-center justify-center gap-1.5'
-          : 'py-2 px-4 rounded-xl text-xs font-extrabold bg-white text-slate-600 hover:text-slate-900 border border-slate-300 cursor-pointer flex items-center justify-center gap-1.5';
+      if (tabPokiesBtn && tabStadiumsBtn && tabKitsBtn) {
+        tabPokiesBtn.className =
+          activeShopTab === 'POKIES'
+            ? 'py-2 px-3 rounded-xl text-xs font-black bg-amber-300 text-slate-950 border-2 border-slate-900 shadow-[0_2px_0_#0f172a] cursor-pointer flex items-center justify-center gap-1.5'
+            : 'py-2 px-3 rounded-xl text-xs font-extrabold bg-white text-slate-600 hover:text-slate-900 border border-slate-300 cursor-pointer flex items-center justify-center gap-1.5';
+        tabStadiumsBtn.className =
+          activeShopTab === 'STADIUMS'
+            ? 'py-2 px-3 rounded-xl text-xs font-black bg-emerald-300 text-slate-950 border-2 border-slate-900 shadow-[0_2px_0_#0f172a] cursor-pointer flex items-center justify-center gap-1.5'
+            : 'py-2 px-3 rounded-xl text-xs font-extrabold bg-white text-slate-600 hover:text-slate-900 border border-slate-300 cursor-pointer flex items-center justify-center gap-1.5';
+        tabKitsBtn.className =
+          activeShopTab === 'KITS'
+            ? 'py-2 px-3 rounded-xl text-xs font-black bg-sky-300 text-slate-950 border-2 border-slate-900 shadow-[0_2px_0_#0f172a] cursor-pointer flex items-center justify-center gap-1.5'
+            : 'py-2 px-3 rounded-xl text-xs font-extrabold bg-white text-slate-600 hover:text-slate-900 border border-slate-300 cursor-pointer flex items-center justify-center gap-1.5';
       }
       if (pokiesGrid) pokiesGrid.classList.toggle('hidden', activeShopTab !== 'POKIES');
       if (stadiumsGrid) stadiumsGrid.classList.toggle('hidden', activeShopTab !== 'STADIUMS');
+      if (kitsGrid) kitsGrid.classList.toggle('hidden', activeShopTab !== 'KITS');
 
       const unlockedPokiesSet = new Set<PokieMachineId>(userProfile.unlockedPokies);
       for (const item of SHOP_POKIE_ITEMS) {
@@ -10738,9 +11420,51 @@ export default function App() {
           }
         }
       }
+
+      const unlockedKitsSet = new Set<KitChoice>(userProfile.unlockedKits || DEFAULT_UNLOCKED_KITS);
+      for (const kit of SHOP_KIT_ITEMS) {
+        const btn = document.getElementById(`buyKitBtn_${kit.id}`) as HTMLButtonElement | null;
+        const statusBadge = document.getElementById(`shopKitStatus_${kit.id}`);
+        if (!btn) continue;
+        const owned = unlockedKitsSet.has(kit.id);
+        const isEquipped = userKitChoice === kit.id;
+        const canAfford = userProfile.balance >= kit.price;
+        if (isEquipped) {
+          btn.disabled = false;
+          btn.innerText = 'EQUIPPED ✓';
+          btn.className =
+            'py-1.5 px-3 rounded-xl bg-slate-900 border-2 border-slate-900 text-amber-300 font-black text-[10.5px] uppercase tracking-wider cursor-pointer';
+          if (statusBadge) {
+            statusBadge.innerText = 'EQUIPPED';
+            statusBadge.className =
+              'px-2 py-0.5 rounded-full bg-slate-900 text-amber-300 text-[8px] font-black uppercase tracking-wider shrink-0';
+          }
+        } else if (owned) {
+          btn.disabled = false;
+          btn.innerText = 'EQUIP KIT';
+          btn.className =
+            'btn-clean py-1.5 px-3 rounded-xl bg-emerald-400 hover:bg-emerald-300 border-2 border-slate-900 text-slate-950 font-black text-[10.5px] uppercase tracking-wider shadow-[0_2px_0_#0f172a] cursor-pointer';
+          if (statusBadge) {
+            statusBadge.innerText = kit.price === 0 ? 'STARTER' : 'OWNED';
+            statusBadge.className =
+              'px-2 py-0.5 rounded-full bg-emerald-200 border border-slate-900 text-emerald-950 text-[8px] font-black uppercase tracking-wider shrink-0';
+          }
+        } else {
+          btn.disabled = false;
+          btn.innerText = `BUY • $${kit.price.toLocaleString()}`;
+          btn.className = canAfford
+            ? 'btn-clean py-1.5 px-3 rounded-xl bg-amber-300 hover:bg-amber-200 border-2 border-slate-900 text-slate-950 font-black text-[10.5px] uppercase tracking-wider shadow-[0_2px_0_#0f172a] cursor-pointer'
+            : 'btn-clean py-1.5 px-3 rounded-xl bg-slate-200 border-2 border-slate-400 text-slate-600 font-black text-[10.5px] uppercase tracking-wider cursor-pointer';
+          if (statusBadge) {
+            statusBadge.innerText = `🔒 $${kit.price.toLocaleString()}`;
+            statusBadge.className =
+              'px-2 py-0.5 rounded-full bg-slate-200 border border-slate-400 text-slate-700 text-[8px] font-black uppercase tracking-wider shrink-0';
+          }
+        }
+      }
     }
 
-    function openClubShopModal(initialTab?: 'POKIES' | 'STADIUMS') {
+    function openClubShopModal(initialTab?: 'POKIES' | 'STADIUMS' | 'KITS') {
       sound.init();
       sound.playUiClick();
       if (initialTab) activeShopTab = initialTab;
@@ -10749,6 +11473,10 @@ export default function App() {
       }
       if (slotMachineModal && !slotMachineModal.classList.contains('hidden')) {
         closeSlotMachineModal();
+      }
+      const kitModal = document.getElementById('kitSelectorModal');
+      if (kitModal && !kitModal.classList.contains('hidden')) {
+        kitModal.classList.add('hidden');
       }
       const lbModal = document.getElementById('onlineLeaderboardModal');
       if (lbModal && !lbModal.classList.contains('hidden')) {
@@ -10768,6 +11496,7 @@ export default function App() {
       if (modal) modal.classList.add('hidden');
       syncPokieMachineThemeAndBetUI();
       syncUserProfileUI();
+      syncKitAndModeUI();
     }
 
     function handleBuyShopPokie(machineId: PokieMachineId) {
@@ -11100,10 +11829,82 @@ export default function App() {
         buyStBtn.addEventListener('click', () => handleBuyShopStadium(s.id));
       }
     }
+    for (const k of SHOP_KIT_ITEMS) {
+      const buyKitBtn = document.getElementById(`buyKitBtn_${k.id}`);
+      if (buyKitBtn) {
+        buyKitBtn.addEventListener('click', () => selectOrBuyKit(k.id));
+      }
+      const modalKitBtn = document.getElementById(`kitModalActionBtn_${k.id}`);
+      if (modalKitBtn) {
+        modalKitBtn.addEventListener('click', () => selectOrBuyKit(k.id));
+      }
+    }
+    const openKitSelectorModalBtn = document.getElementById('openKitSelectorModalBtn');
+    const closeKitModalBtn = document.getElementById('closeKitModalBtn');
+    const kitPrevBtn = document.getElementById('kitPrevBtn');
+    const kitNextBtn = document.getElementById('kitNextBtn');
+    const kitFilterAllBtn = document.getElementById('kitFilterAllBtn');
+    const kitFilterCountriesBtn = document.getElementById('kitFilterCountriesBtn');
+    const kitFilterClubsBtn = document.getElementById('kitFilterClubsBtn');
+    const kitFilterOwnedBtn = document.getElementById('kitFilterOwnedBtn');
+    const kitModalOpenShopBtn = document.getElementById('kitModalOpenShopBtn');
+
+    if (openKitSelectorModalBtn) {
+      openKitSelectorModalBtn.addEventListener('click', () => openKitSelectorModal());
+    }
+    if (closeKitModalBtn) {
+      closeKitModalBtn.addEventListener('click', closeKitSelectorModal);
+    }
+    if (kitPrevBtn) {
+      kitPrevBtn.addEventListener('click', () => cycleOwnedKit(-1));
+    }
+    if (kitNextBtn) {
+      kitNextBtn.addEventListener('click', () => cycleOwnedKit(1));
+    }
+    if (kitFilterAllBtn) {
+      kitFilterAllBtn.addEventListener('click', () => {
+        sound.init();
+        sound.playUiSelect();
+        activeKitModalFilter = 'ALL';
+        syncKitSelectorModalUI();
+      });
+    }
+    if (kitFilterCountriesBtn) {
+      kitFilterCountriesBtn.addEventListener('click', () => {
+        sound.init();
+        sound.playUiSelect();
+        activeKitModalFilter = 'COUNTRY';
+        syncKitSelectorModalUI();
+      });
+    }
+    if (kitFilterClubsBtn) {
+      kitFilterClubsBtn.addEventListener('click', () => {
+        sound.init();
+        sound.playUiSelect();
+        activeKitModalFilter = 'CLUB';
+        syncKitSelectorModalUI();
+      });
+    }
+    if (kitFilterOwnedBtn) {
+      kitFilterOwnedBtn.addEventListener('click', () => {
+        sound.init();
+        sound.playUiSelect();
+        activeKitModalFilter = 'OWNED';
+        syncKitSelectorModalUI();
+      });
+    }
+    if (kitModalOpenShopBtn) {
+      kitModalOpenShopBtn.addEventListener('click', () => {
+        closeKitSelectorModal();
+        openClubShopModal('KITS');
+      });
+    }
+
     const openShopBtn = document.getElementById('openShopBtn');
     const closeShopModalBtn = document.getElementById('closeShopModalBtn');
     const shopTabPokiesBtn = document.getElementById('shopTabPokiesBtn');
     const shopTabStadiumsBtn = document.getElementById('shopTabStadiumsBtn');
+    const shopTabKitsBtn = document.getElementById('shopTabKitsBtn');
     if (openShopBtn) openShopBtn.addEventListener('click', () => openClubShopModal());
     if (closeShopModalBtn) closeShopModalBtn.addEventListener('click', closeClubShopModal);
     if (shopTabPokiesBtn) {
@@ -11119,6 +11920,14 @@ export default function App() {
         sound.init();
         sound.playUiSelect();
         activeShopTab = 'STADIUMS';
+        syncClubShopUI();
+      });
+    }
+    if (shopTabKitsBtn) {
+      shopTabKitsBtn.addEventListener('click', () => {
+        sound.init();
+        sound.playUiSelect();
+        activeShopTab = 'KITS';
         syncClubShopUI();
       });
     }
@@ -11292,24 +12101,7 @@ export default function App() {
     };
     modeButtons.forEach((btn) => btn.addEventListener('click', handleModeClick));
 
-    const kitButtons = document.querySelectorAll('.kit-btn');
-    const handleKitClick = (e: Event) => {
-      const btn = e.currentTarget as HTMLElement;
-      sound.init();
-      const selectedKit = (btn.getAttribute('data-kit') as KitChoice) || 'HOME';
-      userKitChoice = selectedKit;
-      sound.playUiSelect();
-      if (gameState === 'MENU' && !isSearchingMatch && !hasMatchedOpponent) {
-        setMatchmakingIdleUI();
-      } else {
-        syncOpponentUi();
-      }
-      const vis = getFocusableMenuButtons();
-      const idx = vis.indexOf(btn);
-      if (idx >= 0) gamepadState.focusedMenuIndex = idx;
-      syncMenuFocusVisual(true);
-    };
-    kitButtons.forEach((btn) => btn.addEventListener('click', handleKitClick));
+    // Home Menu Kit buttons are now handled via openKitSelectorModalBtn, kitPrevBtn, and kitNextBtn
 
     const controlTabButtons = document.querySelectorAll('.control-tab-btn');
     const handleControlTabClick = (e: Event) => {
@@ -11434,7 +12226,11 @@ export default function App() {
           closeSlotMachineModal();
         } else if (e.code === 'Space' || e.code === 'Enter') {
           e.preventDefault();
-          handleSpinSlotMachine();
+          if (pendingJackpotChallenge) {
+            launchJackpotChallengeMatch();
+          } else {
+            handleSpinSlotMachine();
+          }
         }
         return;
       }
@@ -11638,7 +12434,7 @@ export default function App() {
       });
     }
 
-    // Multi-touch Mobile Controls (tracks dedicated Touch ID + Pointer ID so left-thumb move & right-thumb kick never conflict on iPhone/Tablet)
+    // Multi-touch Mobile Controls (Dynamic Floating Joystick: centers where you press and allows 360° movement around that origin)
     const joystickZone = document.getElementById('joystickZone');
     const joystickKnob = document.getElementById('joystickKnob');
     const mobileActionBtn = document.getElementById('mobileActionBtn');
@@ -11646,19 +12442,35 @@ export default function App() {
     let activeJoyTouchId: number | null = null;
     let joyOriginX = 0;
     let joyOriginY = 0;
+    let joyZoneTranslateX = 0;
+    let joyZoneTranslateY = 0;
 
-    const updateJoystickFromCoords = (clientX: number, clientY: number, customOrigin = false) => {
+    const anchorDynamicJoystickAt = (originX: number, originY: number) => {
+      joyOriginX = originX;
+      joyOriginY = originY;
+      if (!joystickZone) return;
+      const rect = joystickZone.getBoundingClientRect();
+      if (rect.width > 0 && rect.height > 0) {
+        const naturalCenterX = rect.left + rect.width * 0.5 - joyZoneTranslateX;
+        const naturalCenterY = rect.top + rect.height * 0.5 - joyZoneTranslateY;
+        joyZoneTranslateX = originX - naturalCenterX;
+        joyZoneTranslateY = originY - naturalCenterY;
+        joystickZone.style.transform = `translate(${joyZoneTranslateX}px, ${joyZoneTranslateY}px)`;
+      }
+    };
+
+    const updateJoystickFromCoords = (clientX: number, clientY: number, customOrigin = true) => {
       if (!joystickZone || !joystickKnob) return;
       const rect = joystickZone.getBoundingClientRect();
-      const cx = customOrigin ? joyOriginX : rect.left + rect.width / 2;
-      const cy = customOrigin ? joyOriginY : rect.top + rect.height / 2;
+      const cx = customOrigin && joyOriginX > 0 ? joyOriginX : rect.left + rect.width / 2;
+      const cy = customOrigin && joyOriginY > 0 ? joyOriginY : rect.top + rect.height / 2;
       const dx = clientX - cx;
       const dy = clientY - cy;
-      const maxR = Math.max(42, rect.width * 0.42);
-      const dist = Math.hypot(dx, dy) || 1;
+      const maxR = Math.max(42, (rect.width || 110) * 0.42);
+      const dist = Math.hypot(dx, dy);
       const clamped = Math.min(maxR, dist);
-      const nx = dx / dist;
-      const ny = dy / dist;
+      const nx = dist > 0.001 ? dx / dist : 0;
+      const ny = dist > 0.001 ? dy / dist : 0;
       joystickKnob.style.transform = `translate(${nx * clamped}px, ${ny * clamped}px)`;
       const filtered = applyRadialDeadzone((nx * clamped) / maxR, (ny * clamped) / maxR, 0.07);
       joyVec.x = filtered.x;
@@ -11673,12 +12485,19 @@ export default function App() {
       joyVec.active = false;
       joyVec.x = 0;
       joyVec.y = 0;
+      joyOriginX = 0;
+      joyOriginY = 0;
+      joyZoneTranslateX = 0;
+      joyZoneTranslateY = 0;
+      if (joystickZone) {
+        joystickZone.style.transform = 'translate(0px, 0px)';
+      }
       if (joystickKnob) {
         joystickKnob.style.transform = 'translate(0px, 0px)';
       }
     };
 
-    // Native TouchStart on Canvas for Left-Half Floating Thumbstick & Tap-to-Switch (100% immune to iOS multi-touch pointercancel!)
+    // Native TouchStart on Canvas for Left-Half Dynamic Floating Thumbstick & Tap-to-Switch (100% immune to iOS multi-touch pointercancel!)
     const handleCanvasTouchStart = (e: TouchEvent) => {
       sound.unlock();
       if (gameState !== 'PLAYING') return;
@@ -11703,10 +12522,9 @@ export default function App() {
           }
         }
 
-        if (t.clientX < window.innerWidth * 0.5 && activeJoyTouchId === null) {
+        if (t.clientX < window.innerWidth * 0.52 && activeJoyTouchId === null) {
           activeJoyTouchId = t.identifier;
-          joyOriginX = t.clientX;
-          joyOriginY = t.clientY;
+          anchorDynamicJoystickAt(t.clientX, t.clientY);
           updateJoystickFromCoords(t.clientX, t.clientY, true);
           break;
         }
@@ -11759,15 +12577,13 @@ export default function App() {
     const handleWindowPointerMove = (e: PointerEvent) => {
       if (e.pointerType === 'touch') return;
       if (joyVec.pointerId !== -1 && e.pointerId === joyVec.pointerId && activeJoyTouchId === null) {
-        updateJoystickFromCoords(e.clientX, e.clientY, joyOriginX > 0);
+        updateJoystickFromCoords(e.clientX, e.clientY, true);
       }
     };
     const handleWindowPointerUp = (e: PointerEvent) => {
       if (e.pointerType === 'touch') return;
       mouseState.isDown = false;
       if (joyVec.pointerId !== -1 && e.pointerId === joyVec.pointerId && activeJoyTouchId === null) {
-        joyOriginX = 0;
-        joyOriginY = 0;
         resetJoystickState();
       }
       if (e.pointerType === 'mouse' && e.button === 0 && kickChargeState.active) {
@@ -11790,7 +12606,7 @@ export default function App() {
         const t = e.changedTouches[i];
         if (t.identifier === activeJoyTouchId) {
           e.preventDefault();
-          updateJoystickFromCoords(t.clientX, t.clientY, joyOriginX > 0);
+          updateJoystickFromCoords(t.clientX, t.clientY, true);
           break;
         }
       }
@@ -11799,8 +12615,6 @@ export default function App() {
       if (activeJoyTouchId === null) return;
       for (let i = 0; i < e.changedTouches.length; i++) {
         if (e.changedTouches[i].identifier === activeJoyTouchId) {
-          joyOriginX = 0;
-          joyOriginY = 0;
           resetJoystickState();
           break;
         }
@@ -11819,9 +12633,8 @@ export default function App() {
           const t = e.changedTouches[0];
           if (t) {
             activeJoyTouchId = t.identifier;
-            joyOriginX = 0;
-            joyOriginY = 0;
-            updateJoystickFromCoords(t.clientX, t.clientY, false);
+            anchorDynamicJoystickAt(t.clientX, t.clientY);
+            updateJoystickFromCoords(t.clientX, t.clientY, true);
           }
         },
         { passive: false }
@@ -11832,12 +12645,11 @@ export default function App() {
         e.preventDefault();
         sound.unlock();
         joyVec.pointerId = e.pointerId;
-        joyOriginX = 0;
-        joyOriginY = 0;
+        anchorDynamicJoystickAt(e.clientX, e.clientY);
         try {
           joystickZone.setPointerCapture(e.pointerId);
         } catch {}
-        updateJoystickFromCoords(e.clientX, e.clientY, false);
+        updateJoystickFromCoords(e.clientX, e.clientY, true);
       };
       joystickZone.addEventListener('pointerdown', onJoyDown);
     }
@@ -12221,6 +13033,8 @@ export default function App() {
         applyPitchTheme(themeId);
         sound.setPitchTheme(themeId);
         rebuildStaticPitchCache();
+        lastHeadlessRender = 0;
+        resizeCanvas();
       },
       getActiveMusicProfile() {
         return getStadiumMusicProfile(selectedPitchTheme);
@@ -12323,10 +13137,44 @@ export default function App() {
           endMatch('⚽ GOAL SCORED! SPIN TO WIN UNLOCKED!');
         }
       },
-      openShop(tab?: 'POKIES' | 'STADIUMS') {
+      openShop(tab?: 'POKIES' | 'STADIUMS' | 'KITS') {
         const splashEl = document.getElementById('splashScreen');
         if (splashEl) splashEl.classList.add('hidden');
         openClubShopModal(tab);
+      },
+      openKitModal(filter?: 'ALL' | 'COUNTRY' | 'CLUB' | 'OWNED') {
+        const splashEl = document.getElementById('splashScreen');
+        if (splashEl) splashEl.classList.add('hidden');
+        openKitSelectorModal(filter);
+      },
+      closeKitModal() {
+        closeKitSelectorModal();
+      },
+      selectOrBuyKit(kitId: KitChoice) {
+        return selectOrBuyKit(kitId);
+      },
+      cycleOwnedKit(step = 1) {
+        cycleOwnedKit(step);
+        return userKitChoice;
+      },
+      getUnlockedKits() {
+        return [...userProfile.unlockedKits];
+      },
+      simulateDynamicJoystick(pressX: number, pressY: number, dragX: number, dragY: number) {
+        hasDetectedTouchInput = true;
+        syncMobileControlsVisibility();
+        anchorDynamicJoystickAt(pressX, pressY);
+        updateJoystickFromCoords(dragX, dragY, true);
+        const zoneRect = joystickZone?.getBoundingClientRect();
+        return {
+          joyOriginX,
+          joyOriginY,
+          joyZoneTranslateX,
+          joyZoneTranslateY,
+          joyVec: { ...joyVec },
+          zoneCenterX: zoneRect ? zoneRect.left + zoneRect.width * 0.5 : 0,
+          zoneCenterY: zoneRect ? zoneRect.top + zoneRect.height * 0.5 : 0,
+        };
       },
       buyPokieMachine(machineId: PokieMachineId) {
         return handleBuyShopPokie(machineId);
@@ -12507,7 +13355,7 @@ export default function App() {
       {/* Boot-Up Start Page ("PRESS ANY BUTTON TO START") — Bold TIKI TAKA 0.2 Text Only */}
       <div
         id="splashScreen"
-        className="fixed inset-0 z-50 flex flex-col items-center justify-center p-4 sm:p-10 bg-slate-950/15 cursor-pointer overflow-hidden"
+        className="absolute inset-0 z-40 flex flex-col items-center justify-center p-4 sm:p-10 bg-slate-950/15 cursor-pointer overflow-hidden"
       >
         <div className="relative z-10 flex flex-col items-center text-center my-auto max-w-5xl px-4">
           <div className="flex flex-col sm:flex-row items-center justify-center gap-2.5 sm:gap-5 mb-6 sm:mb-10">
@@ -12598,12 +13446,9 @@ export default function App() {
             </span>
             <span
               id="opponentTagHud"
-              className="hidden sm:inline text-[11px] font-extrabold tracking-tight max-w-[85px] md:max-w-[120px] truncate"
+              className="inline-block text-[9.5px] sm:text-[11px] font-extrabold tracking-tight max-w-[78px] sm:max-w-[95px] md:max-w-[125px] truncate"
             >
               smithstreamer007
-            </span>
-            <span className="inline-block sm:hidden text-[9px] font-black tracking-wider uppercase">
-              RIVAL
             </span>
           </div>
         </div>
@@ -13174,21 +14019,26 @@ export default function App() {
 
           <p id="menuSubtitle" className="hidden text-slate-600 font-semibold text-xs sm:text-sm mb-1" />
 
-          {/* Main Dashboard Grid (2-Column Horizontal Layout across Landscape Mobile, Tablet & Desktop) */}
+          {/* Main Dashboard Grid (Balanced 50/50 2-Column Fixed-Height Layout on PC & Clean Responsive Stack on Mobile) */}
           <div id="menuMainGrid" className="grid grid-cols-1 sm:grid-cols-12 gap-3.5 sm:gap-4 items-stretch text-left">
-            {/* Left Column: Mode & Kit Selection */}
-            <div id="menuLeftCol" className="sm:col-span-7 glass-modal rounded-3xl p-4 sm:p-6 flex flex-col justify-between gap-4">
+            {/* Left Column: Mode & Team Kit Locker (Fixed height on PC so toggling modes/kits never shifts layout) */}
+            <div id="menuLeftCol" className="sm:col-span-6 sm:h-[296px] glass-modal rounded-3xl p-4 sm:p-5 flex flex-col justify-between gap-3 overflow-hidden">
               {/* 1. Game Mode Selector: Casual / Ranked / Tournament */}
               <div id="playlistSelectorWrap">
-                <div className="text-[11px] font-black uppercase tracking-wider text-slate-500 mb-2 px-1">
-                  SELECT MATCH MODE
+                <div className="flex items-center justify-between mb-1.5 px-1">
+                  <span className="text-[11px] font-black uppercase tracking-wider text-slate-500">
+                    SELECT MATCH MODE
+                  </span>
+                  <span className="text-[9.5px] font-black uppercase tracking-wider text-emerald-700">
+                    1V1 ONLINE QUEUE
+                  </span>
                 </div>
                 <div className="grid grid-cols-3 gap-2 p-1.5 rounded-2xl bg-slate-100 border-2 border-slate-900">
                   <button
                     id="modeBtnCasual"
                     type="button"
                     data-mode="CASUAL"
-                    className="mode-btn min-h-[44px] py-2.5 px-3 rounded-xl text-xs sm:text-sm font-black transition-colors cursor-pointer bg-amber-300 text-slate-900 border-2 border-slate-900 shadow-[0_2px_0_#0f172a] flex items-center justify-center"
+                    className="mode-btn min-h-[42px] py-2 px-3 rounded-xl text-xs sm:text-sm font-black transition-colors cursor-pointer bg-amber-300 text-slate-900 border-2 border-slate-900 shadow-[0_2px_0_#0f172a] flex items-center justify-center"
                   >
                     Casual
                   </button>
@@ -13196,7 +14046,7 @@ export default function App() {
                     id="modeBtnRanked"
                     type="button"
                     data-mode="RANKED"
-                    className="mode-btn min-h-[44px] py-2.5 px-3 rounded-xl text-xs sm:text-sm font-extrabold transition-colors cursor-pointer text-slate-600 hover:text-slate-900 flex items-center justify-center"
+                    className="mode-btn min-h-[42px] py-2 px-3 rounded-xl text-xs sm:text-sm font-extrabold transition-colors cursor-pointer text-slate-600 hover:text-slate-900 flex items-center justify-center"
                   >
                     Ranked
                   </button>
@@ -13204,22 +14054,14 @@ export default function App() {
                     id="modeBtnTourney"
                     type="button"
                     data-mode="TOURNAMENT"
-                    className="mode-btn min-h-[44px] py-2.5 px-3 rounded-xl text-xs sm:text-sm font-extrabold transition-colors cursor-pointer text-slate-600 hover:text-slate-900 flex items-center justify-center"
+                    className="mode-btn min-h-[42px] py-2 px-3 rounded-xl text-xs sm:text-sm font-extrabold transition-colors cursor-pointer text-slate-600 hover:text-slate-900 flex items-center justify-center"
                   >
                     Tournament
                   </button>
                 </div>
 
                 {/* Tiered Tournament Entry Selector ($100 / $1,000 / $10,000 Entry & Scaled Cup Awards) */}
-                <div id="tournamentTierSelectorWrap" className="hidden mt-2 p-2 rounded-2xl bg-amber-50/90 border-2 border-slate-900 shadow-[0_3px_0_#0f172a]">
-                  <div className="flex items-center justify-between mb-1.5 px-0.5">
-                    <span className="text-[9px] sm:text-[10px] font-black uppercase tracking-wider text-slate-900">
-                      🏆 SELECT TOURNAMENT TIER
-                    </span>
-                    <span className="text-[8.5px] font-black uppercase text-emerald-800">
-                      5X CUP PAYOUT
-                    </span>
-                  </div>
+                <div id="tournamentTierSelectorWrap" className="hidden mt-1.5 p-1.5 rounded-xl bg-amber-50/95 border-2 border-slate-900">
                   <div className="grid grid-cols-3 gap-1.5">
                     {TOURNAMENT_TIER_LIST.map((t) => (
                       <button
@@ -13227,58 +14069,137 @@ export default function App() {
                         id={`tourneyTierBtn_${t.id}`}
                         type="button"
                         data-tier={t.id}
-                        className="tourney-tier-btn p-1.5 sm:p-2 rounded-xl border-2 border-slate-900 bg-white text-left transition-all cursor-pointer flex flex-col justify-between min-w-0"
+                        className="tourney-tier-btn py-1 px-2 rounded-lg border-2 border-slate-900 bg-white text-left transition-colors cursor-pointer flex items-center justify-between gap-1 min-w-0"
                       >
-                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-0.5">
-                          <span className="text-[8.5px] sm:text-[10px] font-black uppercase tracking-tight text-slate-900 truncate">
-                            {t.shortName}
-                          </span>
-                          <span className="font-mono-num text-[8.5px] sm:text-[9px] font-black px-1.5 py-0.2 rounded bg-slate-900 text-amber-300 self-start sm:self-auto">
-                            ${t.entryFee.toLocaleString()}
-                          </span>
-                        </div>
-                        <div className="mt-1 text-[7.5px] sm:text-[8.5px] font-extrabold text-emerald-800 uppercase tracking-tight truncate">
-                          Win: ${t.totalCupPrize.toLocaleString()}
-                        </div>
+                        <span className="text-[8.5px] sm:text-[9.5px] font-black uppercase tracking-tight text-slate-900 truncate">
+                          {t.shortName}
+                        </span>
+                        <span className="font-mono-num text-[8px] sm:text-[8.5px] font-black px-1.5 py-0.2 rounded bg-slate-900 text-amber-300 shrink-0">
+                          ${t.entryFee.toLocaleString()}
+                        </span>
                       </button>
                     ))}
                   </div>
                   <div
                     id="tourneyEntryStatusBanner"
-                    className="hidden mt-1.5 p-1.5 rounded-xl bg-emerald-200 border-2 border-slate-900 text-emerald-950 font-black text-[9.5px] uppercase tracking-wide text-center"
+                    className="hidden mt-1 p-1 rounded-lg bg-emerald-200 border border-slate-900 text-emerald-950 font-black text-[9px] uppercase tracking-wide text-center"
                   />
                 </div>
               </div>
 
-              {/* 2. Home / Away Kit Selector */}
-              <div id="kitSelectorWrap">
-                <div className="text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1.5 px-1">
-                  SELECT TEAM KIT
+              {/* 2. Uncluttered Active Team Kit Bar + Popup Locker Trigger */}
+              <div id="kitSelectorWrap" className="pt-2 border-t-2 border-slate-200">
+                <div className="flex flex-wrap items-center justify-between gap-1.5 mb-1.5 px-0.5">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10.5px] sm:text-[11px] font-black uppercase tracking-wider text-slate-600">
+                      TEAM KIT LOCKER
+                    </span>
+                    <span
+                      id="activeKitUnlockedCountText"
+                      className="font-mono-num text-[9px] sm:text-[9.5px] font-black uppercase tracking-wider px-1.5 py-0.2 rounded bg-amber-100 border border-amber-500 text-amber-900"
+                    >
+                      2/30 KITS OWNED
+                    </span>
+                  </div>
+                  <span
+                    id="kitMatchupPreviewBadge"
+                    className="hidden font-mono-num text-[8.5px] sm:text-[9.5px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded-full border border-amber-500 bg-amber-100 text-amber-950"
+                  >
+                    AUSTRALIA KIT EQUIPPED
+                  </span>
                 </div>
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    id="kitHomeBtn"
-                    type="button"
-                    data-kit="HOME"
-                    className="kit-btn min-h-[42px] py-2 px-3 sm:px-4 rounded-xl text-xs sm:text-sm font-black transition-all cursor-pointer bg-sky-400 text-slate-900 border-2 border-slate-900 shadow-[0_3px_0_#0f172a] flex items-center justify-center gap-2"
-                  >
-                    <span className="w-3.5 h-3.5 rounded-full bg-amber-300 border border-slate-900 shrink-0" />
-                    <span className="truncate">Home Kit (Sky)</span>
-                  </button>
-                  <button
-                    id="kitAwayBtn"
-                    type="button"
-                    data-kit="AWAY"
-                    className="kit-btn min-h-[42px] py-2 px-3 sm:px-4 rounded-xl text-xs sm:text-sm font-extrabold transition-all cursor-pointer bg-slate-100 text-slate-600 hover:text-slate-900 border-2 border-slate-300 flex items-center justify-center gap-2"
-                  >
-                    <span className="w-3.5 h-3.5 rounded-full bg-rose-500 border border-slate-900 shrink-0" />
-                    <span className="truncate">Away Kit (Coral)</span>
-                  </button>
+
+                <div
+                  id="activeKitSummaryCard"
+                  className="sm:h-[76px] p-2.5 sm:px-3 rounded-2xl border-2 border-slate-900 shadow-[0_3px_0_#0f172a] flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 transition-colors"
+                  style={{ backgroundColor: '#fef9c3' }}
+                >
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    {/* Active Jersey Swatch */}
+                    <div
+                      id="activeKitSwatchBody"
+                      className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl border-2 border-slate-900 relative overflow-hidden shrink-0 flex items-center justify-center shadow-[0_2px_0_#0f172a]"
+                      style={{ backgroundColor: '#facc15' }}
+                    >
+                      <span
+                        id="activeKitSwatchCollar"
+                        className="absolute inset-x-0 top-0 h-2"
+                        style={{ backgroundColor: '#15803d' }}
+                      />
+                      <span
+                        id="activeKitSwatchStripe"
+                        className="w-2.5 h-full"
+                        style={{ backgroundColor: '#15803d' }}
+                      />
+                    </div>
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span
+                          id="activeKitNameText"
+                          className="text-xs sm:text-sm font-black text-slate-900 leading-tight"
+                        >
+                          Australia
+                        </span>
+                        <span
+                          id="activeKitCategoryPill"
+                          className="px-2 py-0.5 rounded-full border text-[8.5px] font-black uppercase tracking-wider leading-none"
+                          style={{
+                            backgroundColor: '#fef9c3',
+                            color: '#14532d',
+                            borderColor: '#15803d',
+                          }}
+                        >
+                          NATIONAL TEAM
+                        </span>
+                      </div>
+                      <div
+                        id="activeKitSubtitleText"
+                        className="text-[10px] sm:text-[11px] font-bold text-slate-700 leading-snug mt-0.5 truncate"
+                      >
+                        Socceroos Gold &amp; Green
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <button
+                      id="kitPrevBtn"
+                      type="button"
+                      aria-label="Previous Owned Kit"
+                      title="Previous Owned Kit"
+                      className="btn-clean w-9 h-9 rounded-xl bg-white hover:bg-slate-100 border-2 border-slate-900 text-slate-900 font-black text-xs flex items-center justify-center shadow-[0_2px_0_#0f172a] cursor-pointer shrink-0"
+                    >
+                      ◀
+                    </button>
+                    <button
+                      id="kitNextBtn"
+                      type="button"
+                      aria-label="Next Owned Kit"
+                      title="Next Owned Kit"
+                      className="btn-clean w-9 h-9 rounded-xl bg-white hover:bg-slate-100 border-2 border-slate-900 text-slate-900 font-black text-xs flex items-center justify-center shadow-[0_2px_0_#0f172a] cursor-pointer shrink-0"
+                    >
+                      ▶
+                    </button>
+                    <button
+                      id="openKitSelectorModalBtn"
+                      type="button"
+                      className="btn-clean flex-1 sm:flex-initial py-2 px-3.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-amber-300 border-2 border-slate-900 font-black text-[10.5px] sm:text-xs uppercase tracking-wider shadow-[0_2px_0_#0f172a] cursor-pointer whitespace-nowrap flex items-center justify-center gap-1.5"
+                    >
+                      <i className="fa-solid fa-shirt text-[10px]" />
+                      <span>SELECT / BUY KITS</span>
+                    </button>
+                  </div>
                 </div>
               </div>
+            </div>
 
-              {/* 3. Home Arena Selector & Shuffle Bar (Uncramped, Clean Layout for Mobile & PC, No Ratio Text) */}
-              <div id="stadiumSelectorWrap" className="pt-1.5 border-t-2 border-slate-200">
+            {/* Right Column: Match Stadium Arena & Live Online Matchmaking Status (No YOU vs CPU Emblem Box) */}
+            <div
+              id="matchmakingCard"
+              className="sm:col-span-6 sm:h-[296px] w-full p-4 sm:p-5 rounded-3xl bg-white border-3 border-slate-900 shadow-[0_6px_0_#0f172a] text-left transition-colors duration-300 relative overflow-hidden flex flex-col justify-between"
+            >
+              {/* 1. Home Arena Selector & Shuffle Bar */}
+              <div id="stadiumSelectorWrap">
                 <div className="flex flex-wrap items-center justify-between gap-1.5 mb-1.5 px-0.5">
                   <div className="flex items-center gap-2">
                     <span className="text-[10.5px] sm:text-[11px] font-black uppercase tracking-wider text-slate-600">
@@ -13301,19 +14222,19 @@ export default function App() {
                   </button>
                 </div>
 
-                <div className="p-2 sm:p-2.5 rounded-xl bg-slate-100 border-2 border-slate-900 flex items-center justify-between gap-2 sm:gap-3">
+                <div className="sm:h-[88px] p-2.5 sm:px-3 rounded-2xl bg-slate-100 border-2 border-slate-900 shadow-[0_3px_0_#0f172a] flex items-center justify-between gap-2.5 sm:gap-3">
                   <button
                     id="stadiumPrevBtn"
                     type="button"
                     aria-label="Previous Unlocked Stadium"
-                    className="btn-clean w-8 h-8 sm:w-9 sm:h-9 rounded-lg bg-white hover:bg-slate-200 border-2 border-slate-900 text-slate-900 font-black text-xs flex items-center justify-center cursor-pointer shrink-0 shadow-[0_2px_0_#0f172a]"
+                    className="btn-clean w-9 h-9 rounded-xl bg-white hover:bg-slate-200 border-2 border-slate-900 text-slate-900 font-black text-xs flex items-center justify-center cursor-pointer shrink-0 shadow-[0_2px_0_#0f172a]"
                   >
                     ◀
                   </button>
                   <div className="flex items-center gap-2.5 sm:gap-3 min-w-0 flex-1">
                     <div
                       id="homeStadiumTrueRatioPreview"
-                      className="w-20 sm:w-24 md:w-28 aspect-[2720/1580] rounded-md border-2 border-slate-900 bg-slate-950 overflow-hidden shrink-0 shadow-[0_2px_0_#0f172a]"
+                      className="w-20 sm:w-24 aspect-[2720/1580] rounded-lg border-2 border-slate-900 bg-slate-950 overflow-hidden shrink-0 shadow-[0_2px_0_#0f172a]"
                       dangerouslySetInnerHTML={{
                         __html: getTrueRatioStadiumSvgHtml('CLASSIC_TURF'),
                       }}
@@ -13323,7 +14244,7 @@ export default function App() {
                         id="activeStadiumNameText"
                         className="text-xs sm:text-sm md:text-base font-black text-slate-900 leading-tight break-words"
                       >
-                        Sunlit Classic
+                        Clunes
                       </div>
                       <div className="flex flex-wrap items-center gap-1.5 mt-1">
                         <span
@@ -13339,95 +14260,64 @@ export default function App() {
                     id="stadiumNextBtn"
                     type="button"
                     aria-label="Next Unlocked Stadium"
-                    className="btn-clean w-8 h-8 sm:w-9 sm:h-9 rounded-lg bg-white hover:bg-slate-200 border-2 border-slate-900 text-slate-900 font-black text-xs flex items-center justify-center cursor-pointer shrink-0 shadow-[0_2px_0_#0f172a]"
+                    className="btn-clean w-9 h-9 rounded-xl bg-white hover:bg-slate-200 border-2 border-slate-900 text-slate-900 font-black text-xs flex items-center justify-center cursor-pointer shrink-0 shadow-[0_2px_0_#0f172a]"
                   >
                     ▶
                   </button>
                 </div>
               </div>
-            </div>
 
-            {/* Right Column: Locker-Room 1v1 Online Matchmaking Card */}
-            <div
-              id="matchmakingCard"
-              className="sm:col-span-5 w-full p-3.5 sm:p-5 rounded-3xl bg-white border-3 border-slate-900 shadow-[0_6px_0_#0f172a] text-left transition-all duration-300 relative overflow-hidden flex flex-col justify-between"
-            >
-              <div className="flex items-center justify-between text-[11px] font-extrabold uppercase tracking-wider mb-2.5 sm:mb-3 px-1">
-                <span id="mmStatusLabel" className="flex items-center space-x-2 text-slate-800 transition-colors min-w-0">
-                  <i id="mmStatusIcon" className="fa-solid fa-futbol text-sky-500 text-xs shrink-0" />
-                  <span id="mmStatusText" className="truncate">Casual 1v1 Matchmaking</span>
-                </span>
-                <span id="mmSearchTimer" className="font-mono-num text-[11px] font-bold text-sky-600 hidden shrink-0 ml-2">
-                  0.0s
-                </span>
-              </div>
+              {/* 2. Clean Online Matchmaking Queue Status Bar */}
+              <div className="pt-2 border-t-2 border-slate-200">
+                <div className="flex items-center justify-between text-[10.5px] sm:text-[11px] font-black uppercase tracking-wider mb-1.5 px-0.5">
+                  <span className="text-slate-600">ONLINE MATCHMAKING LOBBY</span>
+                  <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-100 border border-emerald-500 text-emerald-900 text-[9px] font-black">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                    <span>LIVE SERVERS</span>
+                  </span>
+                </div>
 
-              <div className="grid grid-cols-2 gap-2.5 sm:gap-3 relative items-stretch my-auto">
-                {/* Left Card: YOU */}
-                <div className="bg-slate-50 rounded-2xl p-2.5 sm:p-3.5 border-2 border-slate-900 shadow-[0_3px_0_rgba(15,23,42,0.08)] flex flex-col items-center justify-center text-center min-w-0">
-                  <div
-                    id="mmYouAvatar"
-                    className="w-12 h-12 sm:w-15 sm:h-15 rounded-2xl bg-sky-400 border-[3px] border-amber-600 text-slate-900 font-black text-xs flex flex-col items-center justify-center shadow-xs mb-1.5 relative overflow-hidden transition-colors shrink-0"
-                  >
-                    <img
-                      id="mmYouAvatarImg"
-                      alt="Player Avatar"
-                      className="hidden absolute inset-0 w-full h-full object-cover z-20"
-                    />
-                    <div id="mmYouStripe" className="w-full h-1.5 bg-amber-300 absolute top-1/2 -translate-y-1/2" />
-                    <span
-                      id="mmYouNumber"
-                      className="relative z-10 bg-sky-700 text-white px-1.5 py-0.5 rounded text-[10px] font-mono-num"
-                    >
-                      #10
+                <div className="sm:h-[76px] p-3 rounded-2xl bg-slate-50 border-2 border-slate-900 shadow-[0_3px_0_#0f172a] flex flex-col justify-center">
+                  <div className="flex items-center justify-between gap-2 text-xs sm:text-sm font-black">
+                    <span id="mmStatusLabel" className="flex items-center space-x-2 text-slate-800 transition-colors min-w-0">
+                      <i id="mmStatusIcon" className="fa-solid fa-futbol text-sky-500 text-xs shrink-0" />
+                      <span id="mmStatusText" className="truncate">Casual 1v1 Matchmaking</span>
+                    </span>
+                    <span id="mmSearchTimer" className="font-mono-num text-xs font-bold text-sky-600 hidden shrink-0">
+                      0.0s
                     </span>
                   </div>
-                  <div id="mmYouTitle" className="text-xs sm:text-sm font-black text-slate-900 truncate max-w-full px-1">
-                    Player
+                  <div className="text-[10.5px] font-bold text-slate-600 mt-1 flex items-center justify-between gap-2">
+                    <span>3v3 + Keepers • First to +3 Goal Mercy or 02:00</span>
+                    <span className="font-mono-num text-[10px] font-black text-slate-800">60–144HZ</span>
                   </div>
-                  <div
-                    id="mmYouPill"
-                    className="inline-flex items-center space-x-1 mt-1 px-2 py-0.5 rounded-full bg-sky-100 text-[9.5px] sm:text-[10.5px] font-extrabold text-sky-800 max-w-full"
-                  >
-                    <span id="mmYouDot" className="w-1.5 h-1.5 rounded-full bg-sky-500 shrink-0" />
-                    <span id="mmYouMeta" className="truncate">Home Kit (Sky)</span>
-                  </div>
-                </div>
-
-                {/* Center Floating VS Badge */}
-                <div
-                  id="mmVsBadge"
-                  className="w-8 h-8 sm:w-9 sm:h-9 rounded-2xl bg-amber-300 text-slate-900 font-black text-[11px] sm:text-xs flex items-center justify-center shadow-[0_3px_0_#0f172a] border-2 border-slate-900 absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-10 transition-colors duration-200"
-                >
-                  VS
-                </div>
-
-                {/* Right Card: RIVAL SLOT */}
-                <div
-                  id="mmOpponentSlotCard"
-                  className="bg-gradient-to-b from-rose-50 to-white rounded-2xl p-2.5 sm:p-3.5 border-2 border-dashed border-rose-300 flex flex-col items-center justify-center text-center transition-colors duration-200 min-w-0"
-                >
-                  <div
-                    id="mmOpponentAvatar"
-                    className="w-12 h-12 sm:w-15 sm:h-15 rounded-2xl bg-rose-100/80 border-2 border-dashed border-rose-300 text-rose-500 font-black text-sm flex items-center justify-center mb-1.5 relative transition-colors duration-200 shrink-0"
-                  >
-                    <i className="fa-solid fa-user-astronaut text-sm" />
-                  </div>
-                  <div id="mmOpponentName" className="text-xs sm:text-sm font-black text-rose-500 truncate max-w-full px-1">
-                    Open Slot
-                  </div>
-                  <div
-                    id="mmOpponentPingPill"
-                    className="inline-flex items-center space-x-1 mt-1 px-2 py-0.5 rounded-full bg-rose-100 text-[9.5px] sm:text-[10.5px] font-extrabold text-rose-800 max-w-full"
-                  >
-                    <span id="mmOpponentMeta" className="truncate">Away Kit (Coral)</span>
+                  <div id="mmProgressWrap" className="hidden mt-2">
+                    <div className="w-full h-2 bg-slate-200 rounded-full overflow-hidden border border-slate-900">
+                      <div id="mmProgressBar" className="h-full w-0 mm-searching-bar rounded-full transition-all duration-150" />
+                    </div>
                   </div>
                 </div>
               </div>
 
-              <div id="mmProgressWrap" className="hidden mt-3 pt-1">
-                <div className="w-full h-2.5 bg-slate-200 rounded-full overflow-hidden border border-slate-900">
-                  <div id="mmProgressBar" className="h-full w-0 mm-searching-bar rounded-full transition-all duration-150" />
+              {/* Hidden Legacy DOM Hooks Preserved for Pause/Matchmaking State Sync */}
+              <div className="hidden" aria-hidden="true">
+                <div id="mmYouAvatar">
+                  <img id="mmYouAvatarImg" alt="" />
+                  <div id="mmYouStripe" />
+                  <span id="mmYouNumber">#10</span>
+                </div>
+                <div id="mmYouTitle">Player</div>
+                <div id="mmYouPill">
+                  <span id="mmYouDot" />
+                  <span id="mmYouMeta">Australia</span>
+                </div>
+                <div id="mmVsBadge">VS</div>
+                <div id="mmOpponentSlotCard">
+                  <div id="mmOpponentAvatar" />
+                  <div id="mmOpponentName">Open Slot</div>
+                  <div id="mmOpponentPingPill">
+                    <span id="mmOpponentMeta">Brazil</span>
+                  </div>
                 </div>
               </div>
             </div>
@@ -14468,32 +15358,32 @@ export default function App() {
                 </div>
               </div>
 
-              {/* JACKPOT GOAL CHALLENGE SPEECH BUBBLE / MESSAGE CARD (Appears when Jackpot or Hold & Spin is hit!) */}
+              {/* JACKPOT GOAL CHALLENGE SPEECH BUBBLE / MESSAGE CARD (Locks reels & requires winning game to enter Jackpot Spin to Win!) */}
               <div
                 id="jackpotChallengePromptWrap"
                 className="hidden mb-2 p-3 rounded-2xl bg-gradient-to-b from-amber-200 via-yellow-100 to-white border-3 border-slate-900 shadow-[0_5px_0_#0f172a] text-center relative"
               >
                 <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-slate-900 text-amber-300 text-[9px] font-black uppercase tracking-widest mb-1">
-                  <span>💬 JACKPOT GOAL CHALLENGE!</span>
+                  <span>🔒 REELS LOCKED • QUALIFIER REQUIRED</span>
                 </div>
                 <h3
                   id="jackpotBubbleTitle"
                   className="text-sm sm:text-base font-black text-slate-950 uppercase tracking-tight"
                 >
-                  🎰 YOU HIT THE $500 JACKPOT!
+                  👑 WIN GAME TO ENTER JACKPOT SPIN TO WIN!
                 </h3>
                 <p
                   id="jackpotBubbleText"
                   className="mt-1 text-[10px] sm:text-[11px] font-extrabold text-slate-800 leading-snug bg-white/90 p-2 rounded-xl border-2 border-slate-900 shadow-[0_2px_0_#0f172a]"
                 >
-                  &ldquo;You won the Jackpot! Score 1 GOAL in 30 seconds in the machine&apos;s stadium to claim your Jackpot! If you concede a goal or run out of time, you lose the Jackpot!&rdquo;
+                  WIN GAME TO ENTER JACKPOT SPIN TO WIN! Score 1 GOAL in 30 seconds to unlock the Hold &amp; Spin Jackpot Bonus Screen! Re-spinning is locked until you play your qualifier match.
                 </p>
                 <div className="mt-1.5 mb-2">
                   <span
                     id="jackpotBubbleStadiumPill"
                     className="inline-block px-2.5 py-0.5 rounded-full bg-emerald-200 border border-slate-900 text-[9px] font-black uppercase tracking-wider text-emerald-950"
                   >
-                    🏟️ CHAMPIONS CATHEDRAL • 30s SUDDEN DEATH
+                    🏟️ CHAMPIONS CATHEDRAL • 30s QUALIFIER
                   </span>
                 </div>
                 <button
@@ -14502,7 +15392,7 @@ export default function App() {
                   className="indie-cta-btn w-full min-h-[44px] py-2.5 px-4 rounded-xl bg-gradient-to-r from-amber-400 via-yellow-300 to-emerald-400 hover:from-amber-300 hover:to-emerald-300 text-slate-950 font-black text-xs sm:text-sm uppercase tracking-wider cursor-pointer flex items-center justify-center gap-2 animate-bounce"
                 >
                   <PixelSoccerBallIcon className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" />
-                  <span id="launchJackpotMatchBtnLabel">⚽ PLAY 30s JACKPOT MATCH ($500)</span>
+                  <span id="launchJackpotMatchBtnLabel">⚽ WIN GAME TO ENTER JACKPOT SPIN TO WIN</span>
                 </button>
               </div>
 
@@ -14647,24 +15537,183 @@ export default function App() {
       </div>
 
       {/* =================================================================== */}
-      {/* CLUB SHOP MODAL — UNLOCK NEW POKIE MACHINES ($0–$80k) & STADIUMS ($0–$100k) */}
+      {/* TEAM KIT LOCKER POPUP MODAL — 15 COUNTRIES + 15 FAMOUS CLUBS (30 KITS) */}
+      {/* =================================================================== */}
+      <div
+        id="kitSelectorModal"
+        className="hidden fixed inset-0 z-50 bg-slate-950/82 flex items-center justify-center p-2.5 sm:p-4 overflow-y-auto"
+      >
+        <div className="glass-modal screen-enter rounded-[28px] w-full sm:w-[860px] sm:max-w-[860px] max-h-[92dvh] sm:h-[620px] flex flex-col overflow-hidden p-4 sm:p-5 text-left relative my-auto border-3 border-slate-900 shadow-[0_10px_0_#0f172a]">
+          <div className="flex flex-wrap items-center justify-between gap-2 pb-3 mb-3 border-b-2 border-slate-200 shrink-0">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div className="w-10 h-10 rounded-2xl bg-amber-300 border-2 border-slate-900 shadow-[0_3px_0_#0f172a] flex items-center justify-center shrink-0">
+                <svg className="w-5 h-5 text-slate-900" viewBox="0 0 24 24" fill="currentColor" stroke="#0f172a" strokeWidth="1.8" strokeLinejoin="round">
+                  <path d="M8 3L3 6.5L5.5 11L8 9.5V20H16V9.5L18.5 11L21 6.5L16 3L14 5.5C13.3 6.2 10.7 6.2 10 5.5L8 3Z" />
+                </svg>
+              </div>
+              <div className="min-w-0">
+                <div className="text-[9.5px] font-black uppercase tracking-widest text-amber-700">
+                  AUTHENTIC JERSEY LOCKER • FAMOUS COUNTRIES &amp; FAMOUS CLUBS
+                </div>
+                <h2 className="text-lg sm:text-xl font-black text-slate-900">
+                  Select or Unlock Team Kit
+                </h2>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 shrink-0">
+              <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-100 border-2 border-slate-900 shadow-[0_2px_0_#0f172a]">
+                <PixelGoldCoinIcon className="w-4 h-4 shrink-0" />
+                <span id="kitModalBalanceText" className="font-mono-num text-xs sm:text-sm font-black text-emerald-950">
+                  $30
+                </span>
+              </div>
+              <button
+                id="kitModalOpenShopBtn"
+                type="button"
+                className="btn-clean py-1.5 px-3 rounded-xl bg-sky-300 hover:bg-sky-200 border-2 border-slate-900 text-slate-950 font-black text-[10.5px] uppercase tracking-wider shadow-[0_2px_0_#0f172a] cursor-pointer hidden sm:inline-flex items-center gap-1"
+              >
+                <span>Open Club Shop</span>
+              </button>
+              <button
+                id="closeKitModalBtn"
+                type="button"
+                aria-label="Close Team Kit Locker"
+                className="btn-clean w-9 h-9 rounded-xl bg-slate-100 hover:bg-rose-500 hover:text-white border-2 border-slate-900 text-slate-700 font-black text-sm flex items-center justify-center cursor-pointer shadow-[0_2px_0_#0f172a]"
+              >
+                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="18" y1="6" x2="6" y2="18" />
+                  <line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+              </button>
+            </div>
+          </div>
+
+          {/* Filter Tabs: All Kits / Countries / Famous Clubs / Owned */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 p-1.5 rounded-2xl bg-slate-100 border-2 border-slate-900 mb-3 shrink-0">
+            <button
+              id="kitFilterAllBtn"
+              type="button"
+              className="py-2 px-3 rounded-xl text-xs font-black bg-amber-300 text-slate-950 border-2 border-slate-900 shadow-[0_2px_0_#0f172a] cursor-pointer flex items-center justify-center gap-1.5"
+            >
+              <span>All Kits</span>
+            </button>
+            <button
+              id="kitFilterCountriesBtn"
+              type="button"
+              className="py-2 px-3 rounded-xl text-xs font-extrabold bg-white text-slate-600 hover:text-slate-900 border border-slate-300 cursor-pointer flex items-center justify-center gap-1.5"
+            >
+              <span>Countries</span>
+            </button>
+            <button
+              id="kitFilterClubsBtn"
+              type="button"
+              className="py-2 px-3 rounded-xl text-xs font-extrabold bg-white text-slate-600 hover:text-slate-900 border border-slate-300 cursor-pointer flex items-center justify-center gap-1.5"
+            >
+              <span>Famous Clubs</span>
+            </button>
+            <button
+              id="kitFilterOwnedBtn"
+              type="button"
+              className="py-2 px-3 rounded-xl text-xs font-extrabold bg-white text-slate-600 hover:text-slate-900 border border-slate-300 cursor-pointer flex items-center justify-center gap-1.5"
+            >
+              <span>Owned</span>
+              <span id="kitFilterOwnedCount" className="font-mono-num text-[10px]">
+                (2/30)
+              </span>
+            </button>
+          </div>
+
+          <div id="kitModalFeedbackBanner" className="hidden shrink-0" />
+
+          {/* 30 Kits Grid — Fixed Modal Height & Scrollable Interior */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 flex-1 min-h-0 overflow-y-auto content-start pr-1">
+            {TEAM_KIT_LIST.map((kit) => (
+              <div
+                key={kit.id}
+                id={`kitModalCard_${kit.id}`}
+                className="p-3 rounded-2xl bg-white border-2 border-slate-900 shadow-[0_3px_0_#0f172a] flex flex-col justify-between gap-2.5 transition-all"
+              >
+                <div className="flex items-start gap-3">
+                  {/* Authentic Multi-Layered Jersey & Shorts Swatch */}
+                  <div
+                    className="w-12 h-12 rounded-2xl border-2 border-slate-900 relative overflow-hidden shrink-0 flex flex-col items-center justify-between shadow-[0_2px_0_#0f172a]"
+                    style={{ backgroundColor: kit.body }}
+                  >
+                    <div
+                      className="w-full h-2.5 border-b border-slate-900/40"
+                      style={{ backgroundColor: kit.collar }}
+                    />
+                    <div
+                      className="w-3 flex-1"
+                      style={{ backgroundColor: kit.stripe }}
+                    />
+                    <div
+                      className="w-full h-2.5 border-t border-slate-900/40"
+                      style={{ backgroundColor: kit.base }}
+                    />
+                  </div>
+
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center justify-between gap-1 mb-0.5">
+                      <span
+                        className="px-2 py-0.5 rounded-full text-[8.5px] font-black uppercase tracking-wider border"
+                        style={{
+                          backgroundColor: kit.badgeBg,
+                          color: kit.badgeText,
+                          borderColor: kit.badgeBorder,
+                        }}
+                      >
+                        {kit.category === 'COUNTRY' ? 'COUNTRY' : 'CLUB'}
+                      </span>
+                      <span
+                        id={`kitModalStatus_${kit.id}`}
+                        className="px-2 py-0.5 rounded-full bg-slate-200 border border-slate-400 text-slate-700 text-[9px] font-black uppercase tracking-wider shrink-0"
+                      >
+                        {kit.price === 0 ? 'STARTER KIT' : `🔒 $${kit.price.toLocaleString()}`}
+                      </span>
+                    </div>
+                    <div className="text-sm sm:text-base font-black text-slate-900 leading-snug break-words">
+                      {kit.name}
+                    </div>
+                    <div className="text-[10.5px] font-bold text-slate-600 leading-snug mt-0.5 break-words">
+                      {kit.subtitle}
+                    </div>
+                  </div>
+                </div>
+
+                <button
+                  id={`kitModalActionBtn_${kit.id}`}
+                  type="button"
+                  className="btn-clean w-full py-2 px-3 rounded-xl bg-amber-300 hover:bg-amber-200 text-slate-950 border-2 border-slate-900 font-black text-xs uppercase tracking-wider shadow-[0_2px_0_#0f172a] cursor-pointer"
+                >
+                  {kit.price === 0 ? 'SELECT & EQUIP KIT' : `UNLOCK & EQUIP • $${kit.price.toLocaleString()}`}
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* =================================================================== */}
+      {/* CLUB SHOP MODAL — POKIE MACHINES, STADIUMS & 30 TEAM KITS           */}
       {/* =================================================================== */}
       <div
         id="clubShopModal"
         className="hidden fixed inset-0 z-50 bg-slate-950/82 flex items-center justify-center p-2.5 sm:p-4 overflow-y-auto"
       >
-        <div className="glass-modal screen-enter rounded-[28px] max-w-2xl w-full max-h-[92dvh] overflow-y-auto p-4 sm:p-5 text-left relative my-auto border-3 border-slate-900 shadow-[0_10px_0_#0f172a]">
-          <div className="flex items-center justify-between gap-2 pb-3 mb-3 border-b-2 border-slate-200">
+        <div className="glass-modal screen-enter rounded-[28px] w-full sm:w-[860px] sm:max-w-[860px] max-h-[92dvh] sm:h-[620px] flex flex-col overflow-hidden p-4 sm:p-5 text-left relative my-auto border-3 border-slate-900 shadow-[0_10px_0_#0f172a]">
+          <div className="flex items-center justify-between gap-2 pb-3 mb-3 border-b-2 border-slate-200 shrink-0">
             <div className="flex items-center gap-2.5 min-w-0">
               <div className="w-10 h-10 rounded-2xl bg-emerald-400 border-2 border-slate-900 shadow-[0_3px_0_#0f172a] flex items-center justify-center shrink-0">
                 <PixelGoldCoinIcon className="w-5 h-5" />
               </div>
               <div className="min-w-0">
                 <div className="text-[9.5px] font-black uppercase tracking-widest text-emerald-700">
-                  TIKI TAKA 0.2 CLUB SHOP • STADIUMS &amp; POKIE MACHINES
+                  TIKI TAKA 0.2 CLUB SHOP • STADIUMS, POKIES &amp; TEAM KITS
                 </div>
-                <h2 className="text-lg sm:text-xl font-black text-slate-900 truncate">
-                  Unlock Stadiums &amp; Pokies
+                <h2 className="text-lg sm:text-xl font-black text-slate-900">
+                  Club Shop &amp; Kit Store
                 </h2>
               </div>
             </div>
@@ -14690,30 +15739,40 @@ export default function App() {
             </div>
           </div>
 
-          {/* Category Tabs */}
-          <div className="grid grid-cols-2 gap-2 p-1 rounded-2xl bg-slate-100 border-2 border-slate-900 mb-3">
+          {/* Category Tabs (Pokies / Stadiums / Team Kits) */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 p-1.5 rounded-2xl bg-slate-100 border-2 border-slate-900 mb-3 shrink-0">
             <button
               id="shopTabPokiesBtn"
               type="button"
-              className="py-2 px-4 rounded-xl text-xs font-black bg-amber-300 text-slate-950 border-2 border-slate-900 shadow-[0_2px_0_#0f172a] cursor-pointer flex items-center justify-center gap-1.5"
+              className="py-2 px-3 rounded-xl text-xs font-black bg-amber-300 text-slate-950 border-2 border-slate-900 shadow-[0_2px_0_#0f172a] cursor-pointer flex items-center justify-center gap-1.5"
             >
               <PixelSlotMachineIcon className="w-4 h-4 shrink-0" />
-              <span>Pokie Machines ($0 – $80k)</span>
+              <span>Pokie Machines ($0–$80k)</span>
             </button>
             <button
               id="shopTabStadiumsBtn"
               type="button"
-              className="py-2 px-4 rounded-xl text-xs font-extrabold bg-white text-slate-600 hover:text-slate-900 border border-slate-300 cursor-pointer flex items-center justify-center gap-1.5"
+              className="py-2 px-3 rounded-xl text-xs font-extrabold bg-white text-slate-600 hover:text-slate-900 border border-slate-300 cursor-pointer flex items-center justify-center gap-1.5"
             >
               <PixelSoccerBallIcon className="w-4 h-4 shrink-0" />
-              <span>Unlock Stadiums ($0 – $100k)</span>
+              <span>Stadiums ($0–$100k)</span>
+            </button>
+            <button
+              id="shopTabKitsBtn"
+              type="button"
+              className="py-2 px-3 rounded-xl text-xs font-extrabold bg-white text-slate-600 hover:text-slate-900 border border-slate-300 cursor-pointer flex items-center justify-center gap-1.5"
+            >
+              <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round">
+                <path d="M8 3L3 6.5L5.5 11L8 9.5V20H16V9.5L18.5 11L21 6.5L16 3L14 5.5C13.3 6.2 10.7 6.2 10 5.5L8 3Z" />
+              </svg>
+              <span>Team Kits</span>
             </button>
           </div>
 
-          <div id="clubShopFeedbackBanner" className="hidden" />
+          <div id="clubShopFeedbackBanner" className="hidden shrink-0" />
 
           {/* TAB 1: POKIE MACHINES ($0 Starter to $80,000 High Roller) */}
-          <div id="shopPokiesSection" className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div id="shopPokiesSection" className="grid grid-cols-1 sm:grid-cols-2 gap-3 flex-1 min-h-0 overflow-y-auto content-start pr-1">
             {SHOP_POKIE_ITEMS.map((item) => (
               <div
                 key={item.id}
@@ -14758,7 +15817,7 @@ export default function App() {
           </div>
 
           {/* TAB 2: STADIUMS ($0 Starter to $100,000 Cosmic Space — Select/Shuffle on Home Menu) */}
-          <div id="shopStadiumsSection" className="hidden grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div id="shopStadiumsSection" className="hidden grid grid-cols-1 sm:grid-cols-2 gap-3 flex-1 min-h-0 overflow-y-auto content-start pr-1">
             {SHOP_STADIUM_ITEMS.map((st) => (
               <div
                 key={st.id}
@@ -14797,6 +15856,74 @@ export default function App() {
                     className="py-1.5 px-3 rounded-xl bg-emerald-200 border-2 border-slate-900 text-emerald-950 font-black text-[10.5px] uppercase tracking-wider cursor-default"
                   >
                     {st.price === 0 ? 'OWNED' : `BUY • $${st.price.toLocaleString()}`}
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* TAB 3: 30 AUTHENTIC TEAM KITS (COUNTRIES + FAMOUS CLUBS) */}
+          <div id="shopKitsSection" className="hidden grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 flex-1 min-h-0 overflow-y-auto content-start pr-1">
+            {SHOP_KIT_ITEMS.map((kit) => (
+              <div
+                key={kit.id}
+                className="p-3 rounded-2xl bg-white border-2 border-slate-900 shadow-[0_3px_0_#0f172a] flex flex-col justify-between gap-2.5"
+              >
+                <div className="flex items-start gap-2.5">
+                  <div
+                    className="w-11 h-11 rounded-xl border-2 border-slate-900 relative overflow-hidden shrink-0 flex flex-col items-center justify-between shadow-[0_2px_0_#0f172a]"
+                    style={{ backgroundColor: kit.bodyHex }}
+                  >
+                    <div
+                      className="w-full h-2 border-b border-slate-900/40"
+                      style={{ backgroundColor: kit.collarHex }}
+                    />
+                    <div
+                      className="w-2.5 flex-1"
+                      style={{ backgroundColor: kit.stripeHex }}
+                    />
+                    <div
+                      className="w-full h-2 border-t border-slate-900/40"
+                      style={{ backgroundColor: kit.baseHex }}
+                    />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center justify-between gap-1">
+                      <span
+                        className="px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-wider border"
+                        style={{
+                          backgroundColor: kit.badgeBgHex,
+                          color: kit.badgeTextHex,
+                          borderColor: kit.badgeBorderHex,
+                        }}
+                      >
+                        {kit.category === 'COUNTRY' ? 'COUNTRY' : 'CLUB'}
+                      </span>
+                      <span
+                        id={`shopKitStatus_${kit.id}`}
+                        className="px-2 py-0.5 rounded-full bg-slate-200 border border-slate-400 text-slate-700 text-[8px] font-black uppercase tracking-wider shrink-0"
+                      >
+                        {kit.price === 0 ? 'STARTER' : `🔒 $${kit.price.toLocaleString()}`}
+                      </span>
+                    </div>
+                    <div className="text-sm font-black text-slate-900 leading-snug mt-0.5 break-words">
+                      {kit.name}
+                    </div>
+                    <div className="text-[10px] font-bold text-slate-600 leading-snug break-words">
+                      {kit.subtitle}
+                    </div>
+                  </div>
+                </div>
+                <div className="pt-2 border-t border-slate-200 flex items-center justify-between gap-2">
+                  <div className="font-mono-num text-xs font-black text-slate-900">
+                    {kit.price === 0 ? 'STARTER KIT' : `$${kit.price.toLocaleString()}`}
+                  </div>
+                  <button
+                    id={`buyKitBtn_${kit.id}`}
+                    type="button"
+                    className="btn-clean py-1.5 px-3 rounded-xl bg-amber-300 hover:bg-amber-200 border-2 border-slate-900 text-slate-950 font-black text-[10.5px] uppercase tracking-wider shadow-[0_2px_0_#0f172a] cursor-pointer"
+                  >
+                    {kit.price === 0 ? 'EQUIP KIT' : `BUY • $${kit.price.toLocaleString()}`}
                   </button>
                 </div>
               </div>
@@ -14881,7 +16008,12 @@ export default function App() {
       </div>
 
       {/* Isolated 60-144Hz Game Canvas */}
-      <canvas id="gameCanvas" ref={canvasRef} data-testid="game-canvas" />
+      <canvas
+        id="gameCanvas"
+        ref={canvasRef}
+        data-testid="game-canvas"
+        className="absolute inset-0 w-full h-full z-0 block"
+      />
     </div>
   );
 }
